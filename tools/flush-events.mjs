@@ -14,7 +14,11 @@ if (!inFile) { console.error('usage: node tools/flush-events.mjs <queued.jsonl> 
 const hash12 = (e) => crypto.createHash('sha256').update(String(e).trim().toLowerCase()).digest('hex').slice(0, 12);
 const BASE = ['event_id', 'type', 'email', 'ts', 'test'];
 const EXTRA = { digital_rave_attended: ['venue', 'session_id', 'dwell_seconds'], poster_placed: ['spot_id'] };
-const existing = new Set(fs.existsSync(out) ? fs.readFileSync(out, 'utf8').split('\n').filter(Boolean).map(l => { try { return JSON.parse(l).event_id; } catch { return null; } }) : []);
+// dedupe key: event_id, plus the London day for posters (crew_config: a poster over the daily/weekly cap does not consume the
+// spot and may be re-sent with the same event_id on a later day; ingest decides)
+const lday = (ts) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/London' }).format(new Date(ts));
+const dkey = (o) => o.type === 'poster_placed' ? o.event_id + '@' + lday(o.ts) : o.event_id;
+const existing = new Set(fs.existsSync(out) ? fs.readFileSync(out, 'utf8').split('\n').filter(Boolean).map(l => { try { return dkey(JSON.parse(l)); } catch { return null; } }) : []);
 const lines = fs.readFileSync(inFile, 'utf8').split('\n').filter(Boolean); const outLines = []; let skipped = 0;
 for (const l of lines) {
   let e; try { e = JSON.parse(l); } catch { skipped++; continue; }
@@ -29,8 +33,8 @@ for (const l of lines) {
   } else { o.spot_id = e.spot_id; o.event_id = `wp:${e.spot_id}:${hash12(email)}`; }
   o.ts = new Date(Date.parse(o.ts)).toISOString().replace(/\.\d{3}Z$/, 'Z');
   const ordered = Object.fromEntries([...BASE, ...EXTRA[e.type]].map(k => [k, o[k]]));
-  if (existing.has(ordered.event_id)) { skipped++; continue; }
-  existing.add(ordered.event_id); outLines.push(JSON.stringify(ordered));
+  if (existing.has(dkey(ordered))) { skipped++; continue; }
+  existing.add(dkey(ordered)); outLines.push(JSON.stringify(ordered));
 }
 if (dry) { console.log(outLines.join('\n')); console.error(`[dry] ${outLines.length} event(s) would be appended to ${out}; ${skipped} skipped`); process.exit(0); }
 if (outLines.length) { fs.mkdirSync(path.dirname(out), { recursive: true }); fs.appendFileSync(out, outLines.join('\n') + '\n'); }

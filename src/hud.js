@@ -140,14 +140,14 @@ export function createHUD(app) {
     },
     openWardrobe(C, st) { // C = crew module, st = { fit, xp|null, account, apply(fit), signIn(email), signOut(), email, setEmail }
       const lvl = C.playerLevel(st.xp);
-      const rows = C.WARDROBE.map(p => { const locked = p.level > lvl, on = !locked && st.fit[p.slot] === p.id;
+      const rows = [...C.WARDROBE].sort((a, b) => a.level - b.level).map(p => { const locked = p.level > lvl, on = !locked && st.fit[p.slot] === p.id;
         return `<button class="cw ${on ? 'sel' : ''} ${locked ? 'lock' : ''}" data-id="${p.id}" ${locked ? 'disabled' : ''}><img src="${C.shopImg(p.id)}" onerror="this.onerror=null;this.src='${C.img(p.icon)}'" alt="${p.name}" loading="lazy"/><span><b>${p.name}</b><small>${p.slot.toUpperCase()} · ${locked ? 'LOCKED · UNLOCKS AT LVL ' + p.level : 'LVL ' + p.level}</small></span></button>`; }).join('');
       const acct = st.account ? `<p class="fine">SIGNED IN AS ${st.account.email.toUpperCase()} · ${st.xp == null ? 'CREW NOT LOADED' : 'LVL ' + lvl + ' · FIT FROM THE APP'} <button id="crewOut">SIGN OUT</button></p>`
         : `<h3>SIGN IN <small>(SAME CREW ACCOUNT AS THE APP · LOADS YOUR EQUIPPED FIT)</small></h3><div class="row"><input id="email" type="email" placeholder="you@example.com" value="${st.email || ''}"/><button id="crewIn">SIGN IN</button></div>`;
       open(`<h2>WARDROBE</h2><p class="sub">CLOTHING DROP 018 · ${st.account ? 'YOUR CREW FIT · LVL ' + lvl : 'SIGNED OUT · LVL 1 PIECES ONLY · SIGN IN TO WEAR WHAT YOUR CREW RANK UNLOCKS'}</p>
       <div class="crewfig"><img id="crewLook" src="${C.lookFor(st.fit.top, st.fit.outer, st.fit.legs)}" alt="CREW AVATAR"/></div>
       <div class="cwlist">${rows}</div>${acct}
-      <p class="fine">NO XP OR CODES ARE AWARDED IN THE GAME. CHANGES HERE STAY ON THIS DEVICE AND NEVER WRITE TO YOUR CREW. VISITS ARE QUEUED AS TEST EVENTS ONLY.</p>`, 'wardov');
+      <p class="fine">CREW GAME RULES (SET BY RECKLESS CREW, AWARDED BY THE CREW SERVER, NEVER BY THE GAME): DIGITAL RAVE ${C.CREW_RULES.GAME.rave.xp} XP FOR A 10-MIN STAY, MAX ${C.CREW_RULES.GAME.rave.max_per_london_day}/DAY AND ${C.CREW_RULES.GAME.rave.max_per_iso_week}/WEEK · POSTER ${C.CREW_RULES.GAME.poster.xp} XP ONCE PER SPOT, MAX ${C.CREW_RULES.GAME.poster.max_per_london_day}/DAY · CAP ${C.CREW_RULES.GAME.weekly_cap_xp} XP/WEEK.${C.CREW_RULES.status === 'proposed' ? ' (PROPOSED RULES, NOT LIVE YET)' : ''}</p><p class="fine">NO XP OR CODES ARE AWARDED IN THE GAME. CHANGES HERE STAY ON THIS DEVICE AND NEVER WRITE TO YOUR CREW. VISITS ARE QUEUED AS TEST EVENTS ONLY.</p>`, 'wardov');
       overlay.querySelectorAll('.cw').forEach(b => b.onclick = () => { const p = C.gearById(b.dataset.id); st.fit = C.toggle(st.fit, p); st.apply(st.fit);
         overlay.querySelectorAll('.cw').forEach(x => x.classList.toggle('sel', st.fit[C.gearById(x.dataset.id).slot] === x.dataset.id));
         overlay.querySelector('#crewLook').src = C.lookFor(st.fit.top, st.fit.outer, st.fit.legs); });

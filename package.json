@@ -6,7 +6,7 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "vite",
-    "build": "vite build",
+    "build": "node tools/sync-crew-config.mjs && vite build",
     "preview": "vite preview --port 4173",
     "shots": "node tools/shoot.mjs",
     "city": "python3 scripts/build_city.py"

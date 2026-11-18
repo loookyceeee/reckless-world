@@ -265,6 +265,21 @@ export async function buildCity(scene, { low = false } = {}) {
       lampAcc -= L;
     }
   }
+  // ---- placement hygiene: no props inside buildings, none standing in the carriageway ----
+  const BH = new Map(), bk = (i, j) => i + ',' + j;
+  for (const b of buildings) { if (!b.pts) continue; let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9; for (const [x, z] of b.pts) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z); }
+    b._bb = [x0, z0, x1, z1]; for (let i = Math.floor(x0 / 32); i <= Math.floor(x1 / 32); i++) for (let j = Math.floor(z0 / 32); j <= Math.floor(z1 / 32); j++) { const k = bk(i, j); if (!BH.has(k)) BH.set(k, []); BH.get(k).push(b); } }
+  const inPoly = (pts, x, z) => { let c = false; for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) { const [xi, zi] = pts[i], [xj, zj] = pts[j]; if ((zi > z) !== (zj > z) && x < (xj - xi) * (z - zi) / (zj - zi) + xi) c = !c; } return c; };
+  const inBuilding = (x, z, pad = 0) => { for (const b of BH.get(bk(Math.floor(x / 32), Math.floor(z / 32))) || []) { const q = b._bb; if (x < q[0] - pad || x > q[2] + pad || z < q[1] - pad || z > q[3] + pad) continue; if (inPoly(b.pts, x, z)) return true; } if (pad > 0) for (const sg of grid.near(x, z, pad + 1)) { const dx = sg.x1 - sg.x0, dz = sg.z1 - sg.z0, L2 = dx * dx + dz * dz || 1e-6; const t = Math.max(0, Math.min(1, ((x - sg.x0) * dx + (z - sg.z0) * dz) / L2)); if (Math.hypot(sg.x0 + dx * t - x, sg.z0 + dz * t - z) < pad && sg.h >= 2.5) return true; } return false; };
+  const RS = new Map(); for (const r of roadsOut) if (r.d) for (let i = 0; i < r.pts.length - 1; i++) { const a = r.pts[i], b = r.pts[i + 1]; const k = bk(Math.floor((a[0] + b[0]) / 64), Math.floor((a[1] + b[1]) / 64)); if (!RS.has(k)) RS.set(k, []); RS.get(k).push([a, b, r.w]); }
+  /** nearest carriageway: { d: distance beyond the kerb line (negative = in the road), nx, nz: outward normal } */
+  const roadNear = (x, z) => { let best = null; const gi = Math.floor(x / 64), gj = Math.floor(z / 64);
+    for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) for (const [a, b, w] of RS.get(bk(gi + i, gj + j)) || []) { const dx = b[0] - a[0], dz = b[1] - a[1], L2 = dx * dx + dz * dz; if (L2 < 1e-4) continue; const t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (z - a[1]) * dz) / L2)); const px = a[0] + dx * t, pz = a[1] + dz * t, dd = Math.hypot(x - px, z - pz), d = dd - w / 2;
+      if (!best || d < best.d) best = { d, nx: dd > 1e-3 ? (x - px) / dd : 0, nz: dd > 1e-3 ? (z - pz) / dd : 0 }; }
+    return best; };
+  /** keep a kerbside prop on the pavement: pushed out of the carriageway, dropped if that puts it inside a building */
+  const kerbside = (x, z, min = 0.45) => { const r = roadNear(x, z); if (r && r.d < min && r.d > -6) { x += r.nx * (min - r.d); z += r.nz * (min - r.d); } return inBuilding(x, z, 0.35) ? null : [x, z]; };
+  const clean = (list, min) => { const out = [], n0 = list.length, moved0 = { n: 0 }; for (const it of list) { const q = kerbside(it[0], it[1], min); if (q) { it[0] = q[0]; it[1] = q[1]; out.push(it); } } (window.__cleanStats = window.__cleanStats || []).push(n0 + '->' + out.length); list.length = 0; list.push(...out); };
   // crossings (OSM via research pack): zebras with belisha beacons, signal crossings with studs + stop lines; bollards + guard railings
   const furn = { bollard: [], beacon: [], railing: [], signal: [] };
   let XS = null; try { XS = await (await fetch(import.meta.env.BASE_URL + 'data/crossings.json')).json(); } catch (e) { }
@@ -320,6 +335,7 @@ export async function buildCity(scene, { low = false } = {}) {
   const furnM = new StandardMaterial('furn', scene); furnM.diffuseColor = new Color3(1, 1, 1); furnM.specularColor = new Color3(0.3, 0.3, 0.3);
   const tiBuf = (list, f) => { const buf = new Float32Array(list.length * 16); list.forEach((it, i) => f(it).copyToArray(buf, i * 16)); return buf; };
   const place = (name, vd, list, rotIdx) => { if (!list.length) return null; const me = toMesh(name, vd, scene, furnM); me.thinInstanceSetBuffer('matrix', tiBuf(list, (it) => Matrix.Compose(Vector3.One(), Quaternion.FromEulerAngles(0, rotIdx != null ? it[rotIdx] : 0, 0), new Vector3(it[0], 0, it[1]))), 16, true); me.parent = root; me.isPickable = false; return me; };
+  clean(furn.bollard, 0.3); clean(furn.beacon, 0.3); clean(furn.signal, 0.3); clean(furn.railing, 0.25);
   const BLK = hex('#1c1c20'), WHT = hex('#f2f2f2');
   place('bollards', merge([color(xf(cyl(0.95, 0.08, 0.1, 7), { t: [0, 0.475, 0] }), BLK), color(xf(cyl(0.06, 0.085, 0.085, 7, false), { t: [0, 0.82, 0] }), WHT), color(xf(sphere(3), { s: [0.085, 0.05, 0.085], t: [0, 0.95, 0] }), BLK)]), furn.bollard);
   const beaconPole = []; for (let k = 0; k < 8; k++) beaconPole.push(color(xf(cyl(0.3, 0.06, 0.06, 8), { t: [0, 0.15 + k * 0.3, 0] }), k % 2 ? WHT : BLK));
@@ -354,6 +370,7 @@ export async function buildCity(scene, { low = false } = {}) {
   const mkPool = (nm, rgba, em) => { const m = new StandardMaterial(nm, scene); m.diffuseTexture = radialTex(scene, nm + 'T', rgba); m.useAlphaFromDiffuseTexture = true; m.emissiveColor = hex(em); m.disableLighting = true; m.alphaMode = 1; return toMesh(nm, xf(plane(16, 16), { r: [Math.PI / 2, 0, 0], t: [1.1, 0.09, 0] }), scene, m); };
   const groups = [{ led: 1, head: mkHead('lampHeadLED', '#eef3ff'), pool: mkPool('poolLED', 'rgba(220,230,255,0.24)', '#9aa6c2') },
                   { led: 0, head: mkHead('lampHead', '#ffb35a'), pool: mkPool('pool', 'rgba(255,170,80,0.3)', '#c97a3a') }];
+  clean(lamps, 0.5); // real DfI points can fall in the road or inside a footprint (OSM vs survey offsets)
   const mats = [];
   const mtx = ([x, z, a, mh = 7.5]) => Matrix.Compose(new Vector3(1, mh / 7.5, 1), Quaternion.FromEulerAngles(0, -a, 0), new Vector3(x, 0, z));
   for (const l of lamps) mats.push(mtx(l));
@@ -373,7 +390,7 @@ export async function buildCity(scene, { low = false } = {}) {
     const G1 = hex('#3f6b3a'), G2 = hex('#557f44'), G3 = hex('#2f5530');
     const canopy = toMesh('canopy', merge([color(xf(sphere(4), { s: [0.5, 0.42, 0.5], t: [0, 0.62, 0] }), G1), color(xf(sphere(3), { s: [0.34, 0.3, 0.34], t: [0.22, 0.78, 0.1] }), G2), color(xf(sphere(3), { s: [0.32, 0.28, 0.32], t: [-0.2, 0.74, -0.14] }), G3), color(xf(sphere(3), { s: [0.28, 0.26, 0.28], t: [0.02, 0.95, 0.02] }), G2)]), scene, leafM);
     const tm = [], cm = [];
-    for (const [x, z, h, s] of SF.trees) { const rot = Quaternion.FromEulerAngles(0, (x * 7.13 + z * 3.7) % 6.28, 0);
+    for (const [x, z, h, s] of SF.trees) { if (inBuilding(x, z, 1.2)) continue; { const rn = roadNear(x, z); if (rn && rn.d < 0.6) continue; } const rot = Quaternion.FromEulerAngles(0, (x * 7.13 + z * 3.7) % 6.28, 0);
       tm.push(Matrix.Compose(new Vector3(1, h * 0.45, 1), rot, new Vector3(x, 0, z))); cm.push(Matrix.Compose(new Vector3(s * 1.1, h * 0.9, s * 1.1), rot, new Vector3(x, h * 0.1, z))); grid.add(x - 0.15, z, x + 0.15, z, 3); }
     trunk.thinInstanceSetBuffer('matrix', toBuf(tm), 16, true); canopy.thinInstanceSetBuffer('matrix', toBuf(cm), 16, true);
     for (const m of [trunk, canopy]) { m.parent = root; m.isPickable = false; }

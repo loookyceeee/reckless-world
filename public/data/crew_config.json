@@ -1,0 +1,731 @@
+{
+  "schema": "reckless-crew-config/v1",
+  "status": "approved",
+  "status_note": "APPROVED by Luke 2026-11-18 15:10 (curve, game XP cut, wardrobe spread). Takes effect at launch with the XP reset (Mon 23 Nov 2026 00:00 Europe/London); status becomes 'live' then. xp_to_enter_previous / unlock_level_previous / history keep the old values.",
+  "owner": "RECKLESS CREW LOYALTY (writes this file); APP DEV + RECKLESS WORLD read it, never edit",
+  "updated_at": "2026-11-18T15:15:00Z",
+  "account_key": "email, trimmed + lowercased",
+  "launch": {
+    "xp_start_instant_utc": "2026-11-23T00:00:00Z",
+    "timezone": "Europe/London",
+    "everyone_starts_at": 0
+  },
+  "xp_rates": {
+    "skiddle_ticket": {
+      "xp_per_ticket": 500,
+      "status": "locked",
+      "note": "anchor unit; multi-ticket orders earn 500 per ticket to the buyer"
+    },
+    "squarespace_clothing": {
+      "xp_per_gbp": 10,
+      "rounding": "floor",
+      "basis": "subtotal - discount - refunded (no shipping/tax)",
+      "status": "locked (recommend keep)"
+    },
+    "game": {
+      "status": "approved",
+      "weekly_cap_xp": 40,
+      "digital_rave_attended": {
+        "xp": 20,
+        "min_dwell_seconds": 600,
+        "max_per_london_day": 1,
+        "max_per_iso_week": 2
+      },
+      "poster_placed": {
+        "xp": 10,
+        "once_per_spot": true,
+        "max_per_london_day": 2,
+        "over_cap": "do not consume the spot; retry another day"
+      },
+      "max_per_year_xp": 2080,
+      "note": "a full year of max play \u2248 4 tickets (REGULAR entry), so buying tickets/merch drives the top crews"
+    }
+  },
+  "crews": [
+    {
+      "key": "FRESHER",
+      "label": "FRESHER",
+      "order": 1,
+      "merch_percent": 0,
+      "ticket_percent": 0,
+      "code_prefix": null,
+      "xp_to_enter": 0,
+      "levels": [
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "key": "CASUAL_RAVER",
+      "label": "CASUAL RAVER",
+      "order": 2,
+      "merch_percent": 5,
+      "ticket_percent": 5,
+      "code_prefix": "CAS5",
+      "xp_to_enter": 1000,
+      "levels": [
+        4,
+        5,
+        6
+      ]
+    },
+    {
+      "key": "RECKLESS_REGULAR",
+      "label": "RECKLESS REGULAR",
+      "order": 3,
+      "merch_percent": 10,
+      "ticket_percent": 10,
+      "code_prefix": "REG10",
+      "xp_to_enter": 2000,
+      "levels": [
+        7,
+        8,
+        9
+      ]
+    },
+    {
+      "key": "RECKLESS_FAMILY",
+      "label": "RECKLESS FAMILY",
+      "order": 4,
+      "merch_percent": 15,
+      "ticket_percent": 15,
+      "code_prefix": "FAM15",
+      "xp_to_enter": 3000,
+      "levels": [
+        10,
+        11,
+        12
+      ]
+    },
+    {
+      "key": "RECKLESS_CREW",
+      "label": "RECKLESS CREW",
+      "order": 5,
+      "merch_percent": 20,
+      "ticket_percent": 20,
+      "code_prefix": "RC20",
+      "xp_to_enter": 5000,
+      "levels": [
+        13,
+        14,
+        15
+      ]
+    }
+  ],
+  "levels": [
+    {
+      "level": 1,
+      "crew": "FRESHER",
+      "level_within_crew": 1,
+      "step": "I",
+      "xp_to_enter": 0,
+      "xp_to_enter_previous": 0
+    },
+    {
+      "level": 2,
+      "crew": "FRESHER",
+      "level_within_crew": 2,
+      "step": "II",
+      "xp_to_enter": 250,
+      "xp_to_enter_previous": 200
+    },
+    {
+      "level": 3,
+      "crew": "FRESHER",
+      "level_within_crew": 3,
+      "step": "III",
+      "xp_to_enter": 500,
+      "xp_to_enter_previous": 500
+    },
+    {
+      "level": 4,
+      "crew": "CASUAL_RAVER",
+      "level_within_crew": 1,
+      "step": "I",
+      "xp_to_enter": 1000,
+      "xp_to_enter_previous": 1000
+    },
+    {
+      "level": 5,
+      "crew": "CASUAL_RAVER",
+      "level_within_crew": 2,
+      "step": "II",
+      "xp_to_enter": 1250,
+      "xp_to_enter_previous": 1800
+    },
+    {
+      "level": 6,
+      "crew": "CASUAL_RAVER",
+      "level_within_crew": 3,
+      "step": "III",
+      "xp_to_enter": 1500,
+      "xp_to_enter_previous": 2800
+    },
+    {
+      "level": 7,
+      "crew": "RECKLESS_REGULAR",
+      "level_within_crew": 1,
+      "step": "I",
+      "xp_to_enter": 2000,
+      "xp_to_enter_previous": 4500
+    },
+    {
+      "level": 8,
+      "crew": "RECKLESS_REGULAR",
+      "level_within_crew": 2,
+      "step": "II",
+      "xp_to_enter": 2250,
+      "xp_to_enter_previous": 6500
+    },
+    {
+      "level": 9,
+      "crew": "RECKLESS_REGULAR",
+      "level_within_crew": 3,
+      "step": "III",
+      "xp_to_enter": 2500,
+      "xp_to_enter_previous": 9000
+    },
+    {
+      "level": 10,
+      "crew": "RECKLESS_FAMILY",
+      "level_within_crew": 1,
+      "step": "I",
+      "xp_to_enter": 3000,
+      "xp_to_enter_previous": 13000
+    },
+    {
+      "level": 11,
+      "crew": "RECKLESS_FAMILY",
+      "level_within_crew": 2,
+      "step": "II",
+      "xp_to_enter": 3500,
+      "xp_to_enter_previous": 18000
+    },
+    {
+      "level": 12,
+      "crew": "RECKLESS_FAMILY",
+      "level_within_crew": 3,
+      "step": "III",
+      "xp_to_enter": 4000,
+      "xp_to_enter_previous": 24000
+    },
+    {
+      "level": 13,
+      "crew": "RECKLESS_CREW",
+      "level_within_crew": 1,
+      "step": "I",
+      "xp_to_enter": 5000,
+      "xp_to_enter_previous": 32000
+    },
+    {
+      "level": 14,
+      "crew": "RECKLESS_CREW",
+      "level_within_crew": 2,
+      "step": "II",
+      "xp_to_enter": 6000,
+      "xp_to_enter_previous": 42000
+    },
+    {
+      "level": 15,
+      "crew": "RECKLESS_CREW",
+      "level_within_crew": 3,
+      "step": "III",
+      "xp_to_enter": 7500,
+      "xp_to_enter_previous": 55000
+    }
+  ],
+  "crew_up_rule": {
+    "trigger": "xp_total crosses a crew's xp_to_enter (first time ever for that crew)",
+    "skipped_crews": "issue ONE code for the highest crew reached; record skipped crews in Issued.skipped_crews; no stacking",
+    "drop_back": "refunds can drop a fan back a crew; re-crossing later does NOT issue a second code for a crew already issued (check Issued by email+to_crew)",
+    "codes": "individual single-use codes minted + served by APP DEV, one per fan per crew (never re-issued for a crew already reached), discount = crew merch_percent, 1 use total",
+    "ticket_discount_note": "codes only work on Squarespace merch; ticket_percent needs a separate Skiddle Promotion Centre mechanism, not yet set up"
+  },
+  "wardrobe": {
+    "slots": [
+      "top",
+      "outer",
+      "legs"
+    ],
+    "unlock_rule": "piece is wearable if player level >= unlock_level OR piece id is in the ledger owned_items for that email (bought it on recklessraves.co.uk)",
+    "server_must_validate": "PUT /api/crew must drop any fit piece the player has not unlocked; on read, locked pieces are removed before rendering",
+    "starter_fit": {
+      "top": "skate-tee",
+      "outer": null,
+      "legs": "barrel-jeans"
+    },
+    "items": [
+      {
+        "id": "skate-tee",
+        "name": "SKATE TEE",
+        "slot": "top",
+        "unlock_level": 1,
+        "unlock_level_previous": 2,
+        "shop_match": {
+          "drop": "RCKLS018",
+          "keyword": "SKATE",
+          "type_any": [
+            "T-SHIRT",
+            "TEE"
+          ],
+          "seen_in_orders": true
+        }
+      },
+      {
+        "id": "barrel-jeans",
+        "name": "BARREL JEANS",
+        "slot": "legs",
+        "unlock_level": 1,
+        "unlock_level_previous": 5,
+        "shop_match": {
+          "drop": "RCKLS018",
+          "keyword": "BARREL",
+          "type_any": [
+            "JEANS"
+          ],
+          "seen_in_orders": true
+        }
+      },
+      {
+        "id": "rckls-tee",
+        "name": "RCKLS TEE",
+        "slot": "top",
+        "unlock_level": 2,
+        "unlock_level_previous": 3,
+        "shop_match": {
+          "drop": "RCKLS018",
+          "keyword": "RCKLS",
+          "type_any": [
+            "T-SHIRT",
+            "TEE"
+          ],
+          "seen_in_orders": true
+        }
+      },
+      {
+        "id": "see-me-shorts",
+        "name": "SEE ME SHORTS",
+        "slot": "legs",
+        "unlock_level": 3,
+        "unlock_level_previous": 3,
+        "shop_match": {
+          "drop": "RCKLS018",
+          "keyword": "SEE ME",
+          "type_any": [
+            "SHORTS"
+          ],
+          "seen_in_orders": false
+        }
+      },
+      {
+        "id": "deject-sleeve",
+        "name": "DEJECT SLEEVE",
+        "slot": "top",
+        "unlock_level": 3,
+        "unlock_level_previous": 4,
+        "shop_match": {
+          "drop": "RCKLS018",
+          "keyword": "DEJECT",
+          "type_any": [
+            "LONG SLEEVE",
+            "SLEEVE"
+          ],
+          "seen_in_orders": true
+        }
+      },
+      {
+        "id": "moltin-tee",
+        "name": "MOLTIN TEE",
+        "slot": "top",
+        "unlock_level": 4,
+        "unlock_level_previous": 5,
+        "shop_match": {
+          "drop": "RCKLS018",
+          "keyword": "MOLTIN",
+          "type_any": [
+            "T-SHIRT",
+            "TEE"
+          ],
+          "seen_in_orders": false
+        }
+      },
+      {
+        "id": "seasoned-pants",
+        "name": "SEASONED PANTS",
+        "slot": "legs",
+        "unlock_level": 4,
+        "unlock_level_previous": 6,
+        "shop_match": {
+          "drop": "RCKLS018",
+          "keyword": "SEASONED",
+          "type_any": [
+            "SWEATPANTS",
+            "PANTS",
+            "JOGGERS"
+          ],
+          "seen_in_orders": true
+        }
+      },
+      {
+        "id": "stripped-tee",
+        "name": "STRIPPED TEE",
+        "slot": "top",
+        "unlock_level": 5,
+        "unlock_level_previous": 6,
+        "shop_match": {
+          "drop": "RCKLS018",
+          "keyword": "STRIPPED",
+          "type_any": [
+            "T-SHIRT",
+            "TEE"
+          ],
+          "seen_in_orders": true
+        }
+      },
+      {
+        "id": "isometric-tee",
+        "name": "ISOMETRIC TEE",
+        "slot": "top",
+        "unlock_level": 6,
+        "unlock_level_previous": 8,
+        "shop_match": {
+          "drop": "RCKLS018",
+          "keyword": "ISOMETRIC",
+          "type_any": [
+            "T-SHIRT",
+            "TEE"
+          ],
+          "seen_in_orders": true
+        }
+      },
+      {
+        "id": "seasoned-hoodie",
+        "name": "SEASONED HOODIE",
+        "slot": "outer",
+        "unlock_level": 7,
+        "unlock_level_previous": 7,
+        "shop_match": {
+          "drop": "RCKLS018",
+          "keyword": "SEASONED",
+          "type_any": [
+            "HOODIE"
+          ],
+          "seen_in_orders": true
+        }
+      },
+      {
+        "id": "artillery",
+        "name": "ARTILLERY CARGOS",
+        "slot": "legs",
+        "unlock_level": 7,
+        "unlock_level_previous": 8,
+        "shop_match": {
+          "drop": "RCKLS018",
+          "keyword": "ARTILLERY",
+          "type_any": [
+            "CARGO",
+            "PANTS"
+          ],
+          "seen_in_orders": true
+        }
+      },
+      {
+        "id": "ultra-tee",
+        "name": "ULTRA TEE",
+        "slot": "top",
+        "unlock_level": 8,
+        "unlock_level_previous": 9,
+        "shop_match": {
+          "drop": "RCKLS018",
+          "keyword": "ULTRA",
+          "type_any": [
+            "T-SHIRT",
+            "TEE"
+          ],
+          "seen_in_orders": true
+        }
+      },
+      {
+        "id": "stan-bottoms",
+        "name": "STAN BOTTOMS",
+        "slot": "legs",
+        "unlock_level": 9,
+        "unlock_level_previous": 9,
+        "shop_match": {
+          "drop": "RCKLS018",
+          "keyword": "STAN",
+          "type_any": [
+            "BOTTOMS"
+          ],
+          "seen_in_orders": true
+        }
+      },
+      {
+        "id": "rawdwg-zip",
+        "name": "RAWDWG ZIP",
+        "slot": "outer",
+        "unlock_level": 10,
+        "unlock_level_previous": 10,
+        "shop_match": {
+          "drop": "RCKLS018",
+          "keyword": "RAWDWG",
+          "type_any": [
+            "ZIP"
+          ],
+          "seen_in_orders": false
+        }
+      },
+      {
+        "id": "pinner-tee",
+        "name": "PINNER TEE",
+        "slot": "top",
+        "unlock_level": 10,
+        "unlock_level_previous": 11,
+        "shop_match": {
+          "drop": "RCKLS018",
+          "keyword": "PINNER",
+          "type_any": [
+            "T-SHIRT",
+            "TEE"
+          ],
+          "seen_in_orders": true
+        }
+      },
+      {
+        "id": "rawdawg-shorts",
+        "name": "RAWDWG SHORTS",
+        "slot": "legs",
+        "unlock_level": 11,
+        "unlock_level_previous": 11,
+        "shop_match": {
+          "drop": "RCKLS018",
+          "keyword": "RAWDWG",
+          "type_any": [
+            "SHORTS"
+          ],
+          "seen_in_orders": false
+        }
+      },
+      {
+        "id": "distress-shirt",
+        "name": "DISTRESS SHIRT",
+        "slot": "top",
+        "unlock_level": 11,
+        "unlock_level_previous": 12,
+        "shop_match": {
+          "drop": "RCKLS018",
+          "keyword": "DISTRESS",
+          "type_any": [
+            "SHIRT"
+          ],
+          "seen_in_orders": false
+        }
+      },
+      {
+        "id": "manager-shorts",
+        "name": "MANAGER SHORTS",
+        "slot": "legs",
+        "unlock_level": 12,
+        "unlock_level_previous": 12,
+        "shop_match": {
+          "drop": "RCKLS018",
+          "keyword": "MANAGER",
+          "type_any": [
+            "SHORTS"
+          ],
+          "seen_in_orders": false
+        }
+      },
+      {
+        "id": "manager-zip",
+        "name": "MANAGER ZIP",
+        "slot": "outer",
+        "unlock_level": 13,
+        "unlock_level_previous": 13,
+        "shop_match": {
+          "drop": "RCKLS018",
+          "keyword": "MANAGER",
+          "type_any": [
+            "ZIP"
+          ],
+          "seen_in_orders": true
+        }
+      },
+      {
+        "id": "see-me-crop",
+        "name": "SEE ME CROP",
+        "slot": "top",
+        "unlock_level": 14,
+        "unlock_level_previous": 14,
+        "shop_match": {
+          "drop": "RCKLS018",
+          "keyword": "SEE ME",
+          "type_any": [
+            "CROP"
+          ],
+          "seen_in_orders": false
+        }
+      },
+      {
+        "id": "stan-hoodie",
+        "name": "STAN HOODIE",
+        "slot": "outer",
+        "unlock_level": 14,
+        "unlock_level_previous": 14,
+        "shop_match": {
+          "drop": "RCKLS018",
+          "keyword": "STAN",
+          "type_any": [
+            "HOODIE"
+          ],
+          "seen_in_orders": true
+        }
+      },
+      {
+        "id": "rcklstv-jersey",
+        "name": "RCKLSTV JERSEY",
+        "slot": "top",
+        "unlock_level": 15,
+        "unlock_level_previous": 15,
+        "shop_match": {
+          "drop": "RCKLS018",
+          "keyword": "RCKLSTV",
+          "type_any": [
+            "JERSEY"
+          ],
+          "seen_in_orders": true
+        }
+      },
+      {
+        "id": "mesh-jersey",
+        "name": "MESH JERSEY",
+        "slot": "top",
+        "unlock_level": 15,
+        "unlock_level_previous": 15,
+        "shop_match": {
+          "drop": "RCKLS018",
+          "keyword": "MESH",
+          "type_any": [
+            "JERSEY"
+          ],
+          "seen_in_orders": false
+        }
+      }
+    ]
+  },
+  "digital_rewards": [
+    {
+      "id": "badge",
+      "level": 1,
+      "name": "CREW BADGE"
+    },
+    {
+      "id": "stickers",
+      "level": 2,
+      "name": "STICKER PACK"
+    },
+    {
+      "id": "wallpaper",
+      "level": 3,
+      "name": "WALLPAPER"
+    }
+  ],
+  "ledger_contract": {
+    "file": "xp-ingest data/ledger.json (per email)",
+    "fields": [
+      "email",
+      "xp_total",
+      "crew",
+      "crew_label",
+      "level_within_crew",
+      "band",
+      "merch_percent",
+      "ticket_percent",
+      "next_band_xp",
+      "xp_to_next",
+      "updated_at",
+      "owned_items",
+      "owned_merch"
+    ],
+    "owned_items": "wardrobe ids from Drop 018 purchases (refunded orders excluded)",
+    "owned_merch": "normalised slugs of every merch item bought, for future drops"
+  },
+  "issued_tab_columns": [
+    "issued_at",
+    "email",
+    "from_crew",
+    "to_crew",
+    "code",
+    "percent",
+    "channel",
+    "notes",
+    "skipped_crews",
+    "trigger_event_id",
+    "xp_total_at_issue",
+    "status",
+    "emailed_at",
+    "redeemed_at",
+    "redeemed_order_id"
+  ],
+  "issued_status_values": [
+    "minted",
+    "issued",
+    "emailed",
+    "redeemed",
+    "expired",
+    "void"
+  ],
+  "history": [
+    {
+      "date": "2026-11-18",
+      "change": "curve 0..55000 -> 0..7500; game 50/25/400 -> 20/10/40; wardrobe re-spaced; starter fit at L1",
+      "approved_by": "Luke Carlin"
+    },
+    {
+      "previous_game": {
+        "digital_rave_attended": {
+          "xp": 50,
+          "max_per_london_day": 2,
+          "max_per_iso_week": 6
+        },
+        "poster_placed": {
+          "xp": 25,
+          "max_per_london_day": 5
+        },
+        "weekly_cap_xp": 400
+      }
+    }
+  ],
+  "issued_tab_note": "Sheet 'Issued' A:O in this order (A-H unchanged from before, I-O added 18 Nov). APP DEV appends one row per code.",
+  "owned_feed": {
+    "sheet_tab": "Owned",
+    "columns": [
+      "email",
+      "item_name",
+      "order_id",
+      "purchased_at"
+    ],
+    "item_name": "exactly the wardrobe item `name` in this file (e.g. 'SKATE TEE')",
+    "fallback_file": "/home/box/shared/reckless-crew/owned.json",
+    "fallback_shape": {
+      "email": [
+        "Item Name"
+      ]
+    },
+    "writer": "xp-ingest/batch_squarespace.py (non-dry, post-launch runs only; full rebuild so a fully refunded order removes its rows)",
+    "now": "headers only / {} until launch"
+  },
+  "sheet": {
+    "spreadsheetId": "1UAJghKLy1Z87cfdWzHy1jvFvTnx4dtQObl3SUULOf30",
+    "tabs": [
+      "Codes",
+      "Ladder",
+      "Issued",
+      "Level Thresholds",
+      "XP Events",
+      "XP Ledger",
+      "Owned"
+    ]
+  }
+}

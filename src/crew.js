@@ -4,13 +4,18 @@
 // READ-ONLY against the Crew API: GET /api/crew only. Never PUT, never XP, never codes.
 const B = () => import.meta.env.BASE_URL + 'crew/';
 export const API = 'https://reckless-raves-api-30is.onrender.com';
-// ---- crew rules: owned by RECKLESS CREW LOYALTY. Ranks are being redesigned (~500 XP per ticket); swap the numbers here only. ----
+// ---- crew rules: owned by RECKLESS CREW LOYALTY (crew_config.json, schema reckless-crew-config/v1). Never edited here. ----
+// Runtime: GET {API}/api/crew/config, falling back to the copy bundled at build time (public/data/crew_config.json).
+// The numbers below are only the last-resort fallback if neither loads.
 export const CREW_RULES = {
-  RANKS: [0, 200, 500, 1000, 1800, 2800, 4500, 6500, 9000, 13000, 18000, 24000, 32000, 42000, 55000], // xp_to_enter for levels 1..15
-  SIGNED_OUT_LEVEL: 1, // signed-out players (and signed-in before the crew loads) only get L1 pieces
+  RANKS: [0, 250, 500, 1000, 1250, 1500, 2000, 2250, 2500, 3000, 3500, 4000, 5000, 6000, 7500], // xp_to_enter for levels 1..15
+  SIGNED_OUT_LEVEL: 1, // signed-out players (and signed-in before the crew loads) get only what the first rank unlocks
+  STARTER_FIT: { top: 'skate-tee', outer: null, legs: 'barrel-jeans' },
+  GAME: { weekly_cap_xp: 40, rave: { xp: 20, min_dwell_seconds: 600, max_per_london_day: 1, max_per_iso_week: 2 }, poster: { xp: 10, max_per_london_day: 2 } },
+  source: 'fallback', status: null, updated_at: null,
 };
-export const RANKS = CREW_RULES.RANKS;
-export const levelFor = (xp) => { let l = 1; RANKS.forEach((x, i) => { if (xp >= x) l = i + 1; }); return l; };
+export const RANKS = CREW_RULES.RANKS; // same array object; refilled in place by applyCrewConfig
+export const levelFor = (xp) => { let l = 1; CREW_RULES.RANKS.forEach((x, i) => { if (xp >= x) l = i + 1; }); return l; };
 // col = colour sampled from the app render for the in-world 3D figure; kind = which 3D garment shape.
 const W = (id, name, slot, level, icon, look, withJeans, col, kind) => ({ id, name, slot, level, icon, look, withJeans, col, kind });
 export const WARDROBE = [
@@ -60,14 +65,13 @@ export function visibleFor(top, outer, legs) {
   if (piece) return { upper: piece, lower: piece.withJeans === piece.look ? jeans : null };
   return { upper: null, lower: leg };
 }
-// default fit must be L1-only. Drop 018 has no L1 garment (lowest: Skate Tee L2, See Me Shorts L3, Barrel Jeans L5), so the
-// L1 look is the app's own base-body render, exactly what a new L1 crew member sees in the app.
-export const DEFAULT_FIT = { top: null, outer: null, legs: null };
+// starter fit comes from crew_config.wardrobe.starter_fit
+export const DEFAULT_FIT = CREW_RULES.STARTER_FIT;
 /** Current crew level: signed out / not loaded = SIGNED_OUT_LEVEL; otherwise from Crew XP (read-only). */
 export const playerLevel = (xp) => xp == null ? CREW_RULES.SIGNED_OUT_LEVEL : levelFor(xp);
 /** Strip any piece above the player's level (e.g. a saved try-on fit from before the rule). */
 export const allowedFit = (fit, lvl) => { const o = { ...EMPTY_FIT }; for (const k of ['top', 'outer', 'legs']) { const p = gearById(fit && fit[k]); o[k] = p && p.level <= lvl ? p.id : null; } return o; };
-export function loadFit() { try { const f = JSON.parse(localStorage.getItem('rw.fit') || 'null'); if (f && 'top' in f) return f; } catch (e) { } return { ...DEFAULT_FIT }; }
+export function loadFit() { try { const f = JSON.parse(localStorage.getItem('rw.fit') || 'null'); if (f && 'top' in f) return f; } catch (e) { } return { ...CREW_RULES.STARTER_FIT }; }
 export const saveFit = (f) => localStorage.setItem('rw.fit', JSON.stringify(f));
 /** Tap behaviour from crew.tsx: tap an unlocked piece to equip it in its slot, tap again to remove. */
 export const toggle = (fit, piece) => ({ ...fit, [piece.slot]: fit[piece.slot] === piece.id ? null : piece.id });
@@ -85,4 +89,21 @@ export async function readCrew(acct = getAccount()) {
   const r = await fetch(API + '/api/crew', { headers: { Authorization: 'Bearer ' + acct.token } });
   if (!r.ok) return null; const p = await r.json(); const f = p.fit || {};
   return { xp: Math.max(0, Math.floor(Number(p.xp) || 0)), fit: { top: f.top ?? null, outer: f.outer ?? null, legs: f.legs ?? null } };
+}
+
+/** Apply a crew_config (v1) in place: rank thresholds, wardrobe unlock levels, starter fit, game XP rules. */
+export function applyCrewConfig(c, source) {
+  if (!c || c.schema !== 'reckless-crew-config/v1') return false;
+  const lv = (c.levels || []).slice().sort((a, b) => a.level - b.level).map(l => Number(l.xp_to_enter));
+  if (lv.length && lv.every(Number.isFinite)) { CREW_RULES.RANKS.length = 0; CREW_RULES.RANKS.push(...lv); }
+  const items = (c.wardrobe && c.wardrobe.items) || [];
+  for (const it of items) { const p = gearById(it.id); if (p && Number.isFinite(Number(it.unlock_level))) p.level = Number(it.unlock_level); }
+  const sf = c.wardrobe && c.wardrobe.starter_fit; if (sf) for (const k of ['top', 'outer', 'legs']) CREW_RULES.STARTER_FIT[k] = sf[k] ?? null;
+  const g = c.xp_rates && c.xp_rates.game; if (g) { CREW_RULES.GAME.weekly_cap_xp = g.weekly_cap_xp ?? CREW_RULES.GAME.weekly_cap_xp; if (g.digital_rave_attended) CREW_RULES.GAME.rave = { ...CREW_RULES.GAME.rave, ...g.digital_rave_attended }; if (g.poster_placed) CREW_RULES.GAME.poster = { ...CREW_RULES.GAME.poster, ...g.poster_placed }; }
+  CREW_RULES.source = source; CREW_RULES.status = c.status || null; CREW_RULES.updated_at = c.updated_at || null; return true;
+}
+export async function loadCrewConfig() {
+  const get = async (url, ms) => { const ac = new AbortController(); const t = setTimeout(() => ac.abort(), ms); try { const r = await fetch(url, { signal: ac.signal, cache: 'no-cache' }); return r.ok ? await r.json() : null; } catch (e) { return null; } finally { clearTimeout(t); } };
+  const live = await get(API + '/api/crew/config', 2500); if (applyCrewConfig(live, 'api')) return CREW_RULES;
+  const local = await get(import.meta.env.BASE_URL + 'data/crew_config.json', 5000); applyCrewConfig(local, 'bundled'); return CREW_RULES;
 }
