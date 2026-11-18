@@ -94,20 +94,22 @@ function lightsVD(kind) { // headlights front (+z), tail lights back
 }
 
 // CC0 Kenney Car Kit bodies (tools/blender/export_cars.py -> data/cars.json): palette colours, paint colour re-tinted per car
-const MODEL_OF = { saloon: 'sedan', hatch: 'hatchback-sports', taxi: 'taxi', suv: 'suv', van: 'van' };
-function modelVD(M, kind, col) {
-  const m = M && M[MODEL_OF[kind]]; if (!m) return null;
+const MODEL_OF = { saloon: 'sedan', hatch: 'hatchback-sports', taxi: 'taxi', suv: 'suv', van: 'van', bus: 'glider', wagon: 'wagon', estate: 'suv' }; // glider + wagon: tools/gen_vehicles.py
+function modelVD(M, kind, col, part = 'body') {
+  const m = M && M[MODEL_OF[kind]]; if (!m) return null; const EM = new Set(m.emit || []);
   const b64 = (str) => Uint8Array.from(atob(str), ch => ch.charCodeAt(0)).buffer;
   const pos = new Int16Array(b64(m.pos)), ci = new Uint8Array(b64(m.col)), ind = new Uint16Array(b64(m.ind));
   const hsv = ([r, g, b]) => { const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn; let h = 0; if (d > 1e-4) h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; return [h * 60, mx > 0 ? d / mx : 0, mx]; };
-  const pc = m.pal[m.paint], [ph, ps, pv] = hsv(pc);
-  const pal = m.pal.map(e => { const [h, sat, v] = hsv(e); const dh = Math.min(Math.abs(h - ph), 360 - Math.abs(h - ph));
+  const pc = m.paint >= 0 ? m.pal[m.paint] : [0, 0, 0], [ph, ps, pv] = hsv(pc);
+  const pal = m.pal.map(e => { if (m.paint < 0) return e; const [h, sat, v] = hsv(e); const dh = Math.min(Math.abs(h - ph), 360 - Math.abs(h - ph));
     const isPaint = ps > 0.3 ? (sat > 0.2 && dh < 20) : Math.hypot(e[0] - pc[0], e[1] - pc[1], e[2] - pc[2]) < 0.035;
     if (!isPaint) return e; const k = Math.min(1.25, v / pv); return [col.r * k, col.g * k, col.b * k]; });
   const n = ci.length, P = new Float32Array(n * 3), C = new Float32Array(n * 4);
   for (let i = 0; i < n; i++) { P[i * 3] = pos[i * 3] * m.scale; P[i * 3 + 1] = pos[i * 3 + 1] * m.scale; P[i * 3 + 2] = pos[i * 3 + 2] * m.scale;
     const c = pal[ci[i]]; C[i * 4] = c[0]; C[i * 4 + 1] = c[1]; C[i * 4 + 2] = c[2]; C[i * 4 + 3] = 1; }
-  const vd = new VertexData(); vd.positions = P; vd.colors = C; vd.indices = Array.from(ind); vd.normals = []; VertexData.ComputeNormals(vd.positions, vd.indices, vd.normals); return vd;
+  let I = Array.from(ind); if (EM.size || part === 'lights') { const keep = []; for (let t = 0; t < I.length; t += 3) { const e = EM.has(ci[I[t]]); if (e === (part === 'lights')) keep.push(I[t], I[t + 1], I[t + 2]); } I = keep; }
+  if (part === 'lights' && !I.length) return null;
+  const vd = new VertexData(); vd.positions = P; vd.colors = C; vd.indices = I; vd.normals = []; VertexData.ComputeNormals(vd.positions, vd.indices, vd.normals); return vd;
 }
 export function buildTraffic(scene, city, { low = false, stops = [], signals = [], models = null } = {}) {
   const R = rng(77);
@@ -123,7 +125,7 @@ export function buildTraffic(scene, city, { low = false, stops = [], signals = [
   const templates = {};
   const tpl = (key, kind, col) => {
     if (templates[key]) return templates[key];
-    const b = toMesh('car-' + key, (MODEL_OF[kind] && modelVD(models, kind, col)) || carVD(kind, col), scene, bodyM); const l = toMesh('carL-' + key, lightsVD(kind), scene, lightM);
+    const b = toMesh('car-' + key, (MODEL_OF[kind] && modelVD(models, kind, col)) || carVD(kind, col), scene, bodyM); const l = toMesh('carL-' + key, (models && models[MODEL_OF[kind]] && models[MODEL_OF[kind]].emit && modelVD(models, kind, col, 'lights')) || lightsVD(kind), scene, lightM);
     b.position.y = -500; l.position.y = -500; b.alwaysSelectAsActiveMesh = true; l.alwaysSelectAsActiveMesh = true; return (templates[key] = { b, l, kind });
   };
   // patrol livery meshes (fictional Belfast-style; Battenburg side panels, blue roof bar, no marks)
@@ -135,6 +137,19 @@ export function buildTraffic(scene, city, { low = false, stops = [], signals = [
   const darkM = new StandardMaterial('lbBase', scene); darkM.diffuseColor = hex('#1b1d22'); darkM.specularColor = new Color3(0.2, 0.2, 0.2);
   const patrolDeco = (node, kind) => {
     const W = kind === 'wagon';
+    if (models && models[MODEL_OF[kind]]) { // modelled patrol vehicles: Battenburg baked into the wagon body; plain POLICE lettering + blue bar here
+      const mw = W ? 1.135 : 0.965;
+      if (!W) for (const sd of [-1, 1]) { const p = toMesh('bb', xf(box(0.02, 0.36, 3.9), { t: [sd * mw, 0.72, 0.05] }), scene, bbM); p.parent = node; }
+      if (W) for (const sd of [-1, 1]) { const pl = toMesh('polS', xf(plane(1.5, 0.38), {}), scene, polM); pl.parent = node; pl.rotation.y = sd > 0 ? -Math.PI / 2 : Math.PI / 2; pl.position.set(sd * (mw + 0.01), 2.2, -1.75); }
+      const pf = toMesh('polF', xf(plane(W ? 0.95 : 0.8, W ? 0.23 : 0.19), {}), scene, polM); pf.parent = node; pf.rotation.y = Math.PI;
+      if (W) pf.position.set(0, 1.3, 2.565); else { pf.rotation.x = Math.PI / 2 - 0.2; pf.position.set(0, 1.07, 1.75); }
+      const by = W ? 3.12 : 1.8, bz = W ? 0.9 : -0.1, bw = W ? 1.9 : 1.3;
+      const base = toMesh('lbB', xf(box(bw + 0.08, 0.06, 0.32), { t: [0, by - 0.07, bz] }), scene, darkM); base.parent = node;
+      const b1 = toMesh('bar1', xf(box(bw / 2 - 0.02, 0.13, 0.28), { t: [-bw / 4, by, bz] }), scene, barM); b1.parent = node;
+      const b2 = toMesh('bar2', xf(box(bw / 2 - 0.02, 0.13, 0.28), { t: [bw / 4, by, bz] }), scene, barM2); b2.parent = node;
+      if (W) for (const sd of [-1, 1]) { const g = toMesh('grillB', xf(box(0.16, 0.08, 0.04), { t: [sd * 0.45, 1.85, 2.58] }), scene, sd < 0 ? barM : barM2); g.parent = node; }
+      return;
+    }
     const len = W ? 4.9 : 4.3, y = W ? 1.22 : 0.7, h = W ? 0.78 : 0.42, x = W ? 1.162 : 0.93;
     for (const sd of [-1, 1]) { const p = toMesh('bb', xf(box(0.02, h, len), { t: [sd * x, y, 0] }), scene, bbM); p.parent = node;
       const pl = toMesh('polS', xf(plane(W ? 1.9 : 1.3, W ? 0.48 : 0.32), {}), scene, polM); pl.parent = node; pl.rotation.y = sd > 0 ? -Math.PI / 2 : Math.PI / 2;

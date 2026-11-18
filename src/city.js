@@ -187,7 +187,7 @@ export async function buildCity(scene, { low = false } = {}) {
     g.fillStyle = 'rgba(70,68,64,0.6)'; for (let i = 0; i <= n; i++) { g.fillRect(i * s - 1.5, 0, 3, N); g.fillRect(0, i * s - 1.5, N, 3); } });
   const roadM = new StandardMaterial('roads', scene); roadM.diffuseTexture = asphT; roadM.specularColor = new Color3(0.34, 0.35, 0.42); roadM.specularPower = 64; roadM.backFaceCulling = false; // damp Belfast tarmac sheen
   const paveM = new StandardMaterial('pavement', scene); paveM.diffuseTexture = paveT; paveM.specularColor = new Color3(0.12, 0.12, 0.14); paveM.specularPower = 32; paveM.backFaceCulling = false;
-  { const gT = paveT.clone(); gT.uScale = 2200 / 4.2; gT.vScale = 3560 / 4.2; gT.anisotropicFilteringLevel = 8; gm.diffuseTexture = gT; gm.diffuseColor = hex('#6c6a67'); gm.specularColor = new Color3(0.1, 0.1, 0.12); gm.specularPower = 40; } // the city floor is paving (forecourts, yards, plazas), not a dark void
+  { const gT = paveT.clone(); gT.uScale = 2200 / 3; gT.vScale = 3560 / 3; gT.anisotropicFilteringLevel = 8; gm.diffuseTexture = gT; gm.diffuseColor = hex('#7a7875'); gm.specularColor = new Color3(0.1, 0.1, 0.12); gm.specularPower = 32; } // the city floor is paving (forecourts, yards, plazas), not a dark void
   const markM = new StandardMaterial('markings', scene); markM.specularColor = new Color3(0.2, 0.2, 0.2); markM.emissiveColor = new Color3(0.08, 0.08, 0.08); markM.backFaceCulling = false;
   const cobT = mkTex('cobT', 512, (g, N) => { const r = rng(13); g.fillStyle = '#4a4744'; g.fillRect(0, 0, N, N); const rows = 16, h = N / rows;
     for (let j = 0; j < rows; j++) { let x = (j % 2) * h * 0.6 - h; while (x < N) { const w = h * (1.1 + r() * 0.7), v = 120 + r() * 70 | 0; g.fillStyle = `rgb(${v},${v - 4},${v - 10})`;
@@ -236,7 +236,7 @@ export async function buildCity(scene, { low = false } = {}) {
           const k1 = r.w / 2, k2 = r.w / 2 + 0.22; // kerb face + kerb stone
           wallB(MK, [A[0] + ox * k1, A[1] + oz * k1], [Bp[0] + ox * k1, Bp[1] + oz * k1], YR, YP + 0.004, KERBF);
           quadB(MK, [A[0] + ox * (k1 + k2) / 2, A[1] + oz * (k1 + k2) / 2], [Bp[0] + ox * (k1 + k2) / 2, Bp[1] + oz * (k1 + k2) / 2], 0.22, YP + 0.004, KERB);
-          const o2 = r.w / 2 + PW; wallB(MK, [Bp[0] + ox * o2, Bp[1] + oz * o2], [A[0] + ox * o2, A[1] + oz * o2], -0.12, YP, KERBF);
+          const o2 = r.w / 2 + PW; wallB(MK, [Bp[0] + ox * o2, Bp[1] + oz * o2], [A[0] + ox * o2, A[1] + oz * o2], -0.105, YP, PAVE); // back edge in paving colour (no dark seam against the paved floor)
         }
       }
     } else {
