@@ -254,6 +254,7 @@ export function updateTraffic(T, dt, player, t) {
   const { G, PG } = T;
   if (!T.inited) { T.cars.forEach(c => T.placeCar(c, player)); T.peds.forEach(p => T.placePed(p, player)); T.inited = true; }
   for (const c of T.cars) {
+    if (c.chase) continue; // driven by src/missions.js while chasing (heat)
     const pa = G.pos.get(c.a), pb = G.pos.get(c.b);
     const ux = (pb[0] - pa[0]) / c.len, uz = (pb[1] - pa[1]) / c.len;
     // stop for the player if they are in front of the car

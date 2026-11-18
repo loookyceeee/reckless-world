@@ -46,11 +46,13 @@ export function createHUD(app) {
   const hud = el('div', 'hud'); document.body.appendChild(hud);
   hud.innerHTML = `
   <div class="brand"><img src="${import.meta.env.BASE_URL}img/logo.png" alt="Reckless"/><div><b>RECKLESS WORLD</b><span>BELFAST · PROTOTYPE 0.1</span></div></div>
-  <div class="topright"><div class="fps" id="fps">— FPS</div><div class="live" id="live"><i></i><span>RAVE MODE · DEMO</span> <a href="https://www.recklessraves.co.uk" target="_blank" rel="noopener">TICKETS</a></div><div class="objective" id="objective"></div><a class="np" id="np" target="_blank" rel="noopener"></a></div>
+  <div class="topright"><div class="fps" id="fps">— FPS</div><div class="live" id="live"><i></i><span>RAVE MODE · DEMO</span> <a href="https://www.recklessraves.co.uk" target="_blank" rel="noopener">TICKETS</a></div><div class="heat" id="heat" title="HEAT"><i></i><i></i><i></i></div><div class="objective" id="objective"></div><a class="np" id="np" target="_blank" rel="noopener"></a></div>
   <div class="mapwrap"><canvas id="minimap" width="220" height="220"></canvas><canvas id="stam" width="240" height="240"></canvas><div class="street" id="street"></div><div class="district" id="district"></div><div class="gps" id="gps"></div></div>
   <div class="prompt" id="prompt"></div>
   <div class="toast" id="toast"></div>
   <div class="notes" id="notes"></div>
+  <div class="mtitle" id="mtitle"><div class="lb t"></div><div class="lb b"></div><div class="mtb"><small></small><b></b></div></div>
+  <div class="hints" id="hints"></div>
   <div class="stamp" id="stamp"><div class="lb t"></div><div class="lb b"></div><div class="sbody"><div class="stitle"></div><div class="ssub"></div><div class="slines"></div></div></div>
   <div class="btns"><button data-k="phone" class="phfab">PHONE</button><button data-k="m">MAP</button><button data-k="o">WARDROBE</button><button data-k="f">DANCE</button><button data-k="p">PHOTO</button><button data-k="c">CREDITS</button><button data-k="n" id="sndBtn">SOUND: OFF</button><button data-k="l" id="lightsBtn" class="hide">LIGHTS: RAVE</button></div>
   <div class="touch" id="touch"><div class="stick" id="stick"><div class="nub" id="nub"></div></div><button class="tbtn run" id="tRun">RUN</button><button class="tbtn act" id="tAct">E</button><button class="tbtn jmp" id="tJump">JUMP</button><button class="tbtn tph" id="tPhone">☐<em id="tPhoneN"></em></button><button class="tbtn whl" id="tWheel">◎</button></div>
@@ -87,6 +89,15 @@ export function createHUD(app) {
       lines.forEach((t, i) => setTimeout(() => { const d = el('div', 'sl'); d.textContent = t; L.appendChild(d); requestAnimationFrame(() => d.classList.add('on')); }, 1400 + i * 160));
       api._st1 = setTimeout(() => S.classList.add('out'), 4200); api._st2 = setTimeout(() => { S.className = 'stamp'; hud.classList.remove('stamping'); }, 5000);
     },
+    // mission intro (1.9): letterbox, kicker, display title, hold 2.4 s, then the objective slot takes over
+    mtitle({ kicker = 'NEW ACTIVITY', title = '', red = false } = {}) {
+      const M = $('mtitle'); M.className = 'mtitle' + (red ? ' red' : ''); M.querySelector('small').textContent = kicker; M.querySelector('b').textContent = title;
+      void M.offsetWidth; M.classList.add('on'); clearTimeout(api._mt); api._mt = setTimeout(() => { M.classList.add('out'); setTimeout(() => { M.className = 'mtitle'; }, 500); }, 2800);
+    },
+    // heat pips (2.5): solid = active, red pulsing frame = searching (no line of sight), white flash when a pip is added
+    heat(level, searching, flash) { const h = $('heat'); h.classList.toggle('on', level > 0); h.classList.toggle('search', !!searching && level > 0); h.classList.toggle('flash', !!flash);
+      h.querySelectorAll('i').forEach((p, i) => p.classList.toggle('a', i < level)); },
+    hints(html, ms = 6000) { const h = $('hints'); if (!html) { h.classList.remove('on'); return; } h.innerHTML = html; h.classList.add('on'); clearTimeout(api._hn); api._hn = setTimeout(() => h.classList.remove('on'), ms); },
     toast(msg, s = 2.6) { $('toast').textContent = msg; $('toast').classList.add('on'); clearTimeout(api._tt); api._tt = setTimeout(() => $('toast').classList.remove('on'), s * 1000); },
     prompt(msg) { const p = $('prompt'); if (msg) { p.innerHTML = msg; p.classList.add('on'); } else p.classList.remove('on'); },
     fade(on) { $('fade').classList.toggle('on', on); },
@@ -115,6 +126,7 @@ export function createHUD(app) {
         const F = api.filters(), bl = (x, z, f) => { f(base.tx(x) - px, base.ty(z) - py); };
         if (F.stops) for (const b of (app.blips && app.blips.stops) || []) bl(b.x, b.z, (x, y) => { const r = 6 / k; mg.fillStyle = '#fff'; mg.fillRect(x - r, y - r, 2 * r, 2 * r); mg.fillStyle = '#000'; mg.font = `800 ${8 / k}px Unbounded, sans-serif`; mg.textAlign = 'center'; mg.textBaseline = 'middle'; mg.fillText('B', x, y + 0.5 / k); });
         if (F.posters) for (const b of (app.blips && app.blips.posters) || []) bl(b.x, b.z, (x, y) => { const r = 4 / k; mg.fillStyle = b.done ? '#777' : '#ff2a3c'; mg.fillRect(x - r * 0.7, y - r, r * 1.4, r * 2); });
+        for (const b of st.patrols || []) bl(b.x, b.z, (x, y) => { const r = 5 / k; mg.fillStyle = '#fff'; mg.strokeStyle = '#ff2a3c'; mg.lineWidth = 2 / k; mg.beginPath(); mg.arc(x, y, r, 0, Math.PI * 2); mg.fill(); mg.stroke(); });
         if (st.dest && st.dest.kind === 'waypoint') bl(st.dest.x, st.dest.z, (x, y) => { const r = 7 / k; mg.fillStyle = '#ff2a3c'; mg.strokeStyle = '#fff'; mg.lineWidth = 2 / k; mg.beginPath(); mg.moveTo(x, y - r); mg.lineTo(x + r, y); mg.lineTo(x, y + r); mg.lineTo(x - r, y); mg.closePath(); mg.fill(); mg.stroke(); });
         mg.scale(1 / k, 1 / k);
       } else { // interior: nave layout with stage, barrier, bar and exits

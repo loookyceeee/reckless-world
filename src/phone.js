@@ -30,9 +30,11 @@ export function createPhone(ctx) {
     rave: () => { const r = ctx.rave(); const pct = Math.min(100, Math.round((r.dwell || 0) / (r.need || 600) * 100));
       return frame('RAVE', `<div class="phcard"><small>TONIGHT</small><b>${esc(r.venue || 'THE TEMPLE')}</b><span>${r.inside ? 'You are inside.' : 'Doors open. Follow the red line to the door.'}</span></div>
       <div class="phcard"><small>10 MIN TO LOG A VISIT</small><div class="phbar"><i style="width:${r.inside ? pct : 0}%"></i></div><span>${r.inside ? `${Math.floor((r.dwell || 0) / 60)} / 10 MIN` : 'Timer starts when you walk in.'}</span></div>
-      <button class="phbtn" data-act="gpsTemple">SET GPS · THE TEMPLE</button><p class="phfine">Visits are test events until launch. The game never awards XP.</p>`); },
+      <button class="phbtn" data-act="gpsTemple">SET GPS · THE TEMPLE</button>
+      ${ctx.missions ? (ctx.missions.active() === 'fd' ? '<button class="phbtn on" data-act="fdCancel">CANCEL FLYER DROP</button>' : '<button class="phbtn" data-act="fdStart">START FLYER DELIVERY</button>') : ''}<p class="phfine">Visits are test events until launch. The game never awards XP.</p>`); },
     posters: () => { const P = ctx.posters(); const d = P.filter(p => p.done).length;
       return frame('POSTERS', `<div class="phcard"><small>WALLS TODAY</small><b>${d} / ${P.length}</b><span>Paste a fresh poster at each spot. Watch for patrols.</span></div>
+      ${ctx.missions ? (ctx.missions.active() === 'pr' ? '<button class="phbtn on" data-act="prCancel">CANCEL POSTER RUN</button>' : '<button class="phbtn" data-act="prStart">START POSTER RUN · HEAT RISK</button>') : ''}
       <div class="phlist">${P.map((p, i) => `<button class="phrow" data-poster="${i}"><span>${esc(p.name)}</span><i>${p.done ? 'DONE' : 'GO ›'}</i></button>`).join('')}</div>`); },
     radio: () => { const r = ctx.radio();
       return frame('RADIO', `<div class="phcard"><small>RECKLESS FM · NOW PLAYING</small><b>${esc(r.playing && r.title ? r.title.toUpperCase() : (r.failed ? 'RECKLESS BEAT (OFFLINE)' : 'TURN THE SOUND ON'))}</b><span>Reckless Raves on SoundCloud</span></div>
@@ -43,9 +45,10 @@ export function createPhone(ctx) {
     settings: () => { const q = ctx.quality.get();
       return frame('SETTINGS', `<div class="phcard"><small>QUALITY</small><div class="phrowb">${['low', 'med', 'high'].map(n => `<button class="phbtn${q === n ? ' on' : ''}" data-q="${n}">${n.toUpperCase()}</button>`).join('')}</div></div>
       <div class="phrowb"><button class="phbtn" data-act="sound">${esc(ctx.sound.label())}</button><button class="phbtn" data-act="credits">CREDITS</button></div>
+      <div class="phcard"><small>LOOK SENSITIVITY</small><div class="phrowb"><button class="phbtn" data-act="sensDn">−</button><b class="phval">${ctx.sens ? ctx.sens.get().toFixed(2) + '×' : ''}</b><button class="phbtn" data-act="sensUp">+</button></div><div class="phbar"><i style="width:${ctx.sens ? (ctx.sens.get() - 0.5) / 1.5 * 100 : 0}%"></i></div></div>
       <div class="phrowb"><button class="phbtn${haptics.on ? ' on' : ''}" data-act="haptics">HAPTICS ${haptics.on ? 'ON' : 'OFF'}</button></div>
       <p class="phfine">Map data © OpenStreetMap contributors. Terrain: LiDAR open data. Full credits in CREDITS.</p>`); },
-    msgs: () => frame('MSGS', msgs.length ? `<div class="phlist">${msgs.map((m, i) => `<button class="phmsg" data-msg="${i}"><small>${esc(m.from)} · ${esc(m.t)}</small><b>${esc(m.title)}</b><span>${esc(m.body)}</span>${m.dest ? '<i>TAP TO SET GPS ›</i>' : ''}</button>`).join('')}</div>` : '<p class="phfine">No messages.</p>'),
+    msgs: () => frame('MSGS', msgs.length ? `<div class="phlist">${msgs.map((m, i) => `<button class="phmsg" data-msg="${i}"><small>${esc(m.from)} · ${esc(m.t)}</small><b>${esc(m.title)}</b><span>${esc(m.body)}</span>${m.act ? '<i>TAP TO START ›</i>' : m.dest ? '<i>TAP TO SET GPS ›</i>' : ''}</button>`).join('')}</div>` : '<p class="phfine">No messages.</p>'),
   };
   let lastHtml = '';
   const render = () => { const h = (views[view] || views.home)(); if (h === lastHtml) return; lastHtml = h; el.innerHTML = h; }; // only touch the DOM on change, so taps aren't lost
@@ -62,9 +65,14 @@ export function createPhone(ctx) {
     if (b.dataset.v) return go(b.dataset.v);
     if (b.dataset.q) { ctx.quality.set(b.dataset.q); return render(); }
     if (b.dataset.poster != null) { const p = ctx.posters()[+b.dataset.poster]; if (p && !p.done) { ctx.setDest({ x: p.x, z: p.z, label: 'POSTER · ' + p.name, kind: 'waypoint' }); api.close(); } return; }
-    if (b.dataset.msg != null) { const m = msgs[+b.dataset.msg]; if (m && m.dest) { ctx.setDest(m.dest); api.close(); } return; }
+    if (b.dataset.msg != null) { const m = msgs[+b.dataset.msg]; if (m && m.act) { api.close(); m.act(); m.act = null; return; } if (m && m.dest) { ctx.setDest(m.dest); api.close(); } return; }
     const a = b.dataset.act;
     if (a === 'close') return api.close();
+    if (a === 'prStart') { api.close(); return ctx.missions.startPosterRun(); }
+    if (a === 'prCancel') { ctx.missions.cancel('pr'); return render(); }
+    if (a === 'fdStart') { api.close(); return ctx.missions.startFlyers(); }
+    if (a === 'fdCancel') { ctx.missions.cancel('fd'); return render(); }
+    if (a === 'sensDn' || a === 'sensUp') { ctx.sens.set(Math.max(0.5, Math.min(2, Math.round((ctx.sens.get() + (a === 'sensUp' ? 0.25 : -0.25)) * 100) / 100))); return render(); }
     if (a === 'haptics') { haptics.on = !haptics.on; localStorage.setItem('rw.haptics', haptics.on ? '1' : '0'); buzz(10); return render(); }
     if (a === 'sound') { ctx.sound.toggle(); return setTimeout(render, 50); }
     if (a === 'skip') { ctx.skip(); return setTimeout(render, 600); }
@@ -75,6 +83,7 @@ export function createPhone(ctx) {
   veil.addEventListener('click', () => api.close());
   let tick = null;
   const api = {
+    ctx,
     get isOpen() { return S.open; },
     open(v = 'home') { view = v; render(); S.open = true; el.classList.remove('hidden', 'out'); veil.classList.remove('hidden'); requestAnimationFrame(() => el.classList.add('on'));
       clearInterval(tick); tick = setInterval(() => { if (S.open && (view === 'rave' || view === 'home' || view === 'radio')) render(); }, 1000); },

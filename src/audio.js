@@ -34,6 +34,9 @@ export function createAudio() {
     unlock() { if (!ctx) init(); if (ctx.state === 'suspended') ctx.resume(); if (!started) { started = true; api.set(true); } },
     set(v) { on = v; if (!ctx) return; master.gain.setTargetAtTime(on ? 0.7 : 0, ctx.currentTime, 0.25); },
     toggle() { if (!ctx) { api.unlock(); return on; } api.set(!on); return on; },
+    // short original two-tone (not a real emergency-service sample): 4 alternating triangle notes, ~1.3 s
+    siren() { if (!ctx || !on) return; const t = ctx.currentTime, o = ctx.createOscillator(), g = ctx.createGain(); o.type = 'triangle'; o.connect(g).connect(master);
+      for (let i = 0; i < 4; i++) o.frequency.setValueAtTime(i % 2 ? 590 : 780, t + i * 0.32); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.05, t + 0.03); g.gain.setValueAtTime(0.05, t + 1.22); g.gain.linearRampToValueAtTime(0, t + 1.3); o.start(t); o.stop(t + 1.35); },
     // inside: full-band beat; outside: muffled by distance to the Temple door
     set beatOff(v) { beatOff = v; }, // SoundCloud music playing -> synth beat steps aside (it stays as the fallback)
     update({ inside, dist }) { if (!ctx) return; const t = ctx.currentTime;

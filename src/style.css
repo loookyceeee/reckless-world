@@ -210,3 +210,21 @@
 .stick{bottom:220px}
 .is-touch .phpeekf{top:calc(max(14px,env(safe-area-inset-top)) + 56px);bottom:auto;left:12px;right:12px;width:auto;transform:translateY(-200%)}.is-touch .phpeekf.on{transform:none}
 .stick{opacity:.3}
+
+/* ---- stage 8: mission title, heat pips, hints ---- */
+.heat{display:none;gap:3px}.heat.on{display:flex}.heat i{width:10px;height:10px;border:2px solid #fff;display:block;box-sizing:border-box}.heat i.a{background:#fff}
+.heat.search i{border-color:#ff2a3c}.heat.search i.a{background:#ff2a3c;animation:hpulse .6s ease-in-out infinite alternate}
+.heat.flash i{box-shadow:0 0 0 2px #fff}@keyframes hpulse{from{opacity:1}to{opacity:.35}}
+.objective .red{color:#ff2a3c}
+.mtitle{position:fixed;inset:0;pointer-events:none;z-index:8;opacity:0}.mtitle.on{opacity:1}.mtitle .lb{position:absolute;left:0;right:0;height:0;background:#000;transition:height .4s cubic-bezier(.2,.8,.2,1)}
+.mtitle .lb.t{top:0}.mtitle .lb.b{bottom:0}.mtitle.on .lb{height:8vh}.mtitle.out .lb{height:0}
+.mtitle .mtb{position:absolute;left:0;right:0;bottom:calc(8vh + 120px);text-align:center;opacity:0;transform:translateY(8px);transition:opacity .4s,transform .4s cubic-bezier(.2,.8,.2,1)}
+.mtitle.on .mtb{opacity:1;transform:none}.mtitle.out .mtb{opacity:0;transform:translateY(-10px)}
+.mtitle small{display:block;font:700 10px var(--f1);letter-spacing:.24em;margin-bottom:8px}.mtitle.red small{color:#ff2a3c}
+.mtitle b{font:800 clamp(34px,7vw,72px) var(--f1);letter-spacing:-.02em;text-shadow:0 2px 8px #000}
+.hints{position:fixed;inset:0;pointer-events:none;z-index:7;opacity:0;transition:opacity .4s}.hints.on{opacity:1}
+.hints .hk{position:absolute;font:700 10px var(--f1);letter-spacing:.14em;color:#fff;text-shadow:0 2px 8px #000;text-align:center}
+.hints .hk i{display:block;font-style:normal;font-size:9px;opacity:.7;margin-top:3px}
+.hints .card{position:absolute;left:50%;bottom:160px;transform:translateX(-50%);background:rgba(0,0,0,.88);border:2px solid #fff;padding:12px 16px;display:grid;grid-template-columns:auto auto auto auto;gap:6px 16px;font:700 9px var(--f1);letter-spacing:.1em}
+.hints .card b{background:#fff;color:#000;padding:1px 6px;justify-self:end}
+.phval{flex:1;text-align:center;align-self:center;font:800 13px var(--f1)}

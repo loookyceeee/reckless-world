@@ -45,6 +45,7 @@ import * as CR from './crew.js';
 import { loadAvatar3D } from './avatar3d.js';
 import { createMusic, SC_PROFILE } from './music.js';
 import { createPhone, createWheel, buzz } from './phone.js';
+import { createMissions } from './missions.js';
 import { SegGrid } from './collide.js';
 import { createRapid } from './glider.js';
 import * as EV from './events.js';
@@ -177,8 +178,12 @@ async function start() {
   const posterM = new StandardMaterial('poster', scene); posterM.emissiveTexture = signTex('RECKLESS', 512, 720); posterM.disableLighting = true;
   { const c = posterM.emissiveTexture.getContext(); c.fillStyle = '#000'; c.fillRect(0, 0, 512, 720); const img = new Image(); img.src = import.meta.env.BASE_URL + 'img/logo.png'; await img.decode().catch(() => {}); c.drawImage(img, 56, 140, 400, 347); c.fillStyle = '#fff'; c.font = '800 54px Unbounded'; c.textAlign = 'center'; c.fillText('RECKLESS', 256, 580); c.font = '600 30px "DM Sans"'; c.fillText('BELFAST · THE TEMPLE', 256, 640); posterM.emissiveTexture.update(); }
   const posters = POSTER_SPOTS.map(sp => { let best = null, bd = 1e9; for (const s of city.grid.near(sp.x, sp.z, 40)) { const dx = s.x1 - s.x0, dz = s.z1 - s.z0, L2 = dx * dx + dz * dz; if (L2 < 4 || s.h === 30.5 || s.h < 3) continue; let t = ((sp.x - s.x0) * dx + (sp.z - s.z0) * dz) / L2; t = Math.max(0.2, Math.min(0.8, t)); const px = s.x0 + dx * t, pz = s.z0 + dz * t; const d = Math.hypot(px - sp.x, pz - sp.z); if (d < bd) { bd = d; const L = Math.sqrt(L2); best = { x: px, z: pz, nx: dz / L, nz: -dx / L }; } }
-    if (!best) return null; const m = toMesh('poster-' + sp.id, plane(1.2, 1.7), scene, posterM); m.position.set(best.x + best.nx * 0.05, 2.1, best.z + best.nz * 0.05); m.rotation.y = Math.atan2(-best.nx, -best.nz); m.scaling.x = -1; m.parent = city.root; m.setEnabled(!!localStorage.getItem('rw.poster.' + sp.id));
-    return { ...sp, mesh: m, ix: best.x + best.nx * 1.4, iz: best.z + best.nz * 1.4 }; }).filter(Boolean);
+    if (!best) return null; const m = toMesh('poster-' + sp.id, plane(1.2, 1.7), scene, posterM); m.position.set(best.x + best.nx * 0.05, 2.1, best.z + best.nz * 0.05); m.rotation.y = Math.atan2(-best.nx, -best.nz); m.parent = city.root; m.setEnabled(!!localStorage.getItem('rw.poster.' + sp.id));
+    return { ...sp, name: sp.id.replace(/-/g, ' ').toUpperCase(), mesh: m, ix: best.x + best.nx * 1.4, iz: best.z + best.nz * 1.4 }; }).filter(Boolean);
+  const PDAY = () => { try { const o = JSON.parse(localStorage.getItem('rw.pday') || '{}'); return o.day === EV.londonDay() ? o.ids || [] : []; } catch (e) { return []; } };
+  const markPasted = (id) => { const ids = PDAY(); if (!ids.includes(id)) ids.push(id); localStorage.setItem('rw.pday', JSON.stringify({ day: EV.londonDay(), ids })); };
+  const posterDone = (ps) => EV.postedToday(ps.id) || PDAY().includes(ps.id); // walls reset at midnight London time
+  let M = null; window.__rw.posters = posters;
 
   if (glow) { const GX = ['walls', 'roads', 'roofs', 'ground', 'pool', 'poolLED', 'canopy', 'trunk', 'lampPole', 'hlBeam', 'pavement', 'markings', 'puddles', 'bollards', 'railings', 'signalPoles', 'beaconPoles', 'kerbs']; for (const me of scene.meshes) { const base = ((me.metadata && me.metadata.chunkOf) || me.name).split(','); if (base.some(b => GX.includes(b))) glow.addExcludedMesh(me); }
     for (const me of scene.meshes) if (/-(body|head|skate|stan|barrel|stanb)$/.test(me.name) || me.name.startsWith('car-') || me.name === 'ci') glow.addExcludedMesh(me); }
@@ -196,8 +201,9 @@ async function start() {
   hud.setLive(app.live);
   // ---------- input ----------
   const K = app.keys;
-  addEventListener('keydown', (e) => { if (e.target.tagName === 'INPUT') return; K.add(e.code); const k = e.key.toLowerCase(); if (e.code === 'Space' && !app.title) { e.preventDefault(); P.jumpReq = 0.15; return; } if (e.code === 'Tab') { e.preventDefault(); if (!app.title) app.key('phone'); return; } if (e.code === 'KeyQ' && !e.repeat && !app.title && !hud.isOpen() && app.wheel) { app.wheel.open(); return; } if ('emfopclnk'.includes(k) && k.length === 1) { if (app.phone && app.phone.isOpen && 'mop'.includes(k)) app.phone.close(); app.key(k); } if (e.code === 'Escape') { hud.close(); app.phone && app.phone.close(); app.wheel && app.wheel.release(false); } });
-  addEventListener('keyup', (e) => { K.delete(e.code); if (e.code === 'KeyQ' && app.wheel) app.wheel.release(true); });
+  addEventListener('keydown', (e) => { if (e.target.tagName === 'INPUT') return; K.add(e.code); const k = e.key.toLowerCase(); if (e.code === 'KeyB' && !app.title) { if (!C.lb) camSnap = true; C.lb = true; return; } if (e.code === 'Space' && !app.title) { e.preventDefault(); P.jumpReq = 0.15; return; } if (e.code === 'Tab') { e.preventDefault(); if (!app.title) app.key('phone'); return; } if (e.code === 'KeyQ' && !e.repeat && !app.title && !hud.isOpen() && app.wheel) { app.wheel.open(); return; } if ('emfopclnk'.includes(k) && k.length === 1) { if (app.phone && app.phone.isOpen && 'mop'.includes(k)) app.phone.close(); app.key(k); } if (e.code === 'Escape') { hud.close(); app.phone && app.phone.close(); app.wheel && app.wheel.release(false); } });
+  addEventListener('keyup', (e) => { K.delete(e.code); if (e.code === 'KeyB') C.lb = false; if (e.code === 'KeyQ' && app.wheel) app.wheel.release(true); });
+  let SENS = +localStorage.getItem('rw.sens') || 1; let padX = 0, padY = 0, padRun = false, padPrev = [];
   let drag = null; const stick = { id: null, x: 0, y: 0, ox: 0, oy: 0 }; const look = { id: null, x: 0, y: 0 };
   canvas.addEventListener('pointerdown', (e) => {
     if (e.pointerType === 'touch') { if (e.clientX < innerWidth * 0.45 && stick.id === null) { stick.id = e.pointerId; stick.ox = e.clientX; stick.oy = e.clientY; stick.x = stick.y = 0; hud.$('stick').style.cssText = `left:${e.clientX - 60}px;top:${e.clientY - 60}px;opacity:1`; } else if (look.id === null) { look.id = e.pointerId; look.x = e.clientX; look.y = e.clientY; } }
@@ -205,8 +211,8 @@ async function start() {
   });
   canvas.addEventListener('pointermove', (e) => {
     if (e.pointerId === stick.id) { let dx = e.clientX - stick.ox, dy = e.clientY - stick.oy; const d = Math.hypot(dx, dy); if (d > 50) { dx *= 50 / d; dy *= 50 / d; } stick.x = dx / 50; stick.y = dy / 50; hud.$('nub').style.transform = `translate(${dx}px,${dy}px)`; }
-    else if (e.pointerId === look.id) { C.yaw += (e.clientX - look.x) * 0.006; C.pitch = Math.max(-0.30, Math.min(1.05, C.pitch + (e.clientY - look.y) * 0.004)); look.x = e.clientX; look.y = e.clientY; }
-    else if (drag) { C.yaw += (e.clientX - drag.x) * 0.005; C.pitch = Math.max(-0.30, Math.min(1.05, C.pitch + (e.clientY - drag.y) * 0.004)); drag.x = e.clientX; drag.y = e.clientY; }
+    else if (e.pointerId === look.id) { C.yaw += (e.clientX - look.x) * 0.006 * SENS; C.pitch = Math.max(-0.30, Math.min(1.05, C.pitch + (e.clientY - look.y) * 0.004 * SENS)); look.x = e.clientX; look.y = e.clientY; }
+    else if (drag) { C.yaw += (e.clientX - drag.x) * 0.005 * SENS; C.pitch = Math.max(-0.30, Math.min(1.05, C.pitch + (e.clientY - drag.y) * 0.004 * SENS)); drag.x = e.clientX; drag.y = e.clientY; }
   });
   const up = (e) => { if (e.pointerId === stick.id) { stick.id = null; stick.x = stick.y = 0; hud.$('nub').style.transform = ''; hud.$('stick').style.opacity = 0.3; } if (e.pointerId === look.id) look.id = null; drag = null; };
   canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', up);
@@ -302,11 +308,21 @@ async function start() {
     // movement
     let ix = 0, iz = 0;
     if (!app.paused && !app.title) { if (K.has('KeyW') || K.has('ArrowUp')) iz += 1; if (K.has('KeyS') || K.has('ArrowDown')) iz -= 1; if (K.has('KeyA') || K.has('ArrowLeft')) ix -= 1; if (K.has('KeyD') || K.has('ArrowRight')) ix += 1; ix += stick.x; iz -= stick.y; }
+    { const gp = navigator.getGamepads ? [...navigator.getGamepads()].find(p => p && p.connected && p.axes.length >= 2) : null;
+      if (gp && !app.title) { if (!app._pad) { app._pad = true; document.body.classList.add('has-pad'); hud.note({ title: 'CONTROLLER CONNECTED', body: 'A jump · X action · Y phone · RB sprint · hold LB wheel · R3 look back · START map.' }); }
+        const dz = (v) => Math.abs(v) < 0.15 ? 0 : (v - Math.sign(v) * 0.15) / 0.85; padX = dz(gp.axes[0]); padY = dz(gp.axes[1]); const rx = dz(gp.axes[2] || 0), ry = dz(gp.axes[3] || 0);
+        const b = (i) => !!(gp.buttons[i] && (gp.buttons[i].pressed || gp.buttons[i].value > 0.5)), ed = (i) => b(i) && !padPrev[i];
+        if (app.wheel.isOpen) { if (Math.hypot(rx, ry) > 0.5) app.wheel.point(innerWidth / 2 + rx * 160, innerHeight / 2 + ry * 160); }
+        else { C.yaw += rx * 2.6 * SENS * dt; C.pitch = Math.max(-0.30, Math.min(1.05, C.pitch + ry * 1.6 * SENS * dt)); }
+        if (ed(0)) P.jumpReq = 0.15; if (ed(2)) app.key('e'); if (ed(3)) app.key('phone'); if (ed(9)) app.key('m'); if (ed(1)) { hud.close(); app.phone.close(); }
+        padRun = b(5) || b(7); if (b(11) && !C.lb) camSnap = true; C.lb = b(11) || K.has('KeyB');
+        if (ed(4)) app.wheel.open(true); if (!b(4) && padPrev[4] && app.wheel.isOpen) app.wheel.release(true);
+        padPrev = gp.buttons.map((x, i) => b(i)); ix += padX; iz -= padY; } }
     if (window.__rw.auto) { iz = window.__rw.auto.iz || 0; ix = window.__rw.auto.ix || 0; }
-    const mag = Math.min(1, Math.hypot(ix, iz)); const kb = K.has('KeyW') || K.has('KeyS') || K.has('KeyA') || K.has('KeyD') || K.has('ArrowUp') || K.has('ArrowDown') || K.has('ArrowLeft') || K.has('ArrowRight');
+    const mag = Math.min(1, Math.hypot(ix, iz)); const kb0 = K.has('KeyW') || K.has('KeyS') || K.has('KeyA') || K.has('KeyD') || K.has('ArrowUp') || K.has('ArrowDown') || K.has('ArrowLeft') || K.has('ArrowRight'); const kb = kb0 && !(padX || padY);
     // gait (research/game-design.md 2.1): walk 1.6 / jog 3.2 / sprint 6.0 m/s; keyboard jogs, Shift sprints; stick < 0.55 walks, full push (or RUN) sprints
     if (stick.x || stick.y) { if (mag > 0.97) fullPushT += dt; else fullPushT = 0; } else fullPushT = 0;
-    const wantRun = K.has('ShiftLeft') || K.has('ShiftRight') || touchRun || fullPushT > 0.35 || (window.__rw.auto && window.__rw.auto.run);
+    const wantRun = K.has('ShiftLeft') || K.has('ShiftRight') || touchRun || padRun || fullPushT > 0.35 || (window.__rw.auto && window.__rw.auto.run);
     const sprint = wantRun && mag > 0.3 && ST.v > 0 && !ST.locked && !app.inside;
     let gait = mag < 0.05 ? 0 : sprint ? 6.0 : (kb || mag >= 0.55) ? 3.2 : 1.6; if (app.inside) gait *= 0.85;
     // stamina: 4.5 s of sprint, 2.5 s delay after release, 3.0 s to refill; jogging drains at 0.25x; empty -> jog + red pulse
@@ -339,7 +355,8 @@ async function start() {
     C.dip = Math.max(0, C.dip - dt); const dipY = C.dip > 0 ? -0.14 * Math.sin(Math.PI * C.dip / 0.14) : 0; // 0.14 s landing dip
     tgt.set(P.x, 1.5 + P.y * 0.55 + dipY, P.z);
     C.arm += ((P.speed > 4.5 && !app.inside ? 6.6 / 5.8 : 1) - C.arm) * Math.min(1, dt * 2); // arm 5.8 m walking, 6.6 m sprinting
-    const cp = Math.cos(C.pitch), want = C.dist * C.arm; const ox = -Math.sin(C.yaw) * cp, oz = -Math.cos(C.yaw) * cp, oy = Math.sin(C.pitch);
+    C.lbA = C.lb ? 1 : Math.max(0, (C.lbA || 0) - dt / 0.18); const yawE = C.yaw + Math.PI * (C.lbA * C.lbA * (3 - 2 * C.lbA)); // look-behind: snap, restore in 180 ms
+    const cp = Math.cos(C.pitch), want = C.dist * C.arm; const ox = -Math.sin(yawE) * cp, oz = -Math.cos(yawE) * cp, oy = Math.sin(C.pitch);
     const camY = 1.5 + oy * want; const hit = (app.inside ? tGrid : city.grid).raycast(P.x, P.z, P.x + ox * want, P.z + oz * want, camY);
     const d = Math.max(1.0, want * hit - (hit < 1 ? 0.35 : 0)); C.curDist += (d - C.curDist) * Math.min(1, dt * (d < C.curDist ? 20 : 3.5)); // hide fast, restore lazily
     camPos.set(P.x + ox * C.curDist, Math.max(0.35, 1.5 + P.y * 0.55 + dipY + oy * C.curDist), P.z + oz * C.curDist);
@@ -357,18 +374,20 @@ async function start() {
     // interaction prompts
     interact = null;
     if (!app.inside) {
-      if (Math.hypot(P.x - ext.doorPos.x, P.z - ext.doorPos.z) < 3.2) interact = { label: `<b>E</b> ENTER THE TEMPLE`, act: enterTemple };
+      if (M && (interact = M.interact())) { }
+      else if (Math.hypot(P.x - ext.doorPos.x, P.z - ext.doorPos.z) < 3.2) interact = { label: `<b>E</b> ENTER THE TEMPLE`, act: enterTemple };
       else if (venueDoors.some(d => Math.hypot(P.x - d.x, P.z - d.z) < 3.2)) { const d = venueDoors.find(d => Math.hypot(P.x - d.x, P.z - d.z) < 3.2); interact = d.v.nostalgia ? { label: 'THE WARE-HOUSE · EST. · THE OLD PALM HOUSE / THREE SHEETS SITE', act: () => hud.toast('THE WARE-HOUSE · FOR THE ONES WHO WERE THERE') } : { label: `${d.v.name} · ${d.v.sub} · INSIDE COMING SOON`, act: () => hud.toast(`${d.v.name} OPENS IN A LATER BUILD`) }; }
       else if (Math.hypot(P.x - whDoor.x, P.z - whDoor.z) < 3.2) interact = { label: `THE WARE-HOUSE XL · INTERIOR COMING SOON`, act: () => hud.toast('THE WARE-HOUSE XL OPENS IN A LATER BUILD') };
       else if (RB.nearStop(P)) { const st = RB.nearStop(P); interact = { label: `<b>E</b> RAPID BUS · FAST TRAVEL`, act: () => RB.menu(st, P) }; }
-      else for (const ps of posters) if (Math.hypot(P.x - ps.ix, P.z - ps.iz) < 2.4) { const done = EV.postedToday(ps.id) || (!EV.getEmail() && ps.mesh.isEnabled()); interact = { label: done ? 'POSTER UP ✓' : `<b>E</b> ${ps.mesh.isEnabled() ? 'PASTE A FRESH POSTER' : 'PASTE A RECKLESS POSTER'}`, act: async () => { if (done) return; ps.mesh.setEnabled(true); localStorage.setItem('rw.poster.' + ps.id, '1'); buzz([20, 40, 20]); const ev = await EV.posterPlaced(ps.id); hud.toast(ev && ev.blocked ? 'POSTER UP · ' + ev.blocked : ev ? 'POSTER UP · TEST EVENT QUEUED' : 'POSTER UP'); } }; break; }
+      else for (const ps of posters) if (Math.hypot(P.x - ps.ix, P.z - ps.iz) < 2.4) { const done = posterDone(ps); interact = { label: done ? 'POSTER UP ✓' : `<b>E</b> ${ps.mesh.isEnabled() ? 'PASTE A FRESH POSTER' : 'PASTE A RECKLESS POSTER'}`, act: async () => { if (done) return; ps.mesh.setEnabled(true); localStorage.setItem('rw.poster.' + ps.id, '1'); markPasted(ps.id); buzz([20, 40, 20]); const ev = await EV.posterPlaced(ps.id); if (!(M && M.onPaste(ps, ev))) hud.toast(ev && ev.blocked ? 'POSTER UP · ' + ev.blocked : ev ? 'POSTER UP · TEST EVENT QUEUED' : 'POSTER UP'); } }; break; }
     } else if (P.z - INTERIOR_ORIGIN.z < 2.4 && Math.abs(P.x - INTERIOR_ORIGIN.x) < 2) interact = { label: `<b>E</b> EXIT TO CARLISLE CIRCUS`, act: exitTemple };
     hud.prompt(interact ? interact.label : ''); if (isTouch) { const ia = !!interact; if (ia && !app._ia) buzz(12); app._ia = ia; hud.$('tAct').classList.toggle('on', ia); }
     // HUD
     slowT -= dt; if (slowT <= 0) { slowT = 0.5; if (app.inside) EV.raveTick().then(ev => { if (!ev) return; if (ev.blocked) hud.note({ kicker: 'CREW', title: '10 MINUTES IN', body: ev.blocked }); else hud.stamp({ title: 'VISIT LOGGED', sub: 'THE TEMPLE · 10 MINUTES IN', lines: ['RAVE VISIT · TEST EVENT QUEUED', 'CREW ADDS XP AFTER LAUNCH'] }); }); state.street = app.inside ? 'THE TEMPLE' : nearestStreet(); state.district = app.inside ? (T.mode === 'day' ? 'NAVE · DAYLIGHT' : 'NAVE · RAVE') : nearestDistrict();
       { const dd = Math.hypot(P.x - ext.doorPos.x, P.z - ext.doorPos.z); AU.update({ inside: app.inside, dist: dd }); MU.setVolume(app.inside ? 90 : 22 + Math.max(0, 1 - dd / 90) * 30); }
       routeT -= 0.5; if (routeT <= 0 && !app.inside) { routeT = 1.5; if (DEST && DEST.kind === 'waypoint' && Math.hypot(DEST.x - P.x, DEST.z - P.z) < 14) { DEST = null; hud.toast('WAYPOINT REACHED'); } state.route = DEST ? route(P.x, P.z, DEST.x, DEST.z) : null; } if (app.inside) state.route = null; state.dest = DEST;
-      const tv = VENUES[0]; state.objective = app.inside ? '' : `▲ THE TEMPLE <b>${Math.round(Math.hypot(P.x - ext.doorPos.x, P.z - ext.doorPos.z))}M</b>`; }
+      const tv = VENUES[0]; state.objective = (M && M.objective()) || (app.inside ? '' : `▲ THE TEMPLE <b>${Math.round(Math.hypot(P.x - ext.doorPos.x, P.z - ext.doorPos.z))}M</b>`); }
+    if (M && !app.title) { M.update(dt); state.patrols = M.blips(); const hk = M.H.level + '|' + (M.H.hidden > 0) + '|' + (M.H.flash > 0); if (hk !== app._hk) { app._hk = hk; hud.heat(M.H.level, M.H.hidden > 0, M.H.flash > 0); } }
     hud.update(dt, { stamina: ST.v, stamFlash: ST.flash, x: P.x, z: P.z, heading: P.heading, camYaw: C.yaw, inside: app.inside, lx: P.x - INTERIOR_ORIGIN.x, lz: P.z - INTERIOR_ORIGIN.z, ...state });
     fpsT += dt; if (fpsT > 0.5) { fpsT = 0; hud.fps(Math.round(engine.getFps())); }
     cullT -= dt; if (culler && cullT <= 0 && !app.inside) { cullT = 0.25; culler.setDist(app.title ? 900 : TIERS[tier].dist); culler.update(cam.position); WET.update(cam.position); const pd = TIERS[tier].dist * 0.3; for (const p of traffic.peds) { const on = Math.hypot(p.av.root.position.x - cam.position.x, p.av.root.position.z - cam.position.z) < pd; if (p._on !== on) { p._on = on; p.av.root.setEnabled(on); } } }
@@ -400,8 +419,9 @@ async function start() {
     quality: { get: () => tier, set: (n) => { if (TIERS[n]) setTier(n); } },
     radio: () => ({ ...muS, link: SC_PROFILE }), skip: () => MU.next(),
     rave: () => ({ inside: !!app.inside, venue: 'THE TEMPLE', dwell: app.inside ? EV.dwell() : 0, need: EV.MIN_DWELL }),
-    posters: () => posters.map(p => ({ name: spotName(p.id), done: EV.postedToday(p.id) || (!EV.getEmail() && p.mesh.isEnabled()), x: p.ix, z: p.iz })),
+    posters: () => posters.map(p => ({ name: spotName(p.id), done: posterDone(p), x: p.ix, z: p.iz })),
     crew: () => CREW.account ? { rank: 'CREW LEVEL ' + CR.playerLevel(CREW.xp), line: 'Signed in. Your crew rank unlocks wardrobe pieces.' } : { rank: 'SIGNED OUT', line: 'Sign in with your crew email to wear unlocked pieces.' },
+    sens: { get: () => SENS, set: (v) => { SENS = v; localStorage.setItem('rw.sens', String(v)); } },
     setDest: setDestP, onUnread: (n) => { const b = document.getElementById('tPhoneN'); if (b) { b.textContent = n || ''; b.classList.toggle('on', n > 0); } } });
   app.wheel = createWheel({ root: uiRoot, run: (id) => {
     if (id === 'phone') return app.key('phone');
@@ -415,11 +435,23 @@ async function start() {
   } });
   const _key = app.key; app.key = (k) => { if (k === 'phone') { if (hud.isOpen()) hud.close(); return app.phone.toggle(); } return _key(k); };
   window.__rw.phone = app.phone; window.__rw.wheel = app.wheel;
+  { const sx = ext.spawn.x - ext.doorPos.x, sz = ext.spawn.z - ext.doorPos.z, L = Math.hypot(sx, sz) || 1;
+    const pickup = { x: ext.spawn.x - sz / L * 3, z: ext.spawn.z + sx / L * 3 };
+    const drops = [{ id: 'warehousexl', name: VENUES[1].name, x: whDoor.x, z: whDoor.z }, ...venueDoors.filter(d => d.v.id !== 'locationx').map(d => ({ id: d.v.id, name: d.v.name, x: d.x, z: d.z }))];
+    M = createMissions({ hud, P, app, posters, isDone: posterDone, traffic, grid: () => city.grid, route, buzz, siren: () => AU.siren(), inside: () => !!app.inside,
+      setDest: (d) => { DEST = d; routeT = 0; }, text: (m) => app.phone.text(m), pickup, drops,
+      relocate: () => { hud.fade(true); setTimeout(() => { P.x = ext.spawn.x; P.z = ext.spawn.z; P.speed = 0; P.heading = ext.yaw + Math.PI; C.yaw = P.heading; camSnap = true; hud.fade(false); }, 450); } });
+    app.phone.ctx.missions = M; window.__rw.M = M; }
   hud.$('tWheel').addEventListener('pointerdown', (e) => { e.stopPropagation(); if (app.wheel.isOpen) return app.wheel.release(false); app.wheel.open(true); });
   hud.hud.classList.add('titlehide'); titleT0 = t; document.getElementById('title').classList.add('ready');
-  const posterText = () => { const P0 = posters.find(p => !(EV.postedToday(p.id) || (!EV.getEmail() && p.mesh.isEnabled()))); if (!P0) return;
-    app.phone.text({ title: 'POSTER RUN. ' + posters.length + ' WALLS.', body: 'Watch for patrols. Start when you are ready.', dest: { x: P0.ix, z: P0.iz, label: 'POSTER · ' + spotName(P0.id), kind: 'waypoint' } }); };
-  const startGame = () => { if (!app.title) return; setTimeout(posterText, 9000); const ti = document.getElementById('title'); ti.classList.add('gone'); app.title = false; camSnap = true; hud.hud.classList.remove('titlehide'); removeEventListener('keydown', anyKey); setTimeout(() => hud.note({ kicker: 'RECKLESS', title: 'TONIGHT AT THE TEMPLE', body: 'Doors open at 8 Carlisle Circus. Follow the red line, or press M to pick a venue.', hold: 7 }), 1200); if (!Q.has('mute')) { AU.unlock(); sndLbl(); } };
+  const posterText = () => { const P0 = posters.find(p => !(posterDone(p))); if (!P0) return;
+    app.phone.text({ title: 'POSTER RUN. ' + posters.length + ' WALLS.', body: 'Watch for patrols. Start when you are ready.', act: () => M && M.startPosterRun() }); setTimeout(() => app.phone.text({ title: 'FLYERS NEED DROPPING', body: 'Bundle at the Temple door, four venues, against the clock.', act: () => M && M.startFlyers() }), 30000); };
+  const showHints = () => { if (localStorage.getItem('rw.hints')) return; localStorage.setItem('rw.hints', '1');
+    hud.hints(isTouch ? `<div class="hk" style="left:14%;top:52%">MOVE<i>DRAG LEFT SIDE</i></div><div class="hk" style="right:22%;top:36%">LOOK<i>DRAG RIGHT SIDE</i></div>
+      <div class="hk" style="right:10px;bottom:calc(max(28px,env(safe-area-inset-bottom) + 12px) + 70px);display:none"></div>
+      <div class="hk" style="right:96px;bottom:calc(max(28px,env(safe-area-inset-bottom) + 12px) + 136px)">◎ WHEEL<i>OR HOLD E</i></div><div class="hk" style="right:150px;bottom:calc(max(28px,env(safe-area-inset-bottom) + 12px) + 20px)">RUN<i>HOLD · LATCH</i></div>`
+      : `<div class="card"><b>WASD</b>MOVE<b>SHIFT</b>SPRINT<b>SPACE</b>JUMP · VAULT<b>E</b>ACTION<b>TAB</b>PHONE<b>HOLD Q</b>WHEEL<b>B</b>LOOK BACK<b>M</b>MAP</div>`, 7000); };
+  const startGame = () => { if (!app.title) return; setTimeout(showHints, 1800); setTimeout(posterText, 9000); const ti = document.getElementById('title'); ti.classList.add('gone'); app.title = false; camSnap = true; hud.hud.classList.remove('titlehide'); removeEventListener('keydown', anyKey); setTimeout(() => hud.note({ kicker: 'RECKLESS', title: 'TONIGHT AT THE TEMPLE', body: 'Doors open at 8 Carlisle Circus. Follow the red line, or press M to pick a venue.', hold: 7 }), 1200); if (!Q.has('mute')) { AU.unlock(); sndLbl(); } };
   const anyKey = (e) => { if (app.title) startGame(); }; addEventListener('keydown', anyKey);
   document.getElementById('play').onclick = startGame; document.getElementById('title').addEventListener('pointerdown', (e) => { if (document.getElementById('title').classList.contains('ready')) startGame(); });
   if (isTouch) document.getElementById('play').textContent = 'TAP TO ENTER';
