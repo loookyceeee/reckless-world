@@ -70,6 +70,11 @@ for e in d['elements']:
         if t.get('surface') in ('sett', 'cobblestone', 'unhewn_cobblestone'): r['sf'] = 'sett'
         r['p'] = [round(c, 1) for p in xz for c in p]
         roads.append(r)
+# keep the original slice's road order first (spawn points, shop signs and scripted shots index roads by name + fraction)
+try:
+    LEG = {tuple(f): i for i, f in enumerate(json.load(open('scripts/legacy_road_order.json')))}
+    roads.sort(key=lambda r: LEG.get((r['p'][0], r['p'][1], r['p'][-2], r['p'][-1], len(r['p'])), 10**6))
+except FileNotFoundError: pass
 # node ids used by roads -> compact index for graph
 used = {}
 for r in roads:
