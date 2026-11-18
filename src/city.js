@@ -301,8 +301,9 @@ export async function buildCity(scene, { low = false } = {}) {
           acc += 6.5; }
         acc -= L; } }
     if (bulbs.length) { const bm = new StandardMaterial('festoonBulb', scene); bm.emissiveColor = hex('#e0943a'); bm.disableLighting = true;
-      const bulb = toMesh('festoonBulbs', xf(sphere(6), { s: [0.13, 0.16, 0.13] }), scene, bm); const buf = new Float32Array(bulbs.length * 16);
-      bulbs.forEach((q, i) => Matrix.Translation(q[0], q[1], q[2]).copyToArray(buf, i * 16)); bulb.thinInstanceSetBuffer('matrix', buf, 16, true); bulb.parent = root; bulb.isPickable = false;
+      // merged (not thin-instanced: thin-instanced bulbs never drew after chunking), 3000 bulbs per mesh
+      const BV = bulbs.map(q => xf(sphere(4), { s: [0.13, 0.16, 0.13], t: q }));
+      for (let i = 0; i < BV.length; i += 3000) { const bm2 = toMesh('festoonBulbs', merge(BV.slice(i, i + 3000)), scene, bm); bm2.parent = root; bm2.isPickable = false; }
       const wm = new StandardMaterial('festoonWire', scene); wm.diffuseColor = hex('#151515'); wm.specularColor = Color3.Black();
       for (let i = 0; i < WI.length; i += 3000) { const w = toMesh('festoonWire', merge(WI.slice(i, i + 3000)), scene, wm); w.parent = root; w.isPickable = false; } } }
   // puddles: glossy dark patches near the kerbs that catch lamp and moon highlights (wet Belfast night)
