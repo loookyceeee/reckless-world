@@ -67,7 +67,7 @@ export function kit(scene, root, R) {
       for (let k = 0; k < stools; k++) { const t = (k + 0.5) / stools - 0.5, sx = cx - nx * 0.85 + Math.sin(ry) * t * L, sz = cz - nz * 0.85 + Math.cos(ry) * t * L;
         add('metal', xf(cyl(0.75, 0.03, 0.03, 8), { t: [sx, 0.38, sz] }), hex('#2a2b30')); add('kit', xf(cyl(0.07, 0.2, 0.2, 14), { t: [sx, 0.78, sz] }), hex(stool)); add('metal', xf(torus(0.34, 0.02, 14), { t: [sx, 0.3, sz] }), hex('#2a2b30')); }
       segs.push([x0 - nx * 0.45, z0 - nz * 0.45, x1 - nx * 0.45, z1 - nz * 0.45]);
-      return { x: cx - nx * 1.3, z: cz - nz * 1.3, ry };
+      return { x: cx - nx * 1.3, z: cz - nz * 1.3, ry, face: Math.atan2(nx, nz) };
     },
     barrier(x0, x1, z) { for (let x = x0; x < x1 - 0.5; x += 2.2) { B('metal', 2.1, 0.06, 0.06, x + 1.05, 1.15, z, hex('#9aa0a8')); B('metal', 2.1, 0.06, 0.06, x + 1.05, 0.15, z, hex('#9aa0a8')); for (let k = 0; k <= 12; k++) B('metal', 0.025, 1.0, 0.025, x + k * 0.175, 0.65, z, hex('#9aa0a8')); } segs.push([x0, z, x1, z]); },
     truss(x0, x1, z, y, legs = true) { const L = x1 - x0; for (const dy of [0, 0.4]) for (const dz of [-0.2, 0.2]) B('metal', L, 0.05, 0.05, (x0 + x1) / 2, y + dy, z + dz, hex('#2a2b30'));
@@ -285,7 +285,7 @@ export function buildClub(scene, id, { index = 0, low = false, posters = [], ven
     club: true, id, name: venue.name, sub: venue.sub, root, crowd, lights, mode: 'rave', dancers: [], S, mats, meshes, beams, lasers, hazes, wash, scrT,
     segs: K.segs.map(([a, b, c, d]) => [a + OFF.x, b + OFF.z, c + OFF.x, d + OFF.z]),
     spawn: new Vector3(0, 0, 3.2).add(OFF), exitPos: new Vector3(0, 0, 1.2).add(OFF), origin: OFF,
-    plan: { W: S.W, D: S.D, rects: S.plan }, bars: S.bars.map(b => ({ x: b.x + OFF.x, z: b.z + OFF.z, ry: b.ry })), djPos: S.dj,
+    plan: { W: S.W, D: S.D, rects: S.plan }, bars: S.bars.map(b => ({ x: b.x + OFF.x, z: b.z + OFF.z, ry: b.ry, face: b.face })), djPos: S.dj,
     danceFloor: (p) => { const z = p.z - OFF.z, x = p.x - OFF.x; return z > S.floorZ[0] && z < S.floorZ[1] && Math.abs(x) < S.W / 2; },
     floorY: (x, z) => { const tz = S.tierZ; if (!tz) return 0; const lz = z - OFF.z; return lz > tz[0] && lz < tz[1] ? tz[2] : 0; },
     glowSkip: () => [...beams.map(b => b.m), ...lasers.map(l => l.m), ...hazes, wash, meshes.floor].filter(Boolean),

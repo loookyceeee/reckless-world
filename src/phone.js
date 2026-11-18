@@ -3,7 +3,7 @@
 const TILES = [
   ['map', 'MAP', '◻'], ['rave', 'RAVE', '◎'], ['posters', 'POSTERS', '▣'],
   ['radio', 'RADIO', '♪'], ['camera', 'CAMERA', '▢'], ['wardrobe', 'WARDROBE', '▤'],
-  ['crew', 'CREW', '◆'], ['settings', 'SETTINGS', '⚙'], ['msgs', 'MSGS', '●'],
+  ['crew', 'CREW', '◆'], ['settings', 'SETTINGS', '⚙'], ['msgs', 'MSGS', '●'], ['cards', 'CARDS', '▮'], ['dance', 'DANCE', '♫'],
 ];
 const WHEEL = [ // clockwise from north
   ['phone', 'PHONE', 'OPEN THE CREW PHONE'], ['radio', 'RADIO', 'NOW PLAYING · SKIP'], ['camera', 'CAMERA', 'PHOTO MODE'], ['dance', 'DANCE', 'TOGGLE DANCE'],
@@ -49,13 +49,22 @@ export function createPhone(ctx) {
       <div class="phcard"><small>LOOK SENSITIVITY</small><div class="phrowb"><button class="phbtn" data-act="sensDn">−</button><b class="phval">${ctx.sens ? ctx.sens.get().toFixed(2) + '×' : ''}</b><button class="phbtn" data-act="sensUp">+</button></div><div class="phbar"><i style="width:${ctx.sens ? (ctx.sens.get() - 0.5) / 1.5 * 100 : 0}%"></i></div></div>
       <div class="phrowb"><button class="phbtn${haptics.on ? ' on' : ''}" data-act="haptics">HAPTICS ${haptics.on ? 'ON' : 'OFF'}</button></div>
       <p class="phfine">Map data © OpenStreetMap contributors. Terrain: LiDAR open data. Full credits in CREDITS.</p>`); },
+    camera: () => { const H = ctx.hunt ? ctx.hunt() : []; const n = H.filter(h => h.done).length;
+      return frame('CAMERA', `<div class="phcard"><small>PHOTO HUNT</small><b>${n} / ${H.length}</b><span>Frame a landmark in the middle of the viewfinder, clear line of sight, and shoot.</span></div>
+      <div class="phrowb"><button class="phbtn" data-act="vf">OPEN VIEWFINDER</button><button class="phbtn" data-act="snap">PHOTO CARD</button></div>
+      <div class="phshots">${H.map(h => `<div style="${h.thumb ? `background-image:url(${h.thumb})` : ''}">${esc(h.name)}${h.done ? ' ✓' : ''}</div>`).join('')}</div>
+      <div class="phlist">${H.filter(h => !h.done).map(h => `<button class="phrow" data-act="huntgps:${h.id}"><span>${esc(h.name)}</span><i>GPS ›</i></button>`).join('')}</div><p class="phfine">Photo hunt awards nothing. Shots stay on this device.</p>`); },
+    cards: () => { const C = ctx.cards ? ctx.cards() : []; const n = C.filter(c => c.got).length;
+      return frame('CARDS', `<div class="phcard"><small>CREW CARDS</small><b>${n} / ${C.length || 20}</b><span>Hidden in venue porches, on poster walls and behind bus stops. Listen for the ping.</span></div>
+      <div class="phcards">${C.map(c => c.got ? `<div class="pcd"><img data-card="${c.i}" alt="${esc(c.name)}"/></div>` : `<div class="pcd">${String(c.i + 1).padStart(2, '0')}</div>`).join('')}</div><p class="phfine">Cards are collectibles only. They never award XP.</p>`); },
+    dance: () => frame('DANCE', `<div class="phcard"><small>RHYTHM · 140 BPM</small><b>BEST ${ctx.danceBest ? ctx.danceBest() : 0} / 1000</b><span>Stand on any venue dancefloor and press E (or F) to dance. Keys A S W D or arrows, d-pad, or the four pads.</span></div>
+      <p class="phfine">MISS · OK · CLEAN · RECKLESS. Grades stay on this device and award nothing.</p>`),
     msgs: () => frame('MSGS', msgs.length ? `<div class="phlist">${msgs.map((m, i) => `<button class="phmsg" data-msg="${i}"><small>${esc(m.from)} · ${esc(m.t)}</small><b>${esc(m.title)}</b><span>${esc(m.body)}</span>${m.act ? '<i>TAP TO START ›</i>' : m.dest ? '<i>TAP TO SET GPS ›</i>' : ''}</button>`).join('')}</div>` : '<p class="phfine">No messages.</p>'),
   };
   let lastHtml = '';
-  const render = () => { const h = (views[view] || views.home)(); if (h === lastHtml) return; lastHtml = h; el.innerHTML = h; }; // only touch the DOM on change, so taps aren't lost
+  const render = () => { const h = (views[view] || views.home)(); if (h === lastHtml) return; lastHtml = h; el.innerHTML = h; if (view === 'cards' && ctx.cardArt) el.querySelectorAll('img[data-card]').forEach(im => { im.src = ctx.cardArt(+im.dataset.card); }); }; // only touch the DOM on change, so taps aren't lost
   const go = (v) => {
     if (v === 'map') { api.close(); return ctx.open.map(); }
-    if (v === 'camera') { api.close(); return ctx.open.camera(); }
     if (v === 'wardrobe') { api.close(); return ctx.open.wardrobe(); }
     if (v === 'msgs') { unread = 0; ctx.onUnread && ctx.onUnread(0); }
     view = v; render();
@@ -69,6 +78,9 @@ export function createPhone(ctx) {
     if (b.dataset.msg != null) { const m = msgs[+b.dataset.msg]; if (m && m.act) { api.close(); m.act(); m.act = null; return; } if (m && m.dest) { ctx.setDest(m.dest); api.close(); } return; }
     const a = b.dataset.act;
     if (a === 'close') return api.close();
+    if (a === 'vf') { api.close(); return ctx.open.viewfinder && ctx.open.viewfinder(); }
+    if (a === 'snap') { api.close(); return ctx.open.camera(); }
+    if (a && a.startsWith('huntgps:')) { const h = (ctx.hunt() || []).find(x => x.id === a.slice(8)); if (h) { ctx.setDest({ x: h.x, z: h.z, label: 'PHOTO · ' + h.name, kind: 'waypoint' }); api.close(); } return; }
     if (a === 'prStart') { api.close(); return ctx.missions.startPosterRun(); }
     if (a === 'prCancel') { ctx.missions.cancel('pr'); return render(); }
     if (a === 'fdStart') { api.close(); return ctx.missions.startFlyers(); }
