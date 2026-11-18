@@ -208,3 +208,5 @@
 .tbtn.tph em{position:absolute;top:-3px;right:-3px;min-width:16px;height:16px;border-radius:8px;background:#FF2A3C;color:#fff;font:700 9px/16px var(--f1);font-style:normal;display:none}.tbtn.tph em.on{display:block}
 .tbtn.whl{width:48px;height:48px;font-size:18px;right:calc(max(18px,env(safe-area-inset-right)) + 84px);bottom:calc(max(28px,calc(env(safe-area-inset-bottom) + 12px)) + 82px)}
 .stick{bottom:220px}
+.is-touch .phpeekf{top:calc(max(14px,env(safe-area-inset-top)) + 56px);bottom:auto;left:12px;right:12px;width:auto;transform:translateY(-200%)}.is-touch .phpeekf.on{transform:none}
+.stick{opacity:.3}

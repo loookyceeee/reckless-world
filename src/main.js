@@ -208,7 +208,7 @@ async function start() {
     else if (e.pointerId === look.id) { C.yaw += (e.clientX - look.x) * 0.006; C.pitch = Math.max(-0.30, Math.min(1.05, C.pitch + (e.clientY - look.y) * 0.004)); look.x = e.clientX; look.y = e.clientY; }
     else if (drag) { C.yaw += (e.clientX - drag.x) * 0.005; C.pitch = Math.max(-0.30, Math.min(1.05, C.pitch + (e.clientY - drag.y) * 0.004)); drag.x = e.clientX; drag.y = e.clientY; }
   });
-  const up = (e) => { if (e.pointerId === stick.id) { stick.id = null; stick.x = stick.y = 0; hud.$('nub').style.transform = ''; hud.$('stick').style.opacity = 0.45; } if (e.pointerId === look.id) look.id = null; drag = null; };
+  const up = (e) => { if (e.pointerId === stick.id) { stick.id = null; stick.x = stick.y = 0; hud.$('nub').style.transform = ''; hud.$('stick').style.opacity = 0.3; } if (e.pointerId === look.id) look.id = null; drag = null; };
   canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', up);
   canvas.addEventListener('wheel', (e) => { C.dist = Math.max(2.2, Math.min(14, C.dist * (1 + Math.sign(e.deltaY) * 0.1))); e.preventDefault(); }, { passive: false });
   let touchRun = false, fullPushT = 0; const ST = { v: 1, idle: 9, locked: false, flash: 0 }; window.__rw.stamina = ST; // RUN: hold to sprint; held > 350 ms and released while moving latches it (GTA SA mobile); a second tap cancels
