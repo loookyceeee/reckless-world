@@ -1,0 +1,40 @@
+// Headless capture: node tools/shoot.mjs [url]
+import puppeteer from 'puppeteer-core';
+const url = process.argv[2] || 'http://localhost:4173/';
+const OUT = process.env.OUT || '/workspace/reckless-world/shots/';
+const browser = await puppeteer.launch({ executablePath: '/usr/bin/google-chrome', headless: 'new',
+  args: ['--no-sandbox', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--enable-unsafe-webgpu', '--window-size=1280,720'] });
+const page = await browser.newPage(); await page.setViewport({ width: 1280, height: 720 });
+const logs = []; page.on('console', m => logs.push(m.type() + ': ' + m.text())); page.on('pageerror', e => logs.push('PAGEERROR ' + e.message));
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+await page.goto(url + (process.env.Q || ''), { waitUntil: 'load', timeout: 120000 });
+await page.waitForFunction(() => window.__rw && window.__rw.ready, { timeout: 180000 }).catch(e => console.log('not ready', e.message));
+await page.click('#play').catch(() => {});
+const info = await page.evaluate(() => ({ kind: window.__rw.kind, low: window.__rw.low, gpu: !!navigator.gpu }));
+console.log('engine', JSON.stringify(info));
+const fps = async (label, ms = 4000) => { await sleep(ms); const f = await page.evaluate(() => window.__rw.fps()); console.log('FPS', label, f.toFixed(1)); return f; };
+const shot = async (name) => { await page.screenshot({ path: OUT + name + '.png' }); console.log('shot', name); };
+const steps = (process.env.STEPS || 'street,minimap,map,walk,templeext,patrol,rave,day,hero,wardrobe,credits').split(',');
+for (const s of steps) {
+  if (s === 'herostreet') { await page.evaluate(() => { const r = window.__rw; r.camOverride = null; r.camRel = null; r.gotoStreet('Donegall Street', 0.62, 1); r.C.pitch = 0.1; r.C.dist = 5; r.C.curDist = 5; r.C.yaw = r.P.heading; }); await fps('hero-street', 3500); await shot('01-hero-street-donegall'); }
+  if (s === 'gps') { await page.evaluate(() => { const r = window.__rw; r.gotoStreet('Royal Avenue', 0.4, 1); r.C.pitch = 0.3; r.C.dist = 8; r.C.curDist = 8; }); await sleep(3500); await shot('02-minimap-gps-route'); }
+  if (s === 'charstreet') { await page.evaluate(() => { const r = window.__rw; r.gotoStreet('Donegall Street', 0.5, 1); r.camRel = [0.35, 1.5, 1.15, 1.0]; }); await sleep(2500); await shot('18-character-closeup-street'); await page.evaluate(() => { window.__rw.camRel = [0.1, 3.2, 1.0, 0.75]; }); await sleep(800); await shot('19-character-full-street'); await page.evaluate(() => { window.__rw.camRel = null; }); }
+  if (s === 'landmark') { await page.evaluate(() => { const r = window.__rw; r.teleport(96, -258); r.camOverride = [70, 5, -305, 150, 24, -249]; }); await sleep(3000); await shot('12-landmark-st-annes-spire-of-hope'); await page.evaluate(() => { const r = window.__rw; r.teleport(410, -470); r.camOverride = [392, 3.5, -492, 425, 20, -455]; }); await sleep(2500); await shot('13-landmark-albert-clock'); await page.evaluate(() => { window.__rw.camOverride = null; }); }
+  if (s === 'bus') { for (const [kind, nm] of [['bus', '14-traffic-glider-style-bus'], ['cab', '15-traffic-black-cab']]) { await page.evaluate((kind) => { const r = window.__rw; const c = r.traffic.cars.find(c => c.kind === kind); c.max = 0; c.speed = 0; const p = c.node.position; const h = c.heading; const d = kind === 'bus' ? 10 : 6.5; r.camOverride = [p.x + Math.sin(h) * d * 0.7 + Math.cos(h) * d * 0.55, kind === 'bus' ? 4.2 : 2.2, p.z + Math.cos(h) * d * 0.7 - Math.sin(h) * d * 0.55, p.x, 1.4, p.z]; r.P.x = p.x + Math.cos(h) * 4; r.P.z = p.z - Math.sin(h) * 4; }, kind); await sleep(2500); await shot(nm); } await page.evaluate(() => { window.__rw.camOverride = null; }); }
+  if (s === 'street') { await fps('street'); await shot('01-street-temple-exterior'); }
+  if (s === 'minimap') { await page.evaluate(() => { const r = window.__rw; r.gotoStreet('Donegall Street', 0.5); r.C.pitch = 0.35; r.C.dist = 9; }); await fps('cathedral-quarter'); await shot('02-street-cathedral-quarter-minimap'); }
+  if (s === 'map') { await page.evaluate(() => window.__rw.openMap()); await sleep(800); await shot('03-full-map'); await page.evaluate(() => window.__rw.close()); }
+  if (s === 'walk') { await page.evaluate(() => { const r = window.__rw; r.gotoStreet('Royal Avenue', 0.3); r.C.pitch = 0.18; r.C.dist = 6; r.auto = { iz: 1, run: true }; }); await sleep(2500); await shot('04-running'); await page.evaluate(() => { window.__rw.auto = null; }); }
+  if (s === 'templeext') { await page.evaluate(() => { const r = window.__rw; const e = r.ext; r.teleport(e.spawn.x, e.spawn.z); const dx = e.doorPos.x - e.spawn.x, dz = e.doorPos.z - e.spawn.z; const y = Math.atan2(dx, dz); r.P.heading = y; r.C.yaw = y; r.C.pitch = 0.12; r.C.dist = 7; }); await fps('temple-ext', 3000); await shot('05-temple-exterior-glow'); }
+  if (s === 'rave') { await page.evaluate(() => window.__rw.enterTemple()); await sleep(1500); await fps('temple-rave', 3500); await shot('06-temple-interior-rave-hero'); 
+    await page.evaluate(() => { const r = window.__rw; r.P.x = 4000; r.P.z = 29; r.C.yaw = 0; r.C.pitch = 0.1; r.C.dist = 3.5; }); await sleep(1500); await shot('07-temple-rave-stage'); 
+    await page.evaluate(() => { const r = window.__rw; r.P.x = 4000; r.P.z = 33.6; r.C.yaw = Math.PI; r.C.pitch = 0.42; r.C.dist = 7.5; r.C.curDist = 7.5; }); await sleep(1500); await shot('08-temple-rave-crowd'); }
+  if (s === 'day') { await page.evaluate(() => { const r = window.__rw; r.setMode('day'); r.P.x = 4000; r.P.z = 7; r.P.heading = 0; r.C.yaw = 0; r.C.pitch = 0.16; r.C.dist = 4.6; r.C.curDist = 4.6; }); await fps('temple-day', 3000); await shot('09-temple-interior-daylight'); 
+    await page.evaluate(() => { const r = window.__rw; r.P.x = 4003; r.P.z = 26; r.C.yaw = 0.2; r.C.pitch = 0.05; r.C.dist = 4; }); await sleep(1200); await shot('10-temple-daylight-altar'); await page.evaluate(() => window.__rw.setMode('rave')); }
+  if (s === 'hero') { await page.evaluate(() => { const r = window.__rw; r.setMode('day'); r.P.x = 4002.5; r.P.z = 14; r.P.heading = 0; r.C.yaw = Math.PI; r.C.pitch = 0.12; r.C.dist = 2.4; r.C.curDist = 2.4; r.noAutoDance = true; }); await sleep(1500); await shot('11-character-closeup'); await page.evaluate(() => { window.__rw.noAutoDance = false; window.__rw.setMode('rave'); }); }
+  if (s === 'patrol') { for (const [i, nm] of [[0, '16-traffic-patrol-car'], [2, '17-traffic-patrol-wagon']]) { await page.evaluate((i) => { const r = window.__rw; const c = r.traffic.cars.filter(c => c.patrol)[i]; c.max = 0; c.speed = 0; const p = c.node.position; const h = c.heading; r.camOverride = [p.x + Math.sin(h) * 7 + Math.cos(h) * 4, 2.6, p.z + Math.cos(h) * 7 - Math.sin(h) * 4, p.x, 1.0, p.z]; r.teleport(p.x + Math.cos(h) * 6, p.z - Math.sin(h) * 6); }, i); await sleep(2500); await shot(nm); } await page.evaluate(() => { window.__rw.camOverride = null; }); }
+  if (s === 'wardrobe') { await page.keyboard.press('KeyO'); await sleep(600); await shot('12-wardrobe'); await page.evaluate(() => window.__rw.close()); }
+  if (s === 'credits') { await page.keyboard.press('KeyC'); await sleep(600); await shot('13-credits'); await page.evaluate(() => window.__rw.close()); }
+}
+console.log(logs.filter(l => !l.includes('BJS')).slice(0, 30).join('\n'));
+await browser.close();

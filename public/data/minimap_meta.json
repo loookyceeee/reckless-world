@@ -1,0 +1,18 @@
+{
+ "file": "minimap_base_1px_per_m.png",
+ "px_per_m": 1.0,
+ "size": [
+  2579,
+  3537
+ ],
+ "local_x_at_px0": -1354.0308872695377,
+ "local_z_at_top": 773.780000000553,
+ "to_px": "u=(x-local_x_at_px0)*px_per_m ; v=(local_z_at_top - z)*px_per_m  (x,z in game local metres, z north)",
+ "bbox_wgs84": [
+  54.58,
+  -5.952,
+  54.612,
+  -5.912
+ ],
+ "attribution": "(c) OpenStreetMap contributors"
+}

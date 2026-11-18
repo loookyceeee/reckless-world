@@ -1,0 +1,11 @@
+# Render Blueprint — free static site (no card needed for static sites on the Hobby workspace).
+services:
+  - type: web
+    name: reckless-world
+    runtime: static
+    buildCommand: npm ci && npm run build
+    staticPublishPath: dist
+    headers:
+      - path: /*
+        name: Cache-Control
+        value: public, max-age=600
