@@ -179,7 +179,7 @@ print('head bbox', [round(c, 3) for c in (mx - mn)], 'centre', [round(c, 3) for 
 def hn(p): q = p - hc; return Vector((q.x / ex.x, q.y / ex.y, q.z / ex.z))
 def scalp(n):
     zth = 0.30 - max(0.0, min(1.0, (n.y + 0.45) / 1.1)) * (0.95 if FEM else 0.78)   # hairline: high at the forehead, low at the nape
-    if abs(n.x) > 0.78 and n.z < 0.32 and n.y > -0.4: return False   # keep the ears clear
+    if abs(n.x) > 0.78 and n.z < 0.32 and n.y > -0.4 and (not FEM or n.y < 0.22): return False   # keep the ears clear (hers: hair still wraps behind them)
     return n.z > zth
 HSEL = {i for i in hv if scalp(hn(Ph[i]))}
 o = body.copy(); o.data = body.data.copy(); o.name = 'Hair'; bpy.context.collection.objects.link(o)
@@ -239,7 +239,7 @@ hg = oc.vertex_groups.get('Head') or oc.vertex_groups.new(name='Head'); hg.add(l
 oc.data.materials.append(bpy.data.materials.new('M_curls')); print('curls', len(picked), len(oc.data.vertices))
 # drop the shell below the fade (bare skin there): its sliver UVs at the nape smeared texels; the bake anchors the fade at the crown
 HSPAN = hz1 - hz0
-if not FEM:
+if False:
     _b = bmesh.new(); _b.from_mesh(o.data); _b.verts.ensure_lookup_table()
     bmesh.ops.delete(_b, geom=[f for f in _b.faces if all(hfrac(toA @ v.co) < 0.27 for v in f.verts)], context='FACES')
     bmesh.ops.delete(_b, geom=[v for v in _b.verts if not v.link_faces], context='VERTS'); _b.to_mesh(o.data); _b.free()
@@ -376,7 +376,7 @@ def make(kind):
         if v.index not in sel: continue
         p = toA @ v.co; d = PUSH[kind]; b = dom(W[v.index]) or ''
         k = 1.0
-        if kind in ('tee', 'crop'): k = ((1.12 + 0.95 * tparam(p, b) ** 1.2) * (1.12 if FEM else 1.0)) if b.startswith('upperarm') else 1.27  # no puff over the shoulder, flares to the hem  # sleeve flares toward the hem
+        if kind in ('tee', 'crop'): k = 1.3 if b.startswith('upperarm') else 1.27  # no puff over the shoulder, flares to the hem  # sleeve flares toward the hem
         elif kind == 'long': k = 1.35 if b.startswith(('upperarm', 'lowerarm')) else 1.1
         elif kind == 'hoodie': k = 1.45 if b.startswith(('upperarm', 'lowerarm')) else (1.0 if b == 'Head' else 1.2)
         elif kind == 'jeans': k = (1.35 if b.startswith('thigh') else 1.95 if b.startswith('calf') else 1.12)
@@ -384,13 +384,15 @@ def make(kind):
         elif kind == 'cuffed': k = (1.3 if b.startswith('thigh') else 1.45 if b.startswith('calf') else 1.1)
         elif kind == 'shorts': k = 1.4 if b.startswith('thigh') else 1.12
         elif kind in ('briefs', 'bra'): k = 1.04
-        elif kind == 'shoes': k = 1.85
+        elif kind == 'shoes': k = 1.6
         if kind in ('jeans', 'pants', 'cuffed', 'shorts') and p.z > z_pelvis - 0.03:  # waistband tucks under any top
             f = max(0.0, min(1.0, (p.z - (z_pelvis - 0.03)) / 0.04)); k = k + (1.02 - k) * f; d = d + (0.005 - d) * f
         if k != 1.0 and b and b != 'Head':
             c = axis_pt(p, b) if not b.startswith(('spine', 'pelvis', 'clavicle', 'neck')) else Vector((0, axis_pt(p, b).y * 0 + (axis_pt(p, 'spine_02').y), p.z))
             if b.startswith(('spine', 'pelvis', 'clavicle', 'neck')): c = Vector((0.0, axis_pt(p, 'spine_02').y + 0.01, p.z))
-            if kind == 'jeans' and b.startswith(('thigh', 'calf')):  # straight-leg baggy: near-constant radius from mid-thigh to the hem
+            if kind in ('tee', 'crop') and b.startswith('upperarm'):  # straight boxy short sleeve: near-constant wide tube, tiny flare (no puff)
+                r = (p - c).length; tp_ = tparam(p, b); R = max(r * 1.1, (0.074 if FEM else 0.08) + 0.01 * tp_); q = c + (p - c) * (R / max(r, 1e-4))
+            elif kind == 'jeans' and b.startswith(('thigh', 'calf')):  # straight-leg baggy: near-constant radius from mid-thigh to the hem
                 r = (p - c).length; R = max(r * 1.3, 0.104 if b.startswith('thigh') else 0.112 + 0.012 * tparam(p, b)); q = c + (p - c) * (R / max(r, 1e-4)); q.y = c.y + (q.y - c.y) * 1.2 + 0.012 * (tparam(p, b) if b.startswith('calf') else 0.5)  # deep, baggy, sits back over the heel
                 if (q.x - p.x) * (1 if p.x > 0 else -1) < 0: q.x = p.x + (q.x - p.x) * (0.2 if b.startswith('thigh') else 0.55)   # inner leg hugs: legs split high like the app
             elif b.startswith(('spine', 'pelvis', 'clavicle', 'neck')):  # torso: loose in depth, barely wider (no shoulder pads)
@@ -454,6 +456,31 @@ def make(kind):
     print('garment', kind, len(o.data.vertices))
     return o
 for k in ['briefs', 'shoes', 'tee', 'crop', 'long', 'hoodie', 'jeans', 'pants', 'cuffed', 'shorts'] + (['bra'] if FEM else []): make(k)
+# chunky lug soles (turnaround sheet close-up): a thick flat-bottomed sole under each trainer with lug blocks round the edge, skinned to the foot
+_sh = bpy.data.objects['G_shoes']; _Ws = wmap(_sh); _toS = arm.matrix_world.inverted() @ _sh.matrix_world
+sb = bmesh.new()
+for sd in ('_l', '_r'):
+    pts = [_toS @ v.co for v, d in zip(_sh.data.vertices, _Ws) if d and (dom(d) or '').endswith(sd) and (dom(d) or '').startswith(('foot', 'ball'))]
+    if not pts: continue
+    x0, x1 = min(p.x for p in pts), max(p.x for p in pts); y0, y1 = min(p.y for p in pts), max(p.y for p in pts); z0 = min(p.z for p in pts)
+    cx_, cy_ = (x0 + x1) / 2, (y0 + y1) / 2; hw_, hl_ = (x1 - x0) / 2 * 1.08, (y1 - y0) / 2 * 1.05; th_ = 0.045
+    ring = []
+    for j in range(24):  # rounded-rect outline (toe and heel rounded)
+        a_ = j / 24 * 6.283; ca, sa = math.cos(a_), math.sin(a_)
+        k_ = 1 / max(abs(ca) ** 4 + abs(sa) ** 4, 1e-6) ** 0.25; ring.append((cx_ + ca * hw_ * k_ * (0.92 if sa > 0 else 1.0), cy_ + sa * hl_ * k_))
+    bot = [sb.verts.new(_toS.inverted() @ Vector((x, y, z0 - 0.004))) for x, y in ring]; top = [sb.verts.new(_toS.inverted() @ Vector((x, y, z0 + th_))) for x, y in ring]
+    for j in range(24): sb.faces.new((bot[j], bot[(j + 1) % 24], top[(j + 1) % 24], top[j]))
+    sb.faces.new(list(reversed(bot)))
+    for j in range(0, 24, 2):  # lugs: small blocks round the outsole edge
+        x, y = ring[j]; lx, ly = cx_ + (x - cx_) * 1.03, cy_ + (y - cy_) * 1.03
+        g = bmesh.ops.create_cube(sb, size=1.0)
+        for v in g['verts']: v.co = _toS.inverted() @ Vector((lx + v.co.x * 0.022, ly + v.co.y * 0.022, z0 + 0.01 + v.co.z * 0.03))
+os_ = _sh.copy(); os_.data = bpy.data.meshes.new('Soles'); sb.to_mesh(os_.data); sb.free(); os_.name = 'Soles'; bpy.context.collection.objects.link(os_)
+for g in list(os_.vertex_groups): os_.vertex_groups.remove(g)
+for sd in ('_l', '_r'):
+    vg_ = os_.vertex_groups.new(name='foot' + sd); sx_ = 1 if arm.data.bones['foot' + sd].head_local.x > 0 else -1
+    vg_.add([v.index for v in os_.data.vertices if ((_toS @ v.co).x > 0) == (sx_ > 0)], 1.0, 'REPLACE')
+os_.data.materials.clear(); os_.data.materials.append(bpy.data.materials.new('M_soles')); print('soles', len(os_.data.vertices))
 for o in [o for o in bpy.context.scene.objects if o.type == 'MESH']:
     for poly in o.data.polygons: poly.use_smooth = True
 body.name = 'Body'
@@ -513,7 +540,7 @@ for a in keep:
 arm.animation_data.action = None
 s = TARGET_H / hcur; arm.scale = (arm.scale[0] * s, arm.scale[1] * s, arm.scale[2] * s)
 for o in list(bpy.context.scene.objects):  # drop helper spheres (42-vert Icosphere shipped with the base kit)
-    if o.type == 'MESH' and o.name not in ('Stud', 'Curls') and (o.name.startswith('Icosphere') or len(o.data.vertices) < 60): bpy.data.objects.remove(o, do_unlink=True)
+    if o.type == 'MESH' and o.name not in ('Stud', 'Curls', 'Soles') and (o.name.startswith('Icosphere') or len(o.data.vertices) < 60): bpy.data.objects.remove(o, do_unlink=True)
 # --- bake UVs + projection dump: every visible part gets a fresh non-overlapping UV layout (smart project) and its posed
 # (idle frame 1 = the app's stance) loop positions/normals are dumped so tools/bake_avatar_tex.py can project the app's
 # front renders onto it (face, hair, skin, every wardrobe garment). See research/techniques-sources.md (texture projection).
