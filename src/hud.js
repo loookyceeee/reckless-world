@@ -138,6 +138,11 @@ export function createHUD(app) {
         mg.scale(1 / k, 1 / k);
       } else { // interior: nave layout with stage, barrier, bar and exits
         const X = (x) => (x - st.lx) * zoom, Y = (z) => -(z - st.lz) * zoom;
+        if (st.plan) { const pl = st.plan; mg.fillStyle = '#141414'; mg.fillRect(X(-pl.W / 2), Y(pl.D), pl.W * zoom, pl.D * zoom); mg.strokeStyle = '#fff'; mg.lineWidth = 2; mg.strokeRect(X(-pl.W / 2), Y(pl.D), pl.W * zoom, pl.D * zoom);
+          mg.font = '700 9px Unbounded, sans-serif'; mg.textAlign = 'center';
+          for (const r of pl.rects) { mg.fillStyle = r.c; mg.fillRect(X(r.x), Y(r.z + r.d), r.w * zoom, r.d * zoom); mg.fillStyle = r.c === '#fff' ? '#000' : '#fff'; mg.fillText(r.t, X(r.x + r.w / 2), Y(r.z + r.d / 2) + 3); }
+          mg.fillStyle = '#2bd46a'; mg.fillRect(X(-1.5), Y(0.4), 3 * zoom, 0.8 * zoom); mg.fillStyle = '#fff'; mg.fillText('EXIT', X(0), Y(-1.2));
+        } else {
         mg.fillStyle = '#141414'; mg.fillRect(X(-9.6), Y(46), 19.2 * zoom, 46 * zoom);
         mg.strokeStyle = '#fff'; mg.lineWidth = 2; mg.strokeRect(X(-9.6), Y(46), 19.2 * zoom, 46 * zoom);
         mg.fillStyle = '#555'; for (let z = 3; z < 34; z += 6) for (const sx of [-5, 5]) mg.fillRect(X(sx) - 2, Y(z) - 2, 4, 4);
@@ -146,7 +151,7 @@ export function createHUD(app) {
         mg.fillStyle = '#ff2a3c'; mg.fillRect(X(6.8), Y(9), 0.8 * zoom, 5 * zoom);
         mg.fillStyle = '#2bd46a'; mg.fillRect(X(-1.5), Y(0.4), 3 * zoom, 0.8 * zoom);
         mg.font = '700 9px Unbounded, sans-serif'; mg.textAlign = 'center'; mg.fillStyle = '#000'; mg.fillText('STAGE', X(0), Y(40));
-        mg.fillStyle = '#fff'; mg.fillText('BAR', X(7.2), Y(10.5)); mg.fillText('EXIT', X(0), Y(-1.2)); }
+        mg.fillStyle = '#fff'; mg.fillText('BAR', X(7.2), Y(10.5)); mg.fillText('EXIT', X(0), Y(-1.2)); } }
       mg.restore();
       // pins
       mg.save(); mg.font = '700 9px Unbounded, sans-serif'; mg.textAlign = 'center'; mg.textBaseline = 'middle';

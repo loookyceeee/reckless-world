@@ -47,6 +47,7 @@ import { createMusic, SC_PROFILE } from './music.js';
 import { createPhone, createWheel, buzz } from './phone.js';
 import { createMissions } from './missions.js';
 import { SegGrid } from './collide.js';
+import { buildClub, setClubMode, updateClub } from './clubs.js';
 import { createRapid } from './glider.js';
 import * as EV from './events.js';
 import { planeR, torus, xf, plane, toMesh, hex } from './geo.js';
@@ -119,10 +120,13 @@ async function start() {
   freezeMaterials(scene, ['trunk', 'leaf', 'furn', 'lampPoleM', 'pave', 'roads', 'pavement', 'markings']);
   const templeB = city.buildings.find(b => b.temple);
   const ext = buildTempleExterior(scene, templeB, city.grid); ext.root.parent = city.root;
-  const T = buildTempleInterior(scene, { glow, low: LOW, bakeCrowd: () => bakeCrowdVariants(scene, { lod: LOW ? 0.28 : 0.33, simplify: Q.has('nosimp') ? 0 : 0.3 }), makeDancer: (i) => { const a = createAvatar(scene, { name: 'dancer' + i, outfit: ['skate', 'stan', 'stanfull', 'stanfull', 'skate', 'stan'][i], decals: true, lod: 0.5 }); return a; } });
-  T.cam = cam;
+  const TEMPLE = buildTempleInterior(scene, { glow, low: LOW, bakeCrowd: () => bakeCrowdVariants(scene, { lod: LOW ? 0.28 : 0.33, simplify: Q.has('nosimp') ? 0 : 0.3 }), makeDancer: (i) => { const a = createAvatar(scene, { name: 'dancer' + i, outfit: ['skate', 'stan', 'stanfull', 'stanfull', 'skate', 'stan'][i], decals: true, lod: 0.5 }); return a; } });
+  let T = TEMPLE; // the live interior (Temple or one of the clubs built on first entry)
+  T.cam = cam; T.name = 'THE TEMPLE'; T.sub = '8 CARLISLE CIRCUS'; T.exitLabel = 'CARLISLE CIRCUS';
   T.root.setEnabled(false);
-  const tGrid = new SegGrid(8); for (const s of T.segs) tGrid.add(s[0], s[1], s[2], s[3], 99);
+  const tGrid = new SegGrid(8); for (const s of T.segs) tGrid.add(s[0], s[1], s[2], s[3], 99); T.grid = tGrid;
+  T.bars = [{ x: INTERIOR_ORIGIN.x + 6.3, z: INTERIOR_ORIGIN.z + 6.5 }];
+  if (T.CV) T.CV.cap = T.crowd.length;
   const LM = buildLandmarks(scene, city, city.grid); LM.root.parent = city.root;
   city.templeDoor = ext.doorPos; const carModels = Q.has('nocars') ? null : await (await fetch(import.meta.env.BASE_URL + 'data/cars.json')).json().catch(() => null); if (carModels && !Q.has('oldveh')) Object.assign(carModels, await (await fetch(import.meta.env.BASE_URL + 'data/vehicles.json')).json().catch(() => ({}))); const traffic = buildTraffic(scene, city, { models: carModels, low: LOW, stops: (city.sf && city.sf.stops) || [], signals: (city.sf && city.sf.signals) || [] }); bar(85);
   const route = makeRouter(buildGraph(city.roads, false)); let routeT = 0;
@@ -163,7 +167,7 @@ async function start() {
     let best = null, bd = 1e9; for (const sg of city.grid.near(v.x, v.z, 45)) { const dx = sg.x1 - sg.x0, dz = sg.z1 - sg.z0, L2 = dx * dx + dz * dz; if (L2 < 30 || sg.h < 3 || sg.h === 30.5) continue; const L = Math.sqrt(L2), m0 = Math.min(0.45, 3.2 / L);
       const t = Math.max(m0, Math.min(1 - m0, ((v.x - sg.x0) * dx + (v.z - sg.z0) * dz) / L2)); const px = sg.x0 + dx * t, pz = sg.z0 + dz * t, d = Math.hypot(px - v.x, pz - v.z);
       if (d < bd) { let nx = -dz / L, nz = dx / L; if ((px - v.x) * nx + (pz - v.z) * nz < 0) { nx = -nx; nz = -nz; } bd = d; best = { wx: px, wz: pz, nx, nz, h: sg.h }; } }
-    if (!best) continue; const door = { v, x: best.wx + best.nx * 2.5, z: best.wz + best.nz * 2.5 }; venueDoors.push(door); mkRing(door.x, door.z, 'ring-' + v.id);
+    if (!best) continue; const door = { v, x: best.wx + best.nx * 2.5, z: best.wz + best.nz * 2.5, nx: best.nx, nz: best.nz }; venueDoors.push(door); mkRing(door.x, door.z, 'ring-' + v.id);
     const sm = new StandardMaterial('vSign-' + v.id, scene); sm.emissiveTexture = signTex(v.name); sm.disableLighting = true; sm.backFaceCulling = false;
     const sgn = toMesh('vSign-' + v.id, plane(v.name.length > 10 ? 7.5 : 5.5, 1.3), scene, sm); sgn.position.set(best.wx + best.nx * 0.35, Math.min(5.2, best.h - 0.8), best.wz + best.nz * 0.35); sgn.rotation.y = Math.atan2(-best.nx, -best.nz); sgn.parent = city.root;
     if (v.nostalgia) { const nm = new StandardMaterial('vSignN', scene); nm.emissiveTexture = signTex('EST. · NOSTALGIA', 1024, 128); nm.disableLighting = true; nm.backFaceCulling = false;
@@ -206,7 +210,7 @@ async function start() {
   const RB = createRapid({ scene, traffic, hud, app, grid: city.grid }); window.__rw.RB = RB;
   // GPS destination (GTA-style): defaults to the Temple door; venues or a tapped waypoint from the pause map
   let DEST = { x: ext.doorPos.x, z: ext.doorPos.z, label: 'THE TEMPLE', kind: 'venue', id: 'temple' };
-  const venueDest = VENUES.filter(v => v.inSlice).map(v => v.id === 'temple' ? { ...v, x: ext.doorPos.x, z: ext.doorPos.z } : v.id === 'warehousexl' && whDoor ? { ...v, x: whDoor.x, z: whDoor.z } : v);
+  const venueDest = VENUES.filter(v => v.inSlice).map(v => v.id === 'temple' ? { ...v, x: ext.doorPos.x, z: ext.doorPos.z } : v.id === 'warehousexl' && whDoor ? { ...v, x: whDoor.x, z: whDoor.z } : (d => d ? { ...v, x: d.x, z: d.z } : v)(venueDoors.find(q => q.v.id === v.id)));
   app.blips = { stops: RB.stops.map(s => ({ x: s.sx, z: s.sz })), posters: posters.filter(Boolean).map(ps => ({ x: ps.ix, z: ps.iz, get done() { return ps.mesh.isEnabled(); } })), collectibles: [] };
   const mapCtx = () => ({ P, route, venues: venueDest, getDest: () => DEST, setDest: (d) => { DEST = d; routeT = 0; } });
   hud.setLive(app.live);
@@ -246,19 +250,31 @@ async function start() {
   let interact = null;
   const fadeTo = async (fn) => { hud.fade(true); await new Promise(r => setTimeout(r, 380)); await fn(); await new Promise(r => setTimeout(r, 120)); hud.fade(false); };
   const cityLights = [hemi, moon, ext.light];
-  const enterTemple = async () => fadeTo(() => {
+  const CLUBS = {}; const CLUB_ORDER = ['warehousexl', 'terminus', 'thompsons', 'warehouse', 'locationx'];
+  const getClub = (id) => { if (CLUBS[id]) return CLUBS[id]; const v = VENUES.find(q => q.id === id);
+    const c = buildClub(scene, id, { index: CLUB_ORDER.indexOf(id), low: LOW, posters: [...upP, ...pastP], venue: v }); c.cam = cam; c.root.setEnabled(false);
+    c.grid = new SegGrid(8); for (const sg of c.segs) c.grid.add(sg[0], sg[1], sg[2], sg[3], 99);
+    c.exitLabel = ({ warehousexl: 'DUNBAR STREET', terminus: 'GLENGALL STREET', thompsons: "PATTERSON'S PLACE", warehouse: 'BANKMORE SQUARE', locationx: 'LISBURN ROAD' })[id];
+    if (glow) for (const me of c.glowSkip()) glow.addExcludedMesh(me); c.crowdMax = TEMPLE.crowdMax; return (CLUBS[id] = c); };
+  const setMode = (m) => T.club ? setClubMode(T, scene, m) : setTempleMode(T, scene, m);
+  let DOOR = null; // where to come back out
+  const enterVenue = async (V, door) => fadeTo(() => {
     app.inside = true; city.root.setEnabled(false); SKY.sky.setEnabled(false); FL.setEnabled(false); WET.setEnabled(false); traffic.cars.forEach(c => c.node.setEnabled(false)); traffic.parked.forEach(c => c.node.setEnabled(false)); traffic.peds.forEach(p => p.av.root.setEnabled(false));
-    cityLights.forEach(l => l.setEnabled(false)); Object.values(T.lights).forEach(l => l.setEnabled(true)); T.root.setEnabled(true); if (glow) glow.intensity = 0.55; if (pipe) pipe.imageProcessing.exposure = 2.0;
-    setTempleMode(T, scene, Q.get('lights') === 'day' ? 'day' : 'rave'); hud.interior(true, T.mode);
-    P.x = T.spawn.x; P.z = T.spawn.z; P.heading = 0; C.yaw = 0; C.pitch = 0.16; C.dist = 4.6; C.curDist = 4.6; // hero view: the chancel arch
-    EV.raveEnter('The Temple'); hud.toast('THE TEMPLE · CARLISLE CIRCUS');
+    T = V; DOOR = door; if (TEMPLE.CV) for (const it of TEMPLE.CV.list) for (const m of [it.body, it.head, it.far]) if (m) { m.parent = V.root; m.thinInstanceCount = 0; }
+    cityLights.forEach(l => l.setEnabled(false)); Object.values(T.lights).forEach(l => l.setEnabled(true)); T.root.setEnabled(true); if (glow) glow.intensity = 0.55; if (pipe) pipe.imageProcessing.exposure = T.club ? 1.7 : 2.0;
+    setMode(Q.get('lights') === 'day' ? 'day' : 'rave'); hud.interior(true, T.mode);
+    P.x = T.spawn.x; P.z = T.spawn.z; P.heading = 0; C.yaw = 0; C.pitch = 0.16; C.dist = 4.6; C.curDist = 4.6;
+    EV.raveEnter(T.club ? T.name : 'The Temple'); hud.toast(T.name + ' · ' + (T.club ? T.sub : 'CARLISLE CIRCUS'));
   });
+  const enterTemple = async () => enterVenue(TEMPLE, { x: ext.doorPos.x - Math.sin(ext.yaw) * 2.5, z: ext.doorPos.z - Math.cos(ext.yaw) * 2.5, heading: ext.yaw + Math.PI });
+  const enterClub = async (id, d) => enterVenue(getClub(id), { x: d.x + (d.nx || 0) * 0.8, z: d.z + (d.nz || 0) * 0.8, heading: d.nx !== undefined ? Math.atan2(d.nx, d.nz) : 0 });
   const exitTemple = async () => fadeTo(async () => {
     app.inside = false; T.root.setEnabled(false); Object.values(T.lights).forEach(l => l.setEnabled(false)); cityLights.forEach(l => l.setEnabled(true)); if (glow) glow.intensity = 0.5; if (pipe) pipe.imageProcessing.exposure = 1.4;
     city.root.setEnabled(true); SKY.sky.setEnabled(true); FL.setEnabled(true); WET.setEnabled(true); traffic.cars.forEach(c => c.node.setEnabled(true)); traffic.parked.forEach(c => c.node.setEnabled(true)); traffic.peds.forEach(p => { p.av.root.setEnabled(true); p._on = undefined; });
     scene.clearColor = NIGHT; scene.fogDensity = 0.0028; scene.fogColor = new Color3(0.1, 0.105, 0.17); hud.interior(false);
-    P.x = ext.doorPos.x - Math.sin(ext.yaw) * 2.5; P.z = ext.doorPos.z - Math.cos(ext.yaw) * 2.5; P.heading = ext.yaw + Math.PI; C.yaw = P.heading; C.pitch = 0.2; C.dist = 5.8;
-    await EV.raveExit();
+    const d = DOOR || { x: ext.doorPos.x - Math.sin(ext.yaw) * 2.5, z: ext.doorPos.z - Math.cos(ext.yaw) * 2.5, heading: ext.yaw + Math.PI };
+    P.x = d.x; P.z = d.z; P.heading = d.heading; C.yaw = P.heading; C.pitch = 0.2; C.dist = 5.8;
+    T = TEMPLE; await EV.raveExit();
   });
   const AU = createAudio();
   let npLast = '', muS = {};
@@ -276,7 +292,7 @@ async function start() {
       return hud.openWardrobe(CR, { fit: { ...CREW.fit }, xp: CREW.xp, account: CREW.account, email: EV.getEmail(), setEmail: EV.setEmail, apply: applyFit,
         signIn: async (e) => { CREW.account = await CR.signIn(e); await loadCrew(); reopen(); }, signOut: () => { CR.signOut(); CREW.account = null; CREW.xp = null; applyFit(CREW.fit); reopen(); } }); }
     if (k === 'f') { P.dancing = !P.dancing; return; }
-    if (k === 'l' && app.inside) { setTempleMode(T, scene, T.mode === 'day' ? 'rave' : 'day'); hud.interior(true, T.mode); return; }
+    if (k === 'l' && app.inside) { setMode(T.mode === 'day' ? 'rave' : 'day'); hud.interior(true, T.mode); return; }
     if (k === 'p') return photo();
     if (k === 'e' && interact) return interact.act();
   };
@@ -288,7 +304,7 @@ async function start() {
     const c = document.createElement('canvas'); c.width = 1360; c.height = 900; const g = c.getContext('2d');
     g.fillStyle = '#000'; g.fillRect(0, 0, c.width, c.height); g.drawImage(img, 40, 40, 1280, 720);
     const logo = new Image(); logo.src = import.meta.env.BASE_URL + 'img/logo.png'; await logo.decode(); g.drawImage(logo, 40, 784, 96, 83);
-    g.fillStyle = '#fff'; g.font = '800 34px Unbounded'; g.fillText('RECKLESS WORLD', 156, 826); g.font = '600 22px "DM Sans"'; g.fillText((app.inside ? 'THE TEMPLE' : (state.street || 'BELFAST')) + ' · BELFAST', 158, 862);
+    g.fillStyle = '#fff'; g.font = '800 34px Unbounded'; g.fillText('RECKLESS WORLD', 156, 826); g.font = '600 22px "DM Sans"'; g.fillText((app.inside ? T.name : (state.street || 'BELFAST')) + ' · BELFAST', 158, 862);
     g.textAlign = 'right'; g.font = '600 18px "DM Sans"'; g.fillText('RECKLESSRAVES.CO.UK', 1320, 862);
     const a = document.createElement('a'); a.download = 'reckless-world.png'; a.href = c.toDataURL('image/png'); a.click(); hud.toast('PHOTO SAVED');
   };
@@ -356,9 +372,9 @@ async function start() {
     }
     if (P.air) { P.y += P.vy * dt; P.vy -= GRAV * dt; if (P.y <= 0) { P.y = 0; P.air = false; P.vy = 0; P.vault = false; C.dip = 0.14; buzz(12); } }
     if (P.speed > 0.01 && P.mx != null) { P.x += P.mx * P.speed * dt; P.z += P.mz * P.speed * dt; }
-    const pp = { x: P.x, z: P.z }; (app.inside ? tGrid : city.grid).resolve(pp, 0.38, P.y - 0.02); P.x = pp.x; P.z = pp.z;
+    const pp = { x: P.x, z: P.z }; (app.inside ? T.grid : city.grid).resolve(pp, 0.38, P.y - 0.02); P.x = pp.x; P.z = pp.z;
     const autoDance = app.inside && T.mode === 'rave' && T.danceFloor(P) && P.speed < 0.2 && !window.__rw.noAutoDance;
-    player.root.position.set(P.x, P.y, P.z); player.root.rotation.y = P.heading; dust.emitter.set(P.x, 0.05, P.z); dust.emitRate = P.speed > 4.5 && !app.inside ? 45 : 0;
+    player.root.position.set(P.x, P.y + (app.inside && T.floorY ? T.floorY(P.x, P.z) : 0), P.z); player.root.rotation.y = P.heading; dust.emitter.set(P.x, 0.05, P.z); dust.emitRate = P.speed > 4.5 && !app.inside ? 45 : 0;
     if (player.lightRig) player.lightRig(cam);
     SKY.update(cam);
     if (player.animate) player.animate(dt, { speed: P.speed, dancing: P.dancing || autoDance, air: P.air }); else animateAvatar(player, dt, { speed: P.speed * 0.8, dancing: P.dancing || autoDance });
@@ -368,7 +384,7 @@ async function start() {
     C.arm += ((P.speed > 4.5 && !app.inside ? 6.6 / 5.8 : 1) - C.arm) * Math.min(1, dt * 2); // arm 5.8 m walking, 6.6 m sprinting
     C.lbA = C.lb ? 1 : Math.max(0, (C.lbA || 0) - dt / 0.18); const yawE = C.yaw + Math.PI * (C.lbA * C.lbA * (3 - 2 * C.lbA)); // look-behind: snap, restore in 180 ms
     const cp = Math.cos(C.pitch), want = C.dist * C.arm; const ox = -Math.sin(yawE) * cp, oz = -Math.cos(yawE) * cp, oy = Math.sin(C.pitch);
-    const camY = 1.5 + oy * want; const hit = (app.inside ? tGrid : city.grid).raycast(P.x, P.z, P.x + ox * want, P.z + oz * want, camY);
+    const camY = 1.5 + oy * want; const hit = (app.inside ? T.grid : city.grid).raycast(P.x, P.z, P.x + ox * want, P.z + oz * want, camY);
     const d = Math.max(1.0, want * hit - (hit < 1 ? 0.35 : 0)); C.curDist += (d - C.curDist) * Math.min(1, dt * (d < C.curDist ? 20 : 3.5)); // hide fast, restore lazily
     camPos.set(P.x + ox * C.curDist, Math.max(0.35, 1.5 + P.y * 0.55 + dipY + oy * C.curDist), P.z + oz * C.curDist);
     // smoothed follow camera + slight FOV kick when sprinting
@@ -381,20 +397,21 @@ async function start() {
     else if (window.__rw.camOverride) { const o = window.__rw.camOverride; cam.position.set(o[0], o[1], o[2]); cam.setTarget(new Vector3(o[3], o[4], o[5])); }
     // world updates
     if (!app.inside) { updateCity(city, t); updateLandmarks(LM, t); updateTempleExterior(ext, t, app.live); updateTraffic(traffic, dt, P, t); templeRing.rotation.y += dt; templeRing.scaling.setAll(1 + 0.06 * Math.sin(t * 4)); }
-    else updateTempleInterior(T, t, dt), T.dancers.forEach(dn => animateAvatar(dn, dt, { dancing: true }));
+    else if (T.club) updateClub(T, t, dt, TEMPLE.CV); else updateTempleInterior(T, t, dt), T.dancers.forEach(dn => animateAvatar(dn, dt, { dancing: true }));
     // interaction prompts
     interact = null;
     if (!app.inside) {
       if (M && (interact = M.interact())) { }
       else if (Math.hypot(P.x - ext.doorPos.x, P.z - ext.doorPos.z) < 3.2) interact = { label: `<b>E</b> ENTER THE TEMPLE`, act: enterTemple };
-      else if (venueDoors.some(d => Math.hypot(P.x - d.x, P.z - d.z) < 3.2)) { const d = venueDoors.find(d => Math.hypot(P.x - d.x, P.z - d.z) < 3.2); interact = d.v.nostalgia ? { label: 'THE WARE-HOUSE · EST. · THE OLD PALM HOUSE / THREE SHEETS SITE', act: () => hud.toast('THE WARE-HOUSE · FOR THE ONES WHO WERE THERE') } : { label: `${d.v.name} · ${d.v.sub} · INSIDE COMING SOON`, act: () => hud.toast(`${d.v.name} OPENS IN A LATER BUILD`) }; }
-      else if (Math.hypot(P.x - whDoor.x, P.z - whDoor.z) < 3.2) interact = { label: `THE WARE-HOUSE XL · INTERIOR COMING SOON`, act: () => hud.toast('THE WARE-HOUSE XL OPENS IN A LATER BUILD') };
+      else if (venueDoors.some(d => Math.hypot(P.x - d.x, P.z - d.z) < 3.2)) { const d = venueDoors.find(d => Math.hypot(P.x - d.x, P.z - d.z) < 3.2); interact = { label: `<b>E</b> ENTER ${d.v.name}${d.v.nostalgia ? ' · EST. · THE OLD PALM HOUSE' : ''}`, act: () => enterClub(d.v.id, d) }; }
+      else if (Math.hypot(P.x - whDoor.x, P.z - whDoor.z) < 3.2) interact = { label: `<b>E</b> ENTER THE WARE-HOUSE XL`, act: () => enterClub('warehousexl', whDoor) };
       else if (RB.nearStop(P)) { const st = RB.nearStop(P); interact = { label: `<b>E</b> RAPID BUS · FAST TRAVEL`, act: () => RB.menu(st, P) }; }
       else for (const ps of posters) if (Math.hypot(P.x - ps.ix, P.z - ps.iz) < 2.4) { const done = posterDone(ps); interact = { label: done ? 'POSTER UP ✓' : `<b>E</b> ${ps.mesh.isEnabled() ? 'PASTE A FRESH POSTER' : 'PASTE A RECKLESS POSTER'}`, act: async () => { if (done) return; ps.mesh.setEnabled(true); localStorage.setItem('rw.poster.' + ps.id, '1'); markPasted(ps.id); buzz([20, 40, 20]); const ev = await EV.posterPlaced(ps.id); if (!(M && M.onPaste(ps, ev))) hud.toast(ev && ev.blocked ? 'POSTER UP · ' + ev.blocked : ev ? 'POSTER UP · TEST EVENT QUEUED' : 'POSTER UP'); } }; break; }
-    } else if (P.z - INTERIOR_ORIGIN.z < 2.4 && Math.abs(P.x - INTERIOR_ORIGIN.x) < 2) interact = { label: `<b>E</b> EXIT TO CARLISLE CIRCUS`, act: exitTemple };
+    } else if (P.z - T.exitPos.z < 1.2 && Math.abs(P.x - T.exitPos.x) < 2) interact = { label: `<b>E</b> EXIT TO ${T.exitLabel}`, act: exitTemple };
+    else if (T.bars && T.bars.some(b => Math.hypot(P.x - b.x, P.z - b.z) < 1.7)) interact = { label: '<b>E</b> ORDER AT THE BAR', act: () => { const D = ['RECKLESS RED · CHERRY SODA', 'CARLISLE COOLER · LIME + MINT', 'NIGHT BUS · COLD BREW TONIC', 'THE USUAL · WATER, LOTS OF ICE', 'GLENGALL GINGER · GINGER BEER']; buzz(15); hud.toast('ORDERED · ' + D[Math.floor(Math.random() * D.length)] + ' · SOFT DRINKS ONLY'); } };
     hud.prompt(interact ? interact.label : ''); if (isTouch) { const ia = !!interact; if (ia && !app._ia) buzz(12); app._ia = ia; hud.$('tAct').classList.toggle('on', ia); }
     // HUD
-    slowT -= dt; if (slowT <= 0) { slowT = 0.5; if (app.inside) EV.raveTick().then(ev => { if (!ev) return; if (ev.blocked) hud.note({ kicker: 'CREW', title: '10 MINUTES IN', body: ev.blocked }); else hud.stamp({ title: 'VISIT LOGGED', sub: 'THE TEMPLE · 10 MINUTES IN', lines: ['RAVE VISIT · TEST EVENT QUEUED', 'CREW ADDS XP AFTER LAUNCH'] }); }); state.street = app.inside ? 'THE TEMPLE' : nearestStreet(); state.district = app.inside ? (T.mode === 'day' ? 'NAVE · DAYLIGHT' : 'NAVE · RAVE') : nearestDistrict();
+    slowT -= dt; if (slowT <= 0) { slowT = 0.5; if (app.inside) EV.raveTick().then(ev => { if (!ev) return; if (ev.blocked) hud.note({ kicker: 'CREW', title: '10 MINUTES IN', body: ev.blocked }); else hud.stamp({ title: 'VISIT LOGGED', sub: T.name + ' · 10 MINUTES IN', lines: ['RAVE VISIT · TEST EVENT QUEUED', 'CREW ADDS XP AFTER LAUNCH'] }); }); state.street = app.inside ? T.name : nearestStreet(); state.district = app.inside ? (T.club ? T.sub + (T.mode === 'day' ? ' · HOUSE LIGHTS' : ' · RAVE') : (T.mode === 'day' ? 'NAVE · DAYLIGHT' : 'NAVE · RAVE')) : nearestDistrict();
       { const dd = Math.hypot(P.x - ext.doorPos.x, P.z - ext.doorPos.z); AU.update({ inside: app.inside, dist: dd }); MU.setVolume(app.inside ? 90 : 22 + Math.max(0, 1 - dd / 90) * 30); }
       routeT -= 0.5; if (routeT <= 0 && !app.inside) { routeT = 1.5; if (DEST && DEST.kind === 'waypoint' && Math.hypot(DEST.x - P.x, DEST.z - P.z) < 14) { DEST = null; hud.toast('WAYPOINT REACHED'); } state.route = DEST ? route(P.x, P.z, DEST.x, DEST.z) : null; } if (app.inside) state.route = null; state.dest = DEST;
       const tv = VENUES[0]; state.objective = (M && M.objective()) || (app.inside ? '' : `▲ THE TEMPLE <b>${Math.round(Math.hypot(P.x - ext.doorPos.x, P.z - ext.doorPos.z))}M</b>`); }
@@ -402,7 +419,7 @@ async function start() {
       if (app.idleT > 14 && !app._kIdle) { app._kIdle = true; keyHints(app.inside ? 'temple' : ''); } if (!idle && app._kIdle) { app._kIdle = false; hud.keys(null); }
       if (!!app.inside !== !!app._kIn) { app._kIn = !!app.inside; if (app.inside) keyHints('temple'); } }
     if (M && !app.title) { M.update(dt); state.patrols = M.blips(); const hk = M.H.level + '|' + (M.H.hidden > 0) + '|' + (M.H.flash > 0); if (hk !== app._hk) { app._hk = hk; hud.heat(M.H.level, M.H.hidden > 0, M.H.flash > 0); } }
-    hud.update(dt, { stamina: ST.v, stamFlash: ST.flash, x: P.x, z: P.z, heading: P.heading, camYaw: C.yaw, inside: app.inside, lx: P.x - INTERIOR_ORIGIN.x, lz: P.z - INTERIOR_ORIGIN.z, ...state });
+    hud.update(dt, { stamina: ST.v, stamFlash: ST.flash, x: P.x, z: P.z, heading: P.heading, camYaw: C.yaw, inside: app.inside, lx: P.x - T.root.position.x, lz: P.z - T.root.position.z, plan: app.inside && T.club ? T.plan : null, ...state });
     fpsT += dt; if (fpsT > 0.5) { fpsT = 0; hud.fps(Math.round(engine.getFps())); }
     cullT -= dt; if (culler && cullT <= 0 && !app.inside) { cullT = 0.25; culler.setDist(app.title ? 900 : TIERS[tier].dist); culler.update(cam.position); WET.update(cam.position); const pd = TIERS[tier].dist * 0.3; for (const p of traffic.peds) { const on = Math.hypot(p.av.root.position.x - cam.position.x, p.av.root.position.z - cam.position.z) < pd; if (p._on !== on) { p._on = on; p.av.root.setEnabled(on); } } }
     if (!app.title && !app.inside && autoTier) { tierT += engine.getDeltaTime() / 1000; tierF.push(engine.getFps()); if (tierT > 4) { const avg = tierF.reduce((a, b) => a + b, 0) / tierF.length; tierF = []; tierT = 0;
@@ -425,14 +442,14 @@ async function start() {
   // ---- stage 6: crew phone hub + action wheel (research/game-design.md 1.5/1.6) ----
   const uiRoot = document.body;
   const templeDest = () => ({ x: ext.doorPos.x, z: ext.doorPos.z, label: 'THE TEMPLE', kind: 'venue', id: 'temple' });
-  const setDestP = (d, id) => { DEST = id === 'temple' ? templeDest() : d; routeT = 0; hud.toast('GPS · ' + DEST.label); };
+  const setDestP = (d, id) => { const vd = id && venueDest.find(v => v.id === id); DEST = id === 'temple' ? templeDest() : vd ? { x: vd.x, z: vd.z, label: vd.name, kind: 'venue', id } : d; routeT = 0; hud.toast('GPS · ' + DEST.label); };
   const spotName = (id) => id.replace(/-/g, ' ').toUpperCase();
   app.phone = createPhone({ root: uiRoot,
     open: { map: () => app.key('m'), wardrobe: () => app.key('o'), camera: () => app.key('p'), credits: () => app.key('c') },
     sound: { label: () => (AU.on ? 'SOUND ON' : 'SOUND OFF'), toggle: () => app.key('n') },
     quality: { get: () => tier, set: (n) => { if (TIERS[n]) setTier(n); } },
     radio: () => ({ ...muS, link: SC_PROFILE }), skip: () => MU.next(),
-    rave: () => ({ inside: !!app.inside, lights: T.mode, venue: 'THE TEMPLE', dwell: app.inside ? EV.dwell() : 0, need: EV.MIN_DWELL }),
+    rave: () => ({ inside: !!app.inside, lights: T.mode, venue: app.inside ? T.name : 'THE TEMPLE', venues: venueDest.map(v => ({ id: v.id, name: v.name, sub: v.sub })), dwell: app.inside ? EV.dwell() : 0, need: EV.MIN_DWELL }),
     posters: () => posters.map(p => ({ name: spotName(p.id), done: posterDone(p), x: p.ix, z: p.iz })),
     crew: () => CREW.account ? { rank: 'CREW LEVEL ' + CR.playerLevel(CREW.xp), line: 'Signed in. Your crew rank unlocks wardrobe pieces.' } : { rank: 'SIGNED OUT', line: 'Sign in with your crew email to wear unlocked pieces.' },
     onAct: (a) => { if (a === 'lights') { app.key('l'); return true; } return false; },
@@ -475,7 +492,7 @@ async function start() {
   const anyKey = (e) => { if (app.title) startGame(); }; addEventListener('keydown', anyKey);
   document.getElementById('play').onclick = startGame; document.getElementById('title').addEventListener('pointerdown', (e) => { if (document.getElementById('title').classList.contains('ready')) startGame(); });
   if (isTouch) document.getElementById('play').textContent = 'TAP TO ENTER';
-  Object.assign(window.__rw, { ready: true, engine, scene, P, C, enterTemple, exitTemple, kind: engine.__kind, low: LOW,
+  Object.assign(window.__rw, { enterClub: (id) => { const d = id === 'warehousexl' ? whDoor : venueDoors.find(q => q.v.id === id); return enterClub(id, d || { x: 0, z: 0 }); }, cur: () => T, ready: true, engine, scene, P, C, enterTemple, exitTemple, kind: engine.__kind, low: LOW,
     setMode: (m) => { setTempleMode(T, scene, m); hud.interior(true, m); }, openMap: () => hud.openMap(mapCtx()), close: () => hud.close(), hud, player,
     teleport: (x, z, yaw) => { P.x = x; P.z = z; if (yaw != null) { P.heading = yaw; C.yaw = yaw; } C.curDist = C.dist; slowT = 0; },
     gotoStreet: (name, k = 0.5, side = 1) => { const rs = city.roads.filter(r => r.nm === name && r.d); if (!rs.length) return 'none'; const r = rs[Math.floor(rs.length * k) % rs.length]; const i = Math.floor(r.pts.length / 2) - (r.pts.length > 1 && r.pts.length % 2 === 0 ? 1 : 0); const a = r.pts[Math.max(0, i)], b = r.pts[Math.min(r.pts.length - 1, i + 1)]; const L = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1; const ux = (b[0] - a[0]) / L, uz = (b[1] - a[1]) / L; const off = r.w / 2 + 1.2; P.x = (a[0] + b[0]) / 2 - uz * off * side; P.z = (a[1] + b[1]) / 2 + ux * off * side; P.heading = Math.atan2(ux, uz); C.yaw = P.heading; C.curDist = C.dist; slowT = 0; return [P.x, P.z]; },
