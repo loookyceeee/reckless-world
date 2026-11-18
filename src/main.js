@@ -87,7 +87,7 @@ async function start() {
   const hemi = new HemisphericLight('hemi', new Vector3(0.1, 1, 0.2), scene); hemi.intensity = 1.0; hemi.diffuse = hex('#9aa6cc'); hemi.groundColor = hex('#2a2426'); hemi.specular = new Color3(0.2, 0.2, 0.3);
   const moon = new DirectionalLight('moon', new Vector3(-0.4, -0.8, 0.5), scene); moon.intensity = 0.45; moon.diffuse = hex('#b8c4ff'); moon.specular = new Color3(0.3, 0.3, 0.4);
   const cam = new FreeCamera('cam', new Vector3(0, 5, -10), scene); cam.minZ = 0.1; cam.maxZ = 900; cam.fov = 0.95; cam.inputs.clear(); const cam0 = cam;
-  let glow = null; if (!LOW && !Q.has('noglow')) { try { glow = new GlowLayer('glow', scene, { mainTextureRatio: 0.35, blurKernelSize: 48 }); glow.intensity = 0.7; } catch (e) { console.warn('glow off', e); glow = null; } }
+  let glow = null; if (!LOW && !Q.has('noglow')) { try { glow = new GlowLayer('glow', scene, { mainTextureRatio: 0.35, blurKernelSize: 32 }); glow.intensity = 0.5; } catch (e) { console.warn('glow off', e); glow = null; } }
   // cinematic pipeline: gentle bloom, ACES filmic tone mapping, contrast grade, vignette, light grain, FXAA (+ SSAO on ?ssao)
   let pipe = null, SSAO = null;
   if (!SAFE && !Q.has('nopost')) try {
@@ -221,7 +221,7 @@ async function start() {
     EV.raveEnter('The Temple'); hud.toast('THE TEMPLE · CARLISLE CIRCUS');
   });
   const exitTemple = async () => fadeTo(async () => {
-    app.inside = false; T.root.setEnabled(false); Object.values(T.lights).forEach(l => l.setEnabled(false)); cityLights.forEach(l => l.setEnabled(true)); if (glow) glow.intensity = 0.7; if (pipe) pipe.imageProcessing.exposure = 1.4;
+    app.inside = false; T.root.setEnabled(false); Object.values(T.lights).forEach(l => l.setEnabled(false)); cityLights.forEach(l => l.setEnabled(true)); if (glow) glow.intensity = 0.5; if (pipe) pipe.imageProcessing.exposure = 1.4;
     city.root.setEnabled(true); SKY.sky.setEnabled(true); FL.setEnabled(true); WET.setEnabled(true); traffic.cars.forEach(c => c.node.setEnabled(true)); traffic.parked.forEach(c => c.node.setEnabled(true)); traffic.peds.forEach(p => { p.av.root.setEnabled(true); p._on = undefined; });
     scene.clearColor = NIGHT; scene.fogDensity = 0.0028; scene.fogColor = new Color3(0.1, 0.105, 0.17); hud.interior(false);
     P.x = ext.doorPos.x - Math.sin(ext.yaw) * 2.5; P.z = ext.doorPos.z - Math.cos(ext.yaw) * 2.5; P.heading = ext.yaw + Math.PI; C.yaw = P.heading; C.pitch = 0.2; C.dist = 6.2;
