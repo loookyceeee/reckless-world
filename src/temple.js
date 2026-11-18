@@ -423,8 +423,8 @@ export function updateTempleInterior(T, t, dt) {
   if (M.CVL) {
     for (const it of M.CVL) { it.n = 0; it.fn = 0; }
     const cp = T.cam ? T.cam.position : null, rp = T.root.position, FAR2 = 13 * 13;
-    T.crowd.forEach((c) => {
-      const pose = Math.floor(beat * 2 + c.ph) % T.CV.poses; const it = T.CV.list[c.v * T.CV.poses + pose];
+    const cmax = T.crowdMax || 1e9; T.crowd.forEach((c, ci) => {
+      if (ci >= cmax) return; const pose = Math.floor(beat * 2 + c.ph) % T.CV.poses; const it = T.CV.list[c.v * T.CV.poses + pose];
       const b = Math.max(0, Math.sin((beat + c.ph) * Math.PI)); const sway = Math.sin(beat * 0.5 * Math.PI + c.ph) * 0.12;
       Quaternion.FromEulerAnglesToRef(0, c.yaw + sway * 0.5, 0, q4); s4.set(c.s, c.s, c.s); v4.set(c.x, b * 0.06, c.z); Matrix.ComposeToRef(s4, q4, v4, m4);
       const far = it.farReady && cp && ((c.x + rp.x - cp.x) ** 2 + (c.z + rp.z - cp.z) ** 2) > FAR2;

@@ -221,10 +221,10 @@ async function start() {
   const KP = [[420, 120, -520], [250, 55, -330], [60, 34, -120], [-70, 20, 20], [-200, 32, 130], [dX + fwx * 120, 38, dZ + fwz * 120], [dX + fwx * 44, 7.5, dZ + fwz * 44]].map(a => new Vector3(...a));
   const KT = [[146, 30, -249], [146, 45, -249], [-40, 6, -10], [-200, 6, 120], [dX, 6, dZ], [dX, 8, dZ], [dX, 8.5, dZ]].map(a => new Vector3(...a));
   // auto quality tier (low/med/high): ?q=low|med|high pins it, otherwise start med on phones / high on desktop and adapt to measured FPS
-  let tier = Q.get('q') || (LOW ? 'low' : isTouch ? 'med' : 'high'); if (!TIERS[tier]) tier = 'high'; const autoTier = !Q.get('q') && !Q.has('webgl'); let tierT = 0, tierF = [], tierUp = false, cullT = 0;
+  let tier = Q.get('q') || (isTouch ? 'med' : 'high'); if (!TIERS[tier]) tier = 'high'; const autoTier = Q.has('auto') || (!Q.get('q') && !Q.has('webgl')); let tierT = 0, tierF = [], tierUp = false, cullT = 0;
   const baseScale = 1 / Math.min(1.5, devicePixelRatio || 1);
-  function setTier(n) { tier = n; const T0 = TIERS[n]; engine.setHardwareScalingLevel(T0.scale === 1 ? baseScale : Math.max(baseScale, isTouch ? T0.scale : Math.min(T0.scale, 1.25)));
-    if (pipe) { pipe.bloomEnabled = T0.bloom; pipe.grainEnabled = T0.grain; } if (glow) glow.isEnabled = T0.glow; window.__rw.tier = n; console.log('[rw] quality tier', n); }
+  function setTier(n) { tier = n; const T0 = TIERS[n]; const dprE = Math.min(2.5, devicePixelRatio || 1); engine.setHardwareScalingLevel(isTouch ? T0.scale / dprE : T0.scale === 1 ? baseScale : Math.min(T0.scale, 1.25) / Math.min(1.5, dprE)); // phones: native px / scale (1.5x down on med)
+    if (pipe) { pipe.bloomEnabled = T0.bloom; pipe.grainEnabled = T0.grain; } if (glow) glow.isEnabled = T0.glow; if (typeof T !== 'undefined' && T) T.crowdMax = T0.crowd; window.__rw.tier = n; console.log('[rw] quality tier', n); }
   setTier(tier);
   const FLY = 26; let titleT0 = 0;
   const flyover = (s) => { const u = Math.min(1, Math.max(0, s / FLY)); const e = u < 0.5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2; const n = KP.length - 1, x = e * n, i = Math.min(n - 1, Math.floor(x)), f = x - i;
