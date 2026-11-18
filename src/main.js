@@ -205,7 +205,7 @@ async function start() {
   const camPos = new Vector3(), tgt = new Vector3(), smPos = new Vector3(), smTgt = new Vector3(); let camSnap = true;
   // cinematic title flyover: high over St Anne's + the Spire of Hope, down Donegall Street, up Clifton Street to the Temple
   const dX = ext.doorPos.x, dZ = ext.doorPos.z; const _sl = Math.hypot(ext.spawn.x - dX, ext.spawn.z - dZ) || 1; const fwx = (ext.spawn.x - dX) / _sl, fwz = (ext.spawn.z - dZ) / _sl;
-  const KP = [[420, 120, -520], [250, 55, -330], [60, 34, -120], [-70, 20, 20], [-200, 32, 130], [dX + fwx * 70 - fwz * 25, 20, dZ + fwz * 70 + fwx * 25], [dX + fwx * 28, 3.6, dZ + fwz * 28]].map(a => new Vector3(...a));
+  const KP = [[420, 120, -520], [250, 55, -330], [60, 34, -120], [-70, 20, 20], [-200, 32, 130], [dX + fwx * 120, 38, dZ + fwz * 120], [dX + fwx * 44, 7.5, dZ + fwz * 44]].map(a => new Vector3(...a));
   const KT = [[146, 30, -249], [146, 45, -249], [-40, 6, -10], [-200, 6, 120], [dX, 6, dZ], [dX, 8, dZ], [dX, 8.5, dZ]].map(a => new Vector3(...a));
   const FLY = 26; let titleT0 = 0;
   const flyover = (s) => { const u = Math.min(1, Math.max(0, s / FLY)); const e = u < 0.5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2; const n = KP.length - 1, x = e * n, i = Math.min(n - 1, Math.floor(x)), f = x - i;
