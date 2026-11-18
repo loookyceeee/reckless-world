@@ -234,3 +234,5 @@
 .keys.on{opacity:1;transform:none}.keys span{display:flex;align-items:center;gap:8px;font:700 10px var(--f1);letter-spacing:.14em;text-shadow:0 1px 4px #000}
 .keys kbd{font:800 10px var(--f1);min-width:22px;height:22px;padding:0 6px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;background:#000c;border:2px solid #fff;letter-spacing:.04em}
 .is-touch .keys,.hud.stamping .keys{display:none}
+/* narrow phones: the RAVE MODE pill drops below the brand instead of covering it */
+@media (max-width:560px){.topright{top:calc(max(14px,env(safe-area-inset-top)) + 54px)!important;right:max(10px,env(safe-area-inset-right))}.topright .fps{display:none}.brand b{font-size:13px}}

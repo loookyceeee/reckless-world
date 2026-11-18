@@ -15,7 +15,7 @@ CLIPS = {'Walk_Loop': 'walk', 'Jog_Fwd_Loop': 'jog', 'Sprint_Loop': 'sprint', 'J
 USE_QHAIR = False  # the app's short textured crop with a fade is built as a scalp shell below
 SMOOTH_IT = int(__import__('os').environ.get('SMIT', '0'))
 HEAD_S = 1.88
-HEAD_AX = (1.15, 1.1, 1.22)   # app render (front overlay, shots/pass8): head ~4.2 heads tall figure, taller oval skull
+HEAD_AX = (1.24, 1.0, 1.2)    # app render (front overlay, shots/pass8): head ~4.2 heads tall figure, taller oval skull
 LEG_F = 0.86     # app figure has shorter legs than the superhero base     # app renders: ~5.6 heads tall
 TARGET_H = 1.74   # metres, matches cars (~4.3 m) and lanes
 
@@ -66,7 +66,7 @@ for o in meshes:
         v.co = toM @ (pivot + Vector((q.x * s * (1 + (HEAD_AX[0] - 1) * w), q.y * s * (1 + (HEAD_AX[1] - 1) * w), q.z * s * (1 + (HEAD_AX[2] - 1) * w))))
 
 # --- slim the superhero build toward the app's lean figure (radial scale about each bone axis) ---
-SLIM = {'upperarm': 1.12, 'lowerarm': 1.04, 'spine_03': 1.28, 'spine_02': 1.28, 'spine_01': 1.26, 'pelvis': 1.05, 'clavicle': 0.95, 'thigh': 1.22, 'calf': 1.24, 'neck_01': 0.78}  # tuned on the front overlay vs the app body render
+SLIM = {'upperarm': 1.12, 'lowerarm': 1.04, 'spine_03': 1.28, 'spine_02': 1.28, 'spine_01': 1.26, 'pelvis': 1.05, 'clavicle': 0.95, 'thigh': 1.22, 'calf': 1.24, 'neck_01': 0.92}  # tuned on the front overlay vs the app body render
 def axis_pt(p, bn):
     h, t = bone_ws(bn); a = t - h; u = max(0.0, min(1.0, (p - h).dot(a) / a.length_squared)); return h + a * u
 Wb = wmap(body); toAb = arm.matrix_world.inverted() @ body.matrix_world
@@ -271,7 +271,7 @@ def make(kind):
         if v.index not in sel: continue
         p = toA @ v.co; d = PUSH[kind]; b = dom(W[v.index]) or ''
         k = 1.0
-        if kind in ('tee', 'crop'): k = (1.3 + 0.55 * tparam(p, b)) if b.startswith('upperarm') else 1.27  # sleeve flares toward the hem
+        if kind in ('tee', 'crop'): k = (1.04 + 0.75 * tparam(p, b) ** 1.3) if b.startswith('upperarm') else 1.27  # no puff over the shoulder, flares to the hem  # sleeve flares toward the hem
         elif kind == 'long': k = 1.35 if b.startswith(('upperarm', 'lowerarm')) else 1.1
         elif kind == 'hoodie': k = 1.45 if b.startswith(('upperarm', 'lowerarm')) else (1.0 if b == 'Head' else 1.2)
         elif kind == 'jeans': k = (1.35 if b.startswith('thigh') else 1.95 if b.startswith('calf') else 1.12)
@@ -286,14 +286,18 @@ def make(kind):
             c = axis_pt(p, b) if not b.startswith(('spine', 'pelvis', 'clavicle', 'neck')) else Vector((0, axis_pt(p, b).y * 0 + (axis_pt(p, 'spine_02').y), p.z))
             if b.startswith(('spine', 'pelvis', 'clavicle', 'neck')): c = Vector((0.0, axis_pt(p, 'spine_02').y + 0.01, p.z))
             if kind == 'jeans' and b.startswith(('thigh', 'calf')):  # straight-leg baggy: near-constant radius from mid-thigh to the hem
-                r = (p - c).length; R = max(r * 1.12, 0.082 if b.startswith('thigh') else 0.079); q = c + (p - c) * (R / max(r, 1e-4))
+                r = (p - c).length; R = max(r * 1.12, 0.088 if b.startswith('thigh') else 0.085); q = c + (p - c) * (R / max(r, 1e-4))
+                if (q.x - p.x) * (1 if p.x > 0 else -1) < 0: q.x = p.x + (q.x - p.x) * 0.2   # inner leg hugs: legs split high like the app
             elif b.startswith(('spine', 'pelvis', 'clavicle', 'neck')):  # torso: loose in depth, barely wider (no shoulder pads)
                 kx = 1 + (k - 1) * (0.3 if kind in ('tee', 'crop', 'long', 'hoodie') else 0.4); dq = p - c
                 if kind in ('tee', 'long', 'crop') and p.z < z_neck - 0.1:  # boxy oversized fit: sides hang straight to the hem
-                    xm = TW.get(round(p.z, 2), 0.15); tgt = 0.205 * (abs(dq.x) / max(xm, 1e-3)); kx = max(kx, min(1.6, tgt / max(abs(dq.x), 1e-3)))
+                    xm = TW.get(round(p.z, 2), 0.15); tgt = 0.228 * (abs(dq.x) / max(xm, 1e-3)); kb = min(1.6, tgt / max(abs(dq.x), 1e-3))
+                    fz = max(0.0, min(1.0, ((z_neck - 0.13) - p.z) / 0.08)); kx = max(kx, kx + (kb - kx) * fz)   # boxy below the chest, follows the shoulder slope above (no shoulder block)
                     k = max(k, min(1.5, 0.135 / max(TD.get(round(p.z, 2), 0.1), 1e-3)))
                 q = c + Vector((dq.x * kx, dq.y * k, 0))
-            else: q = c + (p - c) * k
+            else:
+                q = c + (p - c) * k
+                if kind in ('pants', 'cuffed', 'shorts') and b.startswith(('thigh', 'calf')) and (q.x - p.x) * (1 if p.x > 0 else -1) < 0: q.x = p.x + (q.x - p.x) * 0.25
             v.co = toA.inverted() @ q + norms[v.index] * d
         else:
             if kind == 'hoodie' and b == 'Head': d = 0.04
@@ -377,15 +381,15 @@ def stance(br):
     for pb in arm.pose.bones: pb.rotation_mode = 'QUATERNION'; pb.matrix_basis.identity()
     for sd in ('_l', '_r'):
         sx = 1 if arm.data.bones['upperarm' + sd].head_local.x > 0 else -1
-        aim('upperarm' + sd, Vector((sx * (0.2 + br * 0.015), 0.03, -1)))  # ~11 deg out: clear gap to the torso like the app render
-        aim('lowerarm' + sd, Vector((sx * 0.1, -0.16, -1)))
-        aim('hand' + sd, Vector((sx * 0.02, -0.12, -1)))
+        aim('upperarm' + sd, Vector((sx * (0.37 + br * 0.015), 0.03, -1)))  # ~11 deg out: clear gap to the torso like the app render
+        aim('lowerarm' + sd, Vector((sx * 0.16, -0.1, -1)))
+        aim('hand' + sd, Vector((sx * 0.12, -0.06, -1)))
         aim('thigh' + sd, Vector((sx * 0.045, 0.0, -1))); aim('calf' + sd, Vector((sx * 0.03, 0.012, -1)))
         for f in ('index', 'middle', 'ring', 'pinky'):
-            for j, ang in ((1, 18), (2, 24), (3, 14)):
+            for j, ang in ((1, 7), (2, 11), (3, 6)):   # relaxed open hand like the app render (was a loose fist)
                 bn = f'{f}_0{j}{sd}'
                 if bn in arm.pose.bones: pb = arm.pose.bones[bn]; pb.rotation_quaternion = Euler((math.radians(ang), 0, 0)).to_quaternion()
-    for bn, ang in (('spine_02', 1.2 * br), ('spine_03', 1.0 * br), ('neck_01', -0.8 * br)):
+    for bn, ang in (('spine_02', 1.2 * br), ('spine_03', -3.0 + 1.0 * br), ('neck_01', -5.0 - 0.8 * br), ('Head', 3.0)):  # upright chest, neck back over the shoulders
         if bn in arm.pose.bones: arm.pose.bones[bn].rotation_quaternion = Euler((math.radians(ang), 0, 0)).to_quaternion()
     bpy.context.view_layer.update()
 for fr, br in ((1, 0.0), (45, 1.0), (90, 0.0)):
