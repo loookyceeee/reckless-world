@@ -261,6 +261,10 @@ for i_, (p_, d_) in enumerate(zip(P, W)):
     b_ = dom(d_) or ''
     if b_.startswith(('spine', 'pelvis', 'clavicle')):
         zk = round(p_.z, 2); TW[zk] = max(TW.get(zk, 0.0), abs(p_.x)); TD[zk] = max(TD.get(zk, 0.0), abs(p_.y - _cy))
+# chest-level front/back extents: the boxy tee hangs straight down from these (no belly bulge, no lower-back bump)
+_ch = [(p_.y - _cy) for p_, d_ in zip(P, W) if (dom(d_) or '').startswith(('spine', 'clavicle')) and z_neck - 0.26 < p_.z < z_neck - 0.14]
+TFR = -min(_ch) if _ch else 0.12; TBK = max(_ch) if _ch else 0.12
+print('TEE chest front/back', round(TFR, 3), round(TBK, 3))
 def make(kind):
     sel = region(kind)
     o = body.copy(); o.data = body.data.copy(); o.name = 'G_' + kind; bpy.context.collection.objects.link(o)
@@ -271,7 +275,7 @@ def make(kind):
         if v.index not in sel: continue
         p = toA @ v.co; d = PUSH[kind]; b = dom(W[v.index]) or ''
         k = 1.0
-        if kind in ('tee', 'crop'): k = (1.04 + 0.75 * tparam(p, b) ** 1.3) if b.startswith('upperarm') else 1.27  # no puff over the shoulder, flares to the hem  # sleeve flares toward the hem
+        if kind in ('tee', 'crop'): k = (1.12 + 0.95 * tparam(p, b) ** 1.2) if b.startswith('upperarm') else 1.27  # no puff over the shoulder, flares to the hem  # sleeve flares toward the hem
         elif kind == 'long': k = 1.35 if b.startswith(('upperarm', 'lowerarm')) else 1.1
         elif kind == 'hoodie': k = 1.45 if b.startswith(('upperarm', 'lowerarm')) else (1.0 if b == 'Head' else 1.2)
         elif kind == 'jeans': k = (1.35 if b.startswith('thigh') else 1.95 if b.startswith('calf') else 1.12)
@@ -286,15 +290,17 @@ def make(kind):
             c = axis_pt(p, b) if not b.startswith(('spine', 'pelvis', 'clavicle', 'neck')) else Vector((0, axis_pt(p, b).y * 0 + (axis_pt(p, 'spine_02').y), p.z))
             if b.startswith(('spine', 'pelvis', 'clavicle', 'neck')): c = Vector((0.0, axis_pt(p, 'spine_02').y + 0.01, p.z))
             if kind == 'jeans' and b.startswith(('thigh', 'calf')):  # straight-leg baggy: near-constant radius from mid-thigh to the hem
-                r = (p - c).length; R = max(r * 1.12, 0.088 if b.startswith('thigh') else 0.085); q = c + (p - c) * (R / max(r, 1e-4))
+                r = (p - c).length; R = max(r * 1.16, 0.098 if b.startswith('thigh') else 0.096); q = c + (p - c) * (R / max(r, 1e-4))
                 if (q.x - p.x) * (1 if p.x > 0 else -1) < 0: q.x = p.x + (q.x - p.x) * 0.2   # inner leg hugs: legs split high like the app
             elif b.startswith(('spine', 'pelvis', 'clavicle', 'neck')):  # torso: loose in depth, barely wider (no shoulder pads)
                 kx = 1 + (k - 1) * (0.3 if kind in ('tee', 'crop', 'long', 'hoodie') else 0.4); dq = p - c
                 if kind in ('tee', 'long', 'crop') and p.z < z_neck - 0.1:  # boxy oversized fit: sides hang straight to the hem
-                    xm = TW.get(round(p.z, 2), 0.15); tgt = 0.228 * (abs(dq.x) / max(xm, 1e-3)); kb = min(1.6, tgt / max(abs(dq.x), 1e-3))
+                    xm = TW.get(round(p.z, 2), 0.15); tgt = 0.25 * (abs(dq.x) / max(xm, 1e-3)); kb = min(1.6, tgt / max(abs(dq.x), 1e-3))
                     fz = max(0.0, min(1.0, ((z_neck - 0.13) - p.z) / 0.08)); kx = max(kx, kx + (kb - kx) * fz)   # boxy below the chest, follows the shoulder slope above (no shoulder block)
-                    k = max(k, min(1.5, 0.135 / max(TD.get(round(p.z, 2), 0.1), 1e-3)))
-                q = c + Vector((dq.x * kx, dq.y * k, 0))
+                    k = 1.04; ext = (TFR if dq.y < 0 else TBK) * 1.02 * max(0.0, 1 - 0.7 * min(1.0, abs(dq.x) / max(xm, 1e-3)) ** 2); ny = dq.y * k
+                    if abs(ny) < ext: ny = math.copysign(abs(ny) + (ext - abs(ny)) * fz, dq.y if dq.y != 0 else -1.0)
+                    q = c + Vector((dq.x * kx, ny, 0))
+                else: q = c + Vector((dq.x * kx, dq.y * k, 0))
             else:
                 q = c + (p - c) * k
                 if kind in ('pants', 'cuffed', 'shorts') and b.startswith(('thigh', 'calf')) and (q.x - p.x) * (1 if p.x > 0 else -1) < 0: q.x = p.x + (q.x - p.x) * 0.25
