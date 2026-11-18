@@ -1,3 +1,4 @@
+import { FresnelParameters } from '@babylonjs/core/Materials/fresnelParameters';
 // Pooled stylised traffic on OSM road graph (UK: drive on the LEFT), fictional patrol vehicles, pedestrians.
 import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
@@ -75,7 +76,7 @@ function lightsVD(kind) { // headlights front (+z), tail lights back
 export function buildTraffic(scene, city, { low = false, stops = [] } = {}) {
   const R = rng(77);
   const G = buildGraph(city.roads, true), PG = buildGraph(city.roads, false);
-  const bodyM = new StandardMaterial('carBody', scene); bodyM.specularColor = new Color3(0.45, 0.45, 0.5); bodyM.specularPower = 48;
+  const bodyM = new StandardMaterial('carBody', scene); bodyM.specularColor = new Color3(0.45, 0.45, 0.5); bodyM.specularPower = 48; if (scene.__env) { bodyM.reflectionTexture = scene.__env; const f = new FresnelParameters(); f.bias = 0.08; f.power = 2; f.leftColor = new Color3(0.7, 0.7, 0.75); f.rightColor = new Color3(0.1, 0.1, 0.12); bodyM.reflectionFresnelParameters = f; }
   const lightM = new StandardMaterial('carLights', scene); lightM.disableLighting = true; lightM.emissiveColor = Color3.White();
   const COLS = ['#d64545', '#f2f2f2', '#2b2b30', '#3f6fd8', '#e7c33a', '#7d8a96', '#4e9a6b', '#b8b0a0', '#c2185b'].map(hex);
   const templates = {};
