@@ -200,6 +200,8 @@ for a in keep:
     tr = arm.animation_data.nla_tracks.new(); tr.name = a.name; st = tr.strips.new(a.name, int(a.frame_range[0]), a); tr.mute = True
 arm.animation_data.action = None
 s = TARGET_H / hcur; arm.scale = (arm.scale[0] * s, arm.scale[1] * s, arm.scale[2] * s)
+for o in list(bpy.context.scene.objects):  # drop helper spheres (42-vert Icosphere shipped with the base kit)
+    if o.type == 'MESH' and (o.name.startswith('Icosphere') or len(o.data.vertices) < 60): bpy.data.objects.remove(o, do_unlink=True)
 for o in bpy.context.scene.objects:  # lean export: one UV set, no vertex colours
     if o.type != 'MESH': continue
     while len(o.data.color_attributes): o.data.color_attributes.remove(o.data.color_attributes[0])
