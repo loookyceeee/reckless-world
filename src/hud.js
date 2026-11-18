@@ -47,7 +47,7 @@ export function createHUD(app) {
   hud.innerHTML = `
   <div class="brand"><img src="${import.meta.env.BASE_URL}img/logo.png" alt="Reckless"/><div><b>RECKLESS WORLD</b><span>BELFAST · PROTOTYPE 0.1</span></div></div>
   <div class="topright"><div class="fps" id="fps">— FPS</div><div class="live" id="live"><i></i><span>RAVE MODE · DEMO</span> <a href="https://www.recklessraves.co.uk" target="_blank" rel="noopener">TICKETS</a></div><div class="objective" id="objective"></div><a class="np" id="np" target="_blank" rel="noopener"></a></div>
-  <div class="mapwrap"><canvas id="minimap" width="220" height="220"></canvas><canvas id="stam" width="240" height="240"></canvas><div class="street" id="street"></div><div class="district" id="district"></div></div>
+  <div class="mapwrap"><canvas id="minimap" width="220" height="220"></canvas><canvas id="stam" width="240" height="240"></canvas><div class="street" id="street"></div><div class="district" id="district"></div><div class="gps" id="gps"></div></div>
   <div class="prompt" id="prompt"></div>
   <div class="toast" id="toast"></div>
   <div class="btns"><button data-k="m">MAP</button><button data-k="o">WARDROBE</button><button data-k="f">DANCE</button><button data-k="p">PHOTO</button><button data-k="c">CREDITS</button><button data-k="n" id="sndBtn">SOUND: OFF</button><button data-k="l" id="lightsBtn" class="hide">LIGHTS: RAVE</button></div>
@@ -62,8 +62,10 @@ export function createHUD(app) {
   let stamVis = 0; const mm = $('minimap'), mg = mm.getContext('2d'); const base = app.mapBase;
   const dpr = Math.min(2, window.devicePixelRatio || 1); const MS = 220; mm.width = mm.height = MS * dpr; mg.scale(dpr, dpr);
   let toastT = 0;
+  const FK = 'rw.mapFilters.v1'; let FIL = { venues: true, stops: true, posters: true, collectibles: true }; try { FIL = { ...FIL, ...JSON.parse(localStorage.getItem(FK) || '{}') }; } catch (e) { }
   const api = {
     hud, $, close, isOpen,
+    filters: () => FIL, setFilter(k, v) { FIL[k] = v; localStorage.setItem(FK, JSON.stringify(FIL)); },
     toast(msg, s = 2.6) { $('toast').textContent = msg; $('toast').classList.add('on'); clearTimeout(api._tt); api._tt = setTimeout(() => $('toast').classList.remove('on'), s * 1000); },
     prompt(msg) { const p = $('prompt'); if (msg) { p.innerHTML = msg; p.classList.add('on'); } else p.classList.remove('on'); },
     fade(on) { $('fade').classList.toggle('on', on); },
@@ -76,14 +78,23 @@ export function createHUD(app) {
         g.clearRect(0, 0, 240, 240); if (stamVis > 0) { g.globalAlpha = stamVis; g.lineWidth = 4; g.lineCap = 'round'; g.strokeStyle = 'rgba(255,255,255,0.22)'; g.beginPath(); g.arc(120, 120, 114, Math.PI, 0, true); g.stroke();
           g.strokeStyle = st.stamFlash > 0 && Math.floor(st.stamFlash * 10) % 2 === 0 ? '#ff2a2a' : '#fff'; g.beginPath(); g.arc(120, 120, 114, Math.PI, Math.PI - Math.PI * v, true); g.stroke(); g.globalAlpha = 1; } } }
       // ---- minimap ----
-      const R = MS / 2, zoom = st.inside ? 6 : 0.62;
+      // speed-driven zoom (GTA radar: tight on foot, pulls out when sprinting / on transit), smoothed
+      { const sp = api._lx == null ? 0 : Math.hypot(st.x - api._lx, st.z - api._lz) / Math.max(dt, 1e-3); api._lx = st.x; api._lz = st.z; api._sp = (api._sp || 0) + (Math.min(sp, 40) - (api._sp || 0)) * Math.min(1, dt * 2.5); }
+      const zTarget = st.inside ? 6 : 0.7 / (1 + Math.max(0, api._sp - 2) * 0.09); api._z = api._z == null ? zTarget : api._z + (zTarget - api._z) * Math.min(1, dt * 2);
+      const R = MS / 2, zoom = st.inside ? 6 : api._z;
       mg.save(); mg.clearRect(0, 0, MS, MS); mg.beginPath(); mg.arc(R, R, R - 3, 0, Math.PI * 2); mg.clip();
       mg.fillStyle = '#000'; mg.fillRect(0, 0, MS, MS);
       mg.translate(R, R); mg.rotate(-st.camYaw); // map rotates with camera (up = view direction)
       if (!st.inside) {
         const px = base.tx(st.x), py = base.ty(st.z); const k = zoom / base.S;
         mg.scale(k, k); mg.drawImage(base.canvas, -px, -py);
-        if (st.route && st.route.length > 1) { mg.strokeStyle = '#ff2a3c'; mg.lineWidth = 5 / k; mg.lineJoin = mg.lineCap = 'round'; mg.beginPath(); st.route.forEach((p, i) => { const x = base.tx(p[0]) - px, y = base.ty(p[1]) - py; i ? mg.lineTo(x, y) : mg.moveTo(x, y); }); mg.stroke(); }
+        if (st.route && st.route.length > 1) { mg.lineJoin = mg.lineCap = 'round'; const path = () => { mg.beginPath(); st.route.forEach((p, i) => { const x = base.tx(p[0]) - px, y = base.ty(p[1]) - py; i ? mg.lineTo(x, y) : mg.moveTo(x, y); }); };
+          mg.strokeStyle = '#000'; mg.lineWidth = 9 / k; path(); mg.stroke(); mg.strokeStyle = '#ff2a3c'; mg.lineWidth = 5 / k; path(); mg.stroke(); }
+        // blips under the venue pins: rapid-bus stops, poster spots (filters shared with the pause map)
+        const F = api.filters(), bl = (x, z, f) => { f(base.tx(x) - px, base.ty(z) - py); };
+        if (F.stops) for (const b of (app.blips && app.blips.stops) || []) bl(b.x, b.z, (x, y) => { const r = 6 / k; mg.fillStyle = '#fff'; mg.fillRect(x - r, y - r, 2 * r, 2 * r); mg.fillStyle = '#000'; mg.font = `800 ${8 / k}px Unbounded, sans-serif`; mg.textAlign = 'center'; mg.textBaseline = 'middle'; mg.fillText('B', x, y + 0.5 / k); });
+        if (F.posters) for (const b of (app.blips && app.blips.posters) || []) bl(b.x, b.z, (x, y) => { const r = 4 / k; mg.fillStyle = b.done ? '#777' : '#ff2a3c'; mg.fillRect(x - r * 0.7, y - r, r * 1.4, r * 2); });
+        if (st.dest && st.dest.kind === 'waypoint') bl(st.dest.x, st.dest.z, (x, y) => { const r = 7 / k; mg.fillStyle = '#ff2a3c'; mg.strokeStyle = '#fff'; mg.lineWidth = 2 / k; mg.beginPath(); mg.moveTo(x, y - r); mg.lineTo(x + r, y); mg.lineTo(x, y + r); mg.lineTo(x - r, y); mg.closePath(); mg.fill(); mg.stroke(); });
         mg.scale(1 / k, 1 / k);
       } else { // interior: nave layout with stage, barrier, bar and exits
         const X = (x) => (x - st.lx) * zoom, Y = (z) => -(z - st.lz) * zoom;
@@ -100,7 +111,7 @@ export function createHUD(app) {
       // pins
       mg.save(); mg.font = '700 9px Unbounded, sans-serif'; mg.textAlign = 'center'; mg.textBaseline = 'middle';
       const cs = Math.cos(st.camYaw), sn = -Math.sin(st.camYaw);
-      if (!st.inside) for (const v of VENUES) {
+      if (!st.inside && FIL.venues) for (const v of VENUES) {
         const dx = (v.x - st.x) * zoom, dy = -(v.z - st.z) * zoom; let x = dx * cs - dy * sn, y = dx * sn + dy * cs;
         const d = Math.hypot(x, y), lim = R - 16; let edge = false; if (d > lim) { x *= lim / d; y *= lim / d; edge = true; }
         mg.fillStyle = v.inSlice ? '#fff' : '#000'; mg.strokeStyle = '#fff'; mg.lineWidth = 2;
@@ -117,26 +128,69 @@ export function createHUD(app) {
       mg.restore();
       mg.strokeStyle = '#fff'; mg.lineWidth = 3; mg.beginPath(); mg.arc(R, R, R - 3, 0, Math.PI * 2); mg.stroke();
       $('street').textContent = st.street || ''; $('district').textContent = st.district || '';
+      { const d = $('gps'); if (st.dest && !st.inside) { const m = Math.hypot(st.dest.x - st.x, st.dest.z - st.z); d.innerHTML = `<i></i>${st.dest.label} · ${m < 1000 ? Math.round(m / 10) * 10 + ' M' : (m / 1000).toFixed(1) + ' KM'}`; d.classList.add('on'); } else d.classList.remove('on'); }
       $('objective').innerHTML = st.objective || '';
     },
-    openMap(st) {
-      open(`<h2>BELFAST</h2><canvas id="bigmap" width="900" height="900"></canvas><p class="legend">WHITE PINS = WALK IN NOW · BLACK PINS = COMING SOON</p>`, 'mapov');
-      const c = overlay.querySelector('#bigmap'), g = c.getContext('2d'); const W = c.width;
-      const all = VENUES.map(v => [v.x, v.z]).concat([[base.bounds.mnx, base.bounds.mnz], [base.bounds.mxx, base.bounds.mxz]]);
-      const mnx = Math.min(...all.map(a => a[0])) - 150, mxx = Math.max(...all.map(a => a[0])) + 150, mnz = Math.min(...all.map(a => a[1])) - 150, mxz = Math.max(...all.map(a => a[1])) + 150;
-      const s = Math.min(W / (mxx - mnx), W / (mxz - mnz)); const X = (x) => (x - mnx) * s + (W - (mxx - mnx) * s) / 2, Y = (z) => (mxz - z) * s + (W - (mxz - mnz) * s) / 2;
-      g.fillStyle = '#000'; g.fillRect(0, 0, W, W);
-      g.strokeStyle = '#1c1c1c'; g.lineWidth = 1; for (let i = -3000; i < 3000; i += 250) { g.beginPath(); g.moveTo(X(i), 0); g.lineTo(X(i), W); g.stroke(); g.beginPath(); g.moveTo(0, Y(i)); g.lineTo(W, Y(i)); g.stroke(); }
-      const k = s / base.S; if (base.img) g.drawImage(base.canvas, X(base.x0), Y(base.ztop), base.canvas.width * k, base.canvas.height * k); else g.drawImage(base.canvas, X(base.bounds.mnx) - 20 * k, Y(base.bounds.mxz) - 20 * k, base.canvas.width * k, base.canvas.height * k);
-      g.strokeStyle = '#fff'; g.setLineDash([6, 6]); g.strokeRect(X(base.bounds.mnx), Y(base.bounds.mxz), (base.bounds.mxx - base.bounds.mnx) * s, (base.bounds.mxz - base.bounds.mnz) * s); g.setLineDash([]);
-      g.font = '700 13px Unbounded, sans-serif'; g.fillStyle = '#fff'; g.fillText('PLAYABLE SLICE', X(base.bounds.mnx) + 8, Y(base.bounds.mxz) + 20);
-      for (const v of VENUES) {
-        const x = X(v.x), y = Y(v.z); g.fillStyle = v.inSlice ? '#fff' : '#000'; g.strokeStyle = '#fff'; g.lineWidth = 3; g.beginPath(); g.arc(x, y, 15, 0, 7); g.fill(); g.stroke();
-        g.fillStyle = v.inSlice ? '#000' : '#fff'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = '800 14px Unbounded, sans-serif'; g.fillText(v.pin, x, y + 1);
-        g.textAlign = 'left'; g.fillStyle = '#fff'; g.font = '700 13px Unbounded, sans-serif'; g.fillText(v.name, x + 22, y - 6);
-        g.font = '600 11px "DM Sans", sans-serif'; g.fillText(v.inSlice || v.nostalgia ? v.sub : v.sub + ' · COMING SOON', x + 22, y + 10);
-      }
-      const px = X(st.x), py = Y(st.z); g.save(); g.translate(px, py); g.rotate(st.heading); g.fillStyle = '#fff'; g.strokeStyle = '#000'; g.lineWidth = 2; g.beginPath(); g.moveTo(0, -12); g.lineTo(9, 9); g.lineTo(0, 4); g.lineTo(-9, 9); g.closePath(); g.fill(); g.stroke(); g.restore();
+    openMap(st) { // st = { P, route(fx,fz,tx,tz), getDest(), setDest(d|null), venues:[{id,name,x,z}] }
+      open(`<div class="pm"><div class="pmhead"><h2>BELFAST</h2><span class="pmhint">DRAG TO PAN · WHEEL / PINCH TO ZOOM · TAP THE MAP TO DROP A WAYPOINT</span></div>
+        <div class="pmbody"><div class="pmcanvas"><canvas id="bigmap"></canvas><div class="pmzoom"><button data-z="1.4">+</button><button data-z="0.7">−</button><button data-z="me">◎</button></div></div>
+        <aside class="pmside"><h3>DESTINATION</h3><div class="pmdest" id="pmdest"></div>
+          <div class="pmvenues">${(st.venues || []).map(v => `<button class="pmv" data-v="${v.id}"><b>${v.pin || ''}</b><span>${v.name}</span></button>`).join('')}</div>
+          <h3>LEGEND</h3><div class="pmleg">
+            <label><input type="checkbox" data-f="venues" ${FIL.venues ? 'checked' : ''}/><i class="lg v"></i>VENUES</label>
+            <label><input type="checkbox" data-f="stops" ${FIL.stops ? 'checked' : ''}/><i class="lg b">B</i>RAPID BUS STOPS</label>
+            <label><input type="checkbox" data-f="posters" ${FIL.posters ? 'checked' : ''}/><i class="lg p"></i>POSTER SPOTS</label>
+            <label><input type="checkbox" data-f="collectibles" ${FIL.collectibles ? 'checked' : ''}/><i class="lg c"></i>COLLECTIBLES${(app.blips && app.blips.collectibles && app.blips.collectibles.length) ? '' : ' · SOON'}</label>
+            <div class="lgrow"><i class="lg r"></i>GPS ROUTE</div><div class="lgrow"><i class="lg w"></i>WAYPOINT</div><div class="lgrow"><i class="lg me"></i>YOU</div></div>
+          <button class="pmclear" id="pmclear">CLEAR WAYPOINT</button></aside></div></div>`, 'mapov');
+      const c = overlay.querySelector('#bigmap'), g = c.getContext('2d'); const wrap = c.parentElement; const dpr = Math.min(2, window.devicePixelRatio || 1);
+      const fit = () => { const r = wrap.getBoundingClientRect(); c.width = Math.max(200, r.width * dpr); c.height = Math.max(200, r.height * dpr); c.style.width = r.width + 'px'; c.style.height = r.height + 'px'; };
+      fit();
+      const P = st.P; const V = { cx: P.x, cz: P.z, s: 0.45 }; // s = px per metre (css px)
+      const toS = (x, z) => [(x - V.cx) * V.s * dpr + c.width / 2, -(z - V.cz) * V.s * dpr + c.height / 2];
+      const toW = (sx, sy) => [(sx * dpr - c.width / 2) / (V.s * dpr) + V.cx, -(sy * dpr - c.height / 2) / (V.s * dpr) + V.cz];
+      let route = null; const reroute = () => { const d = st.getDest(); route = d ? st.route(P.x, P.z, d.x, d.z) : null; };
+      reroute();
+      const draw = () => {
+        const W = c.width, H = c.height; g.setTransform(1, 0, 0, 1, 0, 0); g.fillStyle = '#000'; g.fillRect(0, 0, W, H);
+        const k = V.s * dpr / base.S; const [ox, oy] = toS(base.img ? base.x0 : base.bounds.mnx, base.img ? base.ztop : base.bounds.mxz);
+        g.imageSmoothingEnabled = true; if (base.img) g.drawImage(base.canvas, ox, oy, base.canvas.width * k, base.canvas.height * k); else g.drawImage(base.canvas, ox - 20 * k, oy - 20 * k, base.canvas.width * k, base.canvas.height * k);
+        g.strokeStyle = 'rgba(255,255,255,0.06)'; g.lineWidth = 1; const step = 250; const [wx0, wz1] = toW(0, 0), [wx1, wz0] = toW(W / dpr, H / dpr);
+        for (let x = Math.ceil(wx0 / step) * step; x < wx1; x += step) { const [a] = toS(x, 0); g.beginPath(); g.moveTo(a, 0); g.lineTo(a, H); g.stroke(); }
+        for (let z = Math.ceil(wz0 / step) * step; z < wz1; z += step) { const [, b] = toS(0, z); g.beginPath(); g.moveTo(0, b); g.lineTo(W, b); g.stroke(); }
+        const u = dpr; g.lineJoin = g.lineCap = 'round';
+        if (route && route.length > 1) { const path = () => { g.beginPath(); route.forEach((p, i) => { const [x, y] = toS(p[0], p[1]); i ? g.lineTo(x, y) : g.moveTo(x, y); }); }; g.strokeStyle = '#000'; g.lineWidth = 9 * u; path(); g.stroke(); g.strokeStyle = '#ff2a3c'; g.lineWidth = 5 * u; path(); g.stroke(); }
+        const B = app.blips || {};
+        if (FIL.stops) for (const b of B.stops || []) { const [x, y] = toS(b.x, b.z); const r = 7 * u; g.fillStyle = '#fff'; g.fillRect(x - r, y - r, 2 * r, 2 * r); g.fillStyle = '#000'; g.font = `800 ${9 * u}px Unbounded, sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('B', x, y + u); }
+        if (FIL.posters) for (const b of B.posters || []) { const [x, y] = toS(b.x, b.z); const r = 5 * u; g.fillStyle = b.done ? '#777' : '#ff2a3c'; g.strokeStyle = '#fff'; g.lineWidth = 1.5 * u; g.fillRect(x - r * 0.7, y - r, r * 1.4, r * 2); g.strokeRect(x - r * 0.7, y - r, r * 1.4, r * 2); }
+        if (FIL.collectibles) for (const b of B.collectibles || []) { const [x, y] = toS(b.x, b.z); g.fillStyle = '#ffd400'; g.beginPath(); g.arc(x, y, 4 * u, 0, 7); g.fill(); }
+        if (FIL.venues) for (const v of VENUES) { const [x, y] = toS(v.x, v.z); const r = 13 * u; g.fillStyle = v.inSlice ? '#fff' : '#000'; g.strokeStyle = '#fff'; g.lineWidth = 3 * u; g.beginPath(); g.arc(x, y, r, 0, 7); g.fill(); g.stroke();
+          g.fillStyle = v.inSlice ? '#000' : '#fff'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = `800 ${13 * u}px Unbounded, sans-serif`; g.fillText(v.pin, x, y + u);
+          if (V.s > 0.18) { g.textAlign = 'left'; g.font = `800 ${11 * u}px Unbounded, sans-serif`; g.lineWidth = 4 * u; g.strokeStyle = '#000'; g.strokeText(v.name, x + r + 6 * u, y - 4 * u); g.fillStyle = '#fff'; g.fillText(v.name, x + r + 6 * u, y - 4 * u);
+            g.font = `600 ${9 * u}px "DM Sans", sans-serif`; const sub = v.inSlice || v.nostalgia ? v.sub : v.sub + ' · COMING SOON'; g.strokeText(sub, x + r + 6 * u, y + 9 * u); g.fillStyle = '#ccc'; g.fillText(sub, x + r + 6 * u, y + 9 * u); } }
+        const d = st.getDest(); if (d) { const [x, y] = toS(d.x, d.z); const r = 10 * u; g.fillStyle = '#ff2a3c'; g.strokeStyle = '#fff'; g.lineWidth = 2.5 * u; g.beginPath(); g.moveTo(x, y - r); g.lineTo(x + r, y); g.lineTo(x, y + r); g.lineTo(x - r, y); g.closePath(); g.fill(); g.stroke(); }
+        { const [x, y] = toS(P.x, P.z); g.save(); g.translate(x, y); g.rotate(P.heading); g.fillStyle = '#fff'; g.strokeStyle = '#000'; g.lineWidth = 2.5 * u; g.beginPath(); g.moveTo(0, -13 * u); g.lineTo(9 * u, 10 * u); g.lineTo(0, 5 * u); g.lineTo(-9 * u, 10 * u); g.closePath(); g.fill(); g.stroke(); g.restore(); }
+        // scale bar
+        { const m = V.s > 1 ? 50 : V.s > 0.3 ? 200 : 500; const px = m * V.s * u; g.fillStyle = '#fff'; g.fillRect(16 * u, H - 22 * u, px, 3 * u); g.font = `700 ${9 * u}px Unbounded, sans-serif`; g.textAlign = 'left'; g.textBaseline = 'alphabetic'; g.fillText(m + ' M', 16 * u, H - 28 * u); }
+        const dd = overlay.querySelector('#pmdest'); if (dd) dd.innerHTML = d ? `<b>${d.label}</b><span>${Math.round(Math.hypot(d.x - P.x, d.z - P.z))} M ${route ? 'BY ROAD' : '· NO ROUTE'}</span>` : '<span>NONE · TAP THE MAP OR PICK A VENUE</span>';
+      };
+      const clampS = (v) => Math.max(0.08, Math.min(4, v));
+      const zoomAt = (f, sx, sy) => { const [wx, wz] = toW(sx, sy); V.s = clampS(V.s * f); const [nx, nz] = toW(sx, sy); V.cx += wx - nx; V.cz += wz - nz; draw(); };
+      const pts = new Map(); let moved = 0, pinch0 = null;
+      c.addEventListener('pointerdown', (e) => { c.setPointerCapture(e.pointerId); pts.set(e.pointerId, [e.offsetX, e.offsetY]); moved = 0; if (pts.size === 2) { const [a, b] = [...pts.values()]; pinch0 = { d: Math.hypot(a[0] - b[0], a[1] - b[1]), s: V.s }; } });
+      c.addEventListener('pointermove', (e) => { const q = pts.get(e.pointerId); if (!q) return; const dx = e.offsetX - q[0], dy = e.offsetY - q[1]; pts.set(e.pointerId, [e.offsetX, e.offsetY]);
+        if (pts.size === 2 && pinch0) { const [a, b] = [...pts.values()]; const dd = Math.hypot(a[0] - b[0], a[1] - b[1]); const mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2; zoomAt(clampS(pinch0.s * dd / Math.max(1, pinch0.d)) / V.s, mx, my); moved += 99; return; }
+        moved += Math.abs(dx) + Math.abs(dy); V.cx -= dx / V.s; V.cz += dy / V.s; draw(); });
+      const up = (e) => { if (!pts.has(e.pointerId)) return; pts.delete(e.pointerId); if (pts.size < 2) pinch0 = null;
+        if (moved < 6 && pts.size === 0) { const [x, z] = toW(e.offsetX, e.offsetY); st.setDest({ x, z, label: 'WAYPOINT', kind: 'waypoint' }); reroute(); draw(); } };
+      c.addEventListener('pointerup', up); c.addEventListener('pointercancel', (e) => { pts.delete(e.pointerId); pinch0 = null; });
+      c.addEventListener('wheel', (e) => { e.preventDefault(); zoomAt(Math.exp(-e.deltaY * 0.0015), e.offsetX, e.offsetY); }, { passive: false });
+      overlay.querySelectorAll('.pmzoom button').forEach(b => b.onclick = () => { if (b.dataset.z === 'me') { V.cx = P.x; V.cz = P.z; draw(); } else { const r = c.getBoundingClientRect(); zoomAt(Number(b.dataset.z), r.width / 2, r.height / 2); } });
+      overlay.querySelectorAll('.pmv').forEach(b => b.onclick = () => { const v = (st.venues || []).find(q => q.id === b.dataset.v); if (!v) return; st.setDest({ x: v.x, z: v.z, label: v.name, kind: 'venue', id: v.id }); reroute(); V.cx = (P.x + v.x) / 2; V.cz = (P.z + v.z) / 2; draw(); });
+      overlay.querySelectorAll('.pmleg input').forEach(i => i.onchange = () => { api.setFilter(i.dataset.f, i.checked); draw(); });
+      overlay.querySelector('#pmclear').onclick = () => { st.setDest(null); reroute(); draw(); };
+      api._mapResize = () => { if (!overlay.querySelector('#bigmap')) return removeEventListener('resize', api._mapResize); fit(); draw(); }; addEventListener('resize', api._mapResize);
+      draw(); api._mapDraw = draw;
     },
     openWardrobe(C, st) { // C = crew module, st = { fit, xp|null, account, apply(fit), signIn(email), signOut(), email, setEmail }
       const lvl = C.playerLevel(st.xp);

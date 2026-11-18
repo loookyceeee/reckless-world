@@ -187,6 +187,11 @@ async function start() {
   app.mapBase = mapBase;
   const hud = createHUD(app);
   const RB = createRapid({ scene, traffic, hud, app, grid: city.grid }); window.__rw.RB = RB;
+  // GPS destination (GTA-style): defaults to the Temple door; venues or a tapped waypoint from the pause map
+  let DEST = { x: ext.doorPos.x, z: ext.doorPos.z, label: 'THE TEMPLE', kind: 'venue', id: 'temple' };
+  const venueDest = VENUES.filter(v => v.inSlice).map(v => v.id === 'temple' ? { ...v, x: ext.doorPos.x, z: ext.doorPos.z } : v.id === 'warehousexl' && whDoor ? { ...v, x: whDoor.x, z: whDoor.z } : v);
+  app.blips = { stops: RB.stops.map(s => ({ x: s.sx, z: s.sz })), posters: posters.filter(Boolean).map(ps => ({ x: ps.ix, z: ps.iz, get done() { return ps.mesh.isEnabled(); } })), collectibles: [] };
+  const mapCtx = () => ({ P, route, venues: venueDest, getDest: () => DEST, setDest: (d) => { DEST = d; routeT = 0; } });
   hud.setLive(app.live);
   // ---------- input ----------
   const K = app.keys;
@@ -237,7 +242,7 @@ async function start() {
     if (k === 'k') { MU.next(); return; }
     if (k === 'c') { if (hud.isOpen()) return hud.close(); hud.openCredits(`<button id="exp">EXPORT TEST EVENTS (${EV.queue().length})</button><button id="livebtn">RAVE MODE: ${app.live ? 'ON' : 'OFF'}</button>`);
       document.getElementById('exp').onclick = () => EV.exportQueue(); document.getElementById('livebtn').onclick = (e) => { app.live = !app.live; hud.setLive(app.live); e.target.textContent = 'RAVE MODE: ' + (app.live ? 'ON' : 'OFF'); }; return; }
-    if (k === 'm') { if (hud.isOpen()) return hud.close(); return hud.openMap(P); }
+    if (k === 'm') { if (hud.isOpen()) return hud.close(); return hud.openMap(mapCtx()); }
     if (k === 'o') { if (hud.isOpen()) return hud.close(); const reopen = () => { hud.close(); app.key('o'); };
       return hud.openWardrobe(CR, { fit: { ...CREW.fit }, xp: CREW.xp, account: CREW.account, email: EV.getEmail(), setEmail: EV.setEmail, apply: applyFit,
         signIn: async (e) => { CREW.account = await CR.signIn(e); await loadCrew(); reopen(); }, signOut: () => { CR.signOut(); CREW.account = null; CREW.xp = null; applyFit(CREW.fit); reopen(); } }); }
@@ -339,7 +344,7 @@ async function start() {
     // HUD
     slowT -= dt; if (slowT <= 0) { slowT = 0.5; if (app.inside) EV.raveTick().then(ev => ev && hud.toast(ev.blocked ? '10 MINUTES IN · ' + ev.blocked : '10 MINUTES IN · TEST VISIT QUEUED')); state.street = app.inside ? 'THE TEMPLE' : nearestStreet(); state.district = app.inside ? (T.mode === 'day' ? 'NAVE · DAYLIGHT' : 'NAVE · RAVE') : nearestDistrict();
       { const dd = Math.hypot(P.x - ext.doorPos.x, P.z - ext.doorPos.z); AU.update({ inside: app.inside, dist: dd }); MU.setVolume(app.inside ? 90 : 22 + Math.max(0, 1 - dd / 90) * 30); }
-      routeT -= 0.5; if (routeT <= 0 && !app.inside) { routeT = 1.5; state.route = route(P.x, P.z, ext.doorPos.x, ext.doorPos.z); } if (app.inside) state.route = null;
+      routeT -= 0.5; if (routeT <= 0 && !app.inside) { routeT = 1.5; if (DEST && DEST.kind === 'waypoint' && Math.hypot(DEST.x - P.x, DEST.z - P.z) < 14) { DEST = null; hud.toast('WAYPOINT REACHED'); } state.route = DEST ? route(P.x, P.z, DEST.x, DEST.z) : null; } if (app.inside) state.route = null; state.dest = DEST;
       const tv = VENUES[0]; state.objective = app.inside ? '' : `▲ THE TEMPLE <b>${Math.round(Math.hypot(P.x - ext.doorPos.x, P.z - ext.doorPos.z))}M</b>`; }
     hud.update(dt, { stamina: ST.v, stamFlash: ST.flash, x: P.x, z: P.z, heading: P.heading, camYaw: C.yaw, inside: app.inside, lx: P.x - INTERIOR_ORIGIN.x, lz: P.z - INTERIOR_ORIGIN.z, ...state });
     fpsT += dt; if (fpsT > 0.5) { fpsT = 0; hud.fps(Math.round(engine.getFps())); }
@@ -367,7 +372,7 @@ async function start() {
   document.getElementById('play').onclick = startGame; document.getElementById('title').addEventListener('pointerdown', (e) => { if (document.getElementById('title').classList.contains('ready')) startGame(); });
   if (isTouch) document.getElementById('play').textContent = 'TAP TO ENTER';
   Object.assign(window.__rw, { ready: true, engine, scene, P, C, enterTemple, exitTemple, kind: engine.__kind, low: LOW,
-    setMode: (m) => { setTempleMode(T, scene, m); hud.interior(true, m); }, openMap: () => hud.openMap(P), close: () => hud.close(), hud, player,
+    setMode: (m) => { setTempleMode(T, scene, m); hud.interior(true, m); }, openMap: () => hud.openMap(mapCtx()), close: () => hud.close(), hud, player,
     teleport: (x, z, yaw) => { P.x = x; P.z = z; if (yaw != null) { P.heading = yaw; C.yaw = yaw; } C.curDist = C.dist; slowT = 0; },
     gotoStreet: (name, k = 0.5, side = 1) => { const rs = city.roads.filter(r => r.nm === name && r.d); if (!rs.length) return 'none'; const r = rs[Math.floor(rs.length * k) % rs.length]; const i = Math.floor(r.pts.length / 2) - (r.pts.length > 1 && r.pts.length % 2 === 0 ? 1 : 0); const a = r.pts[Math.max(0, i)], b = r.pts[Math.min(r.pts.length - 1, i + 1)]; const L = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1; const ux = (b[0] - a[0]) / L, uz = (b[1] - a[1]) / L; const off = r.w / 2 + 1.2; P.x = (a[0] + b[0]) / 2 - uz * off * side; P.z = (a[1] + b[1]) / 2 + ux * off * side; P.heading = Math.atan2(ux, uz); C.yaw = P.heading; C.curDist = C.dist; slowT = 0; return [P.x, P.z]; },
     stats: () => { const inst = window.__rw.inst; return { drawCalls: inst ? inst.drawCallsCounter.current : -1, activeMeshes: scene.getActiveMeshes().length, activeIndices: scene.getActiveIndices(), totalVertices: scene.getTotalVertices(), meshes: scene.meshes.length, frameMs: inst ? inst.frameTimeCounter.lastSecAverage : -1 }; }, fps: () => engine.getFps(), ext, T, traffic, posters, whDoor });
