@@ -241,9 +241,8 @@ def pestate():
     def sm(a, b, x): t = max(0.0, min(1.0, (x - a) / (b - a))); return t * t * (3 - 2 * t)
     def bcol(c, n):
         x, y, z = c; nx, ny, nz = n
-        if abs(nx) > 0.55 and BB0 < y < BB0 + 2 * SQ and -2.05 < z < 2.0:
-            u = int(math.floor((z + 2.05) / SQ)); v = 0 if y < BB0 + SQ else 1
-            return 'bbY' if (u + v) % 2 == 0 else 'bbB'
+        ya = max([0.3 + math.sqrt(max(0.0, (RW + 0.08) ** 2 - (z - zw) ** 2)) * 1.05 for zw in ZW if abs(z - zw) < RW + 0.08] or [0.0])
+        if abs(nx) > 0.55 and ya and y < ya + 0.035: return 'paint'   # clean white lip round the arches
         if nz > 0.35 and z > 2.0:
             if 0.55 < y < 0.69 and abs(x) > 0.4: return 'head'
             if 0.44 < y < 0.56 and abs(x) < 0.5: return 'grille'
@@ -258,8 +257,8 @@ def pestate():
     rings = []; zs = [ZR + k * 0.0475 for k in range(int(L / 0.0475) + 1)]
     for z in zs:
         f = sm(1.85, ZF, z); r_ = sm(-1.95, ZR, z)  # nose / tail rounding
-        top = 0.97 - 0.15 * sm(0.9, 2.25, z) - 0.12 * f ** 2 - 0.04 * r_  # bonnet falls toward the nose
-        y0 = 0.3 + 0.12 * f + 0.1 * r_
+        top = 0.97 - 0.11 * sm(0.9, 2.3, z) - 0.07 * f ** 2 - 0.04 * r_  # bonnet falls gently: blunt, level nose
+        y0 = 0.3 + 0.07 * f + 0.1 * r_
         for zw in ZW:
             d = abs(z - zw)
             if d < RW + 0.08: y0 = max(y0, 0.3 + math.sqrt(max(0.0, (RW + 0.08) ** 2 - d * d)) * 1.05)
@@ -267,6 +266,38 @@ def pestate():
         h = max(0.12, top - y0)
         rings.append((z, rr_ring(w, h, min(0.16, h * 0.45), y0, 5, (BB0, BB0 + SQ, BB0 + 2 * SQ), 0.3)))
     loft(m, rings, bcol)
+    # Battenburg as a decal skin just proud of the body side: crisp squares, clipped cleanly to the wheel arches
+    def prof(z):
+        f = sm(1.85, ZF, z); r_ = sm(-1.95, ZR, z)
+        top = 0.97 - 0.11 * sm(0.9, 2.3, z) - 0.07 * f ** 2 - 0.04 * r_; w = W * (1 - 0.1 * f ** 1.6 - 0.05 * r_ ** 1.6)
+        y0 = 0.3 + 0.07 * f + 0.1 * r_
+        for zw in ZW:
+            d = abs(z - zw)
+            if d < RW + 0.08: y0 = max(y0, 0.3 + math.sqrt(max(0.0, (RW + 0.08) ** 2 - d * d)) * 1.05)
+        return top, w, y0
+    def sx(z, y):
+        top, w, y0 = prof(z); h = max(0.12, top - y0); r = min(0.16, h * 0.45); xr = w / 2 - r
+        if y > top - r: return xr + math.sqrt(max(0.0, r * r - (y - (top - r)) ** 2))
+        if y < y0 + r: return xr + math.sqrt(max(0.0, r * r - (y0 + r - y) ** 2))
+        return w / 2
+    NZ, NY = 4, 3
+    for sd in (-1, 1):
+        for u in range(int(4.05 / SQ)):
+            z0 = -2.05 + u * SQ; z1 = min(z0 + SQ, 2.0)
+            if z1 <= z0: continue
+            for v in range(2):
+                colk = 'bbY' if (u + v) % 2 == 0 else 'bbB'; ya0, ya1 = BB0 + v * SQ, BB0 + (v + 1) * SQ
+                for a_ in range(NZ):
+                    za, zb = z0 + (z1 - z0) * a_ / NZ, z0 + (z1 - z0) * (a_ + 1) / NZ
+                    lo = lambda z: max(ya0, prof(z)[2] + 0.035 if prof(z)[2] > 0.31 else ya0)
+                    la, lb = lo(za), lo(zb)
+                    if la >= ya1 - 1e-3 and lb >= ya1 - 1e-3: continue
+                    la, lb = min(la, ya1), min(lb, ya1)
+                    for b_ in range(NY):
+                        ta, tb = b_ / NY, (b_ + 1) / NY
+                        P = [(za, la + (ya1 - la) * ta), (zb, lb + (ya1 - lb) * ta), (zb, lb + (ya1 - lb) * tb), (za, la + (ya1 - la) * tb)]
+                        ids = [m.v((sd * (sx(z, y) + 0.004), y, z)) for z, y in P]
+                        _ofs(m, ids[0], ids[1], ids[2], colk, (sd, 0, 0)); _ofs(m, ids[0], ids[2], ids[3], colk, (sd, 0, 0))
     # glasshouse: belt 0.93, roof 1.5, raked screen (base z 0.95 -> roof z 0.05), slight estate tailgate rake
     def ccol(c, n):
         x, y, z = c; nx, ny, nz = n

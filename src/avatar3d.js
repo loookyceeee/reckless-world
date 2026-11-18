@@ -54,8 +54,8 @@ export async function loadAvatar3D(scene, { name = 'player', base = import.meta.
     m.emissiveColor = new Color3(f, f, f); m.diffuseColor = new Color3(d, d, d); };
   // animation groups, blended by weight
   const AG = {}; for (const g of res.animationGroups) { g.stop(); AG[g.name] = g; }
-  for (const k of ['idle', 'walk', 'jog', 'sprint', 'dance']) if (AG[k]) { AG[k].start(true, 1.0); AG[k].setWeightForAllAnimatables(k === 'idle' ? 1 : 0); }
-  const w = { idle: 1, walk: 0, jog: 0, sprint: 0, dance: 0 };
+  for (const k of ['idle', 'walk', 'jog', 'sprint', 'dance', 'jumpLoop']) if (AG[k]) { AG[k].start(true, 1.0); AG[k].setWeightForAllAnimatables(k === 'idle' ? 1 : 0); }
+  const w = { idle: 1, walk: 0, jog: 0, sprint: 0, dance: 0, jumpLoop: 0 };
   const av = { root, isGlb: true, parts: byName, ag: AG, fit: null };
   av.setFit = (f, vis) => { av.fit = f; av._vis = vis; const V = vis(f.top, f.outer, f.legs), up = V.upper, lo = V.lower;
     for (const k of KINDS) (byName['G_' + k] || []).forEach(x => x.setEnabled(false));
@@ -66,12 +66,13 @@ export async function loadAvatar3D(scene, { name = 'player', base = import.meta.
   };
   // speed (m/s) -> gait weights; playback rate matched to stride so feet don't skate
   const GAIT = [['idle', 0], ['walk', 1.6], ['jog', 3.2], ['sprint', 6.0]];
-  av.animate = (dt, { speed = 0, dancing = false } = {}) => {
-    const tgt = { idle: 0, walk: 0, jog: 0, sprint: 0, dance: 0 };
-    if (dancing) tgt.dance = 1;
+  av.animate = (dt, { speed = 0, dancing = false, air = false } = {}) => {
+    const tgt = { idle: 0, walk: 0, jog: 0, sprint: 0, dance: 0, jumpLoop: 0 };
+    if (air && AG.jumpLoop) tgt.jumpLoop = 1;
+    else if (dancing) tgt.dance = 1;
     else { let i = 0; while (i < GAIT.length - 1 && speed > GAIT[i + 1][1]) i++;
       if (i >= GAIT.length - 1) tgt.sprint = 1; else { const a = GAIT[i], b = GAIT[i + 1], u = Math.max(0, Math.min(1, (speed - a[1]) / (b[1] - a[1]))); tgt[a[0]] = 1 - u; tgt[b[0]] = u; } }
-    const k = Math.min(1, dt * 8);
+    const k = Math.min(1, dt * (air || w.jumpLoop > 0.5 ? 14 : 8));
     for (const n in w) { w[n] += (tgt[n] - w[n]) * k; const g = AG[n]; if (g) g.setWeightForAllAnimatables(w[n]); }
     const rate = (n, base) => { const g = AG[n]; if (g) g.speedRatio = Math.max(0.6, Math.min(1.5, speed / base)); };
     rate('walk', 1.6); rate('jog', 3.2); rate('sprint', 6.0);

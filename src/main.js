@@ -44,7 +44,7 @@ import { VENUES, DISTRICTS, POSTER_SPOTS } from './venues.js';
 import * as CR from './crew.js';
 import { loadAvatar3D } from './avatar3d.js';
 import { createMusic, SC_PROFILE } from './music.js';
-import { createPhone, createWheel } from './phone.js';
+import { createPhone, createWheel, buzz } from './phone.js';
 import { SegGrid } from './collide.js';
 import { createRapid } from './glider.js';
 import * as EV from './events.js';
@@ -133,14 +133,14 @@ async function start() {
   // smooth rigged crew avatar (models/avatar.glb); the procedural figure stands in until it loads (?procav keeps it)
   if (!Q.has('procav')) loadAvatar3D(scene, { name: 'player3d' }).then(av => { if (glow) av.root.getChildMeshes().forEach(m => glow.addExcludedMesh(m)); const old = player; av.root.position.copyFrom(old.root.position); av.root.rotation.y = old.root.rotation.y; old.root.setEnabled(false); old.allMeshes().forEach(m => m.setEnabled(false)); player = av; window.__rw.player = av; player.setFit(CREW.fit, CR.visibleFor); if (glow) for (const m of av.allMeshes()) glow.addExcludedMesh(m); DG.log('avatar3d loaded'); }).catch(e => console.warn('avatar3d', e));
   const loadCrew = async () => { if (!CREW.account) return; try { const r = await CR.readCrew(CREW.account); if (r) { CREW.xp = r.xp; if (r.fit.top || r.fit.outer || r.fit.legs) applyFit(r.fit); } } catch (e) { } }; loadCrew();
-  const P = { x: ext.spawn.x, z: ext.spawn.z, heading: 0, speed: 0, dancing: false }; window.__rw.P = P;
+  const P = { x: ext.spawn.x, z: ext.spawn.z, heading: 0, speed: 0, dancing: false }; window.__rw.P = P; window.__rw.grid = () => city.grid;
   { const dx = ext.doorPos.x - P.x, dz = ext.doorPos.z - P.z; P.heading = Math.atan2(dx, dz); }
   // footstep dust puffs when sprinting
   const dustT = new DynamicTexture('dustT', 64, scene, true); { const g = dustT.getContext(); const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, 'rgba(200,200,210,0.6)'); gr.addColorStop(1, 'rgba(200,200,210,0)'); g.fillStyle = gr; g.fillRect(0, 0, 64, 64); dustT.hasAlpha = true; dustT.update(); }
   const dust = new ParticleSystem('dust', LOW ? 60 : 160, scene); dust.particleTexture = dustT; dust.emitter = new Vector3(0, 0.05, 0); dust.minEmitBox = new Vector3(-0.15, 0, -0.15); dust.maxEmitBox = new Vector3(0.15, 0, 0.15);
   dust.color1 = new Color4(0.75, 0.75, 0.8, 0.35); dust.color2 = new Color4(0.6, 0.6, 0.68, 0.25); dust.colorDead = new Color4(0.5, 0.5, 0.55, 0); dust.minSize = 0.15; dust.maxSize = 0.45; dust.minLifeTime = 0.35; dust.maxLifeTime = 0.8;
   dust.emitRate = 0; dust.direction1 = new Vector3(-0.4, 0.6, -0.4); dust.direction2 = new Vector3(0.4, 1.0, 0.4); dust.minEmitPower = 0.3; dust.maxEmitPower = 0.8; dust.gravity = new Vector3(0, -0.3, 0); dust.blendMode = ParticleSystem.BLENDMODE_STANDARD; dust.start();
-  const C = { yaw: P.heading, pitch: 0.22, dist: 6.2, curDist: 6.2 };
+  const C = { yaw: P.heading, pitch: 0.22, dist: 5.8, curDist: 5.8, arm: 1, dip: 0 }; P.y = 0; P.vy = 0; P.air = false; P.jumpReq = 0; window.__rw.C = C;
   // markers: entrance rings + warehouse sign + poster spots
   const ringM = new StandardMaterial('ring', scene); ringM.emissiveColor = new Color3(1, 1, 1); ringM.disableLighting = true; ringM.alpha = 0.85;
   const mkRing = (x, z, n) => { const r = toMesh(n, xf(torus(2.6, 0.12, 40), { t: [0, 0.15, 0] }), scene, ringM); r.position.set(x, 0, z); r.parent = city.root; return r; };
@@ -196,7 +196,7 @@ async function start() {
   hud.setLive(app.live);
   // ---------- input ----------
   const K = app.keys;
-  addEventListener('keydown', (e) => { if (e.target.tagName === 'INPUT') return; K.add(e.code); const k = e.key.toLowerCase(); if (e.code === 'Tab') { e.preventDefault(); if (!app.title) app.key('phone'); return; } if (e.code === 'KeyQ' && !e.repeat && !app.title && !hud.isOpen() && app.wheel) { app.wheel.open(); return; } if ('emfopclnk'.includes(k) && k.length === 1) { if (app.phone && app.phone.isOpen && 'mop'.includes(k)) app.phone.close(); app.key(k); } if (e.code === 'Escape') { hud.close(); app.phone && app.phone.close(); app.wheel && app.wheel.release(false); } });
+  addEventListener('keydown', (e) => { if (e.target.tagName === 'INPUT') return; K.add(e.code); const k = e.key.toLowerCase(); if (e.code === 'Space' && !app.title) { e.preventDefault(); P.jumpReq = 0.15; return; } if (e.code === 'Tab') { e.preventDefault(); if (!app.title) app.key('phone'); return; } if (e.code === 'KeyQ' && !e.repeat && !app.title && !hud.isOpen() && app.wheel) { app.wheel.open(); return; } if ('emfopclnk'.includes(k) && k.length === 1) { if (app.phone && app.phone.isOpen && 'mop'.includes(k)) app.phone.close(); app.key(k); } if (e.code === 'Escape') { hud.close(); app.phone && app.phone.close(); app.wheel && app.wheel.release(false); } });
   addEventListener('keyup', (e) => { K.delete(e.code); if (e.code === 'KeyQ' && app.wheel) app.wheel.release(true); });
   let drag = null; const stick = { id: null, x: 0, y: 0, ox: 0, oy: 0 }; const look = { id: null, x: 0, y: 0 };
   canvas.addEventListener('pointerdown', (e) => {
@@ -205,14 +205,24 @@ async function start() {
   });
   canvas.addEventListener('pointermove', (e) => {
     if (e.pointerId === stick.id) { let dx = e.clientX - stick.ox, dy = e.clientY - stick.oy; const d = Math.hypot(dx, dy); if (d > 50) { dx *= 50 / d; dy *= 50 / d; } stick.x = dx / 50; stick.y = dy / 50; hud.$('nub').style.transform = `translate(${dx}px,${dy}px)`; }
-    else if (e.pointerId === look.id) { C.yaw += (e.clientX - look.x) * 0.006; C.pitch = Math.max(-0.35, Math.min(1.25, C.pitch + (e.clientY - look.y) * 0.004)); look.x = e.clientX; look.y = e.clientY; }
-    else if (drag) { C.yaw += (e.clientX - drag.x) * 0.005; C.pitch = Math.max(-0.35, Math.min(1.25, C.pitch + (e.clientY - drag.y) * 0.004)); drag.x = e.clientX; drag.y = e.clientY; }
+    else if (e.pointerId === look.id) { C.yaw += (e.clientX - look.x) * 0.006; C.pitch = Math.max(-0.30, Math.min(1.05, C.pitch + (e.clientY - look.y) * 0.004)); look.x = e.clientX; look.y = e.clientY; }
+    else if (drag) { C.yaw += (e.clientX - drag.x) * 0.005; C.pitch = Math.max(-0.30, Math.min(1.05, C.pitch + (e.clientY - drag.y) * 0.004)); drag.x = e.clientX; drag.y = e.clientY; }
   });
   const up = (e) => { if (e.pointerId === stick.id) { stick.id = null; stick.x = stick.y = 0; hud.$('nub').style.transform = ''; hud.$('stick').style.opacity = 0.45; } if (e.pointerId === look.id) look.id = null; drag = null; };
   canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', up);
   canvas.addEventListener('wheel', (e) => { C.dist = Math.max(2.2, Math.min(14, C.dist * (1 + Math.sign(e.deltaY) * 0.1))); e.preventDefault(); }, { passive: false });
-  let touchRun = false, fullPushT = 0; const ST = { v: 1, idle: 9, locked: false, flash: 0 }; window.__rw.stamina = ST; hud.$('tRun').addEventListener('pointerdown', (e) => { e.stopPropagation(); touchRun = !touchRun; hud.$('tRun').classList.toggle('on', touchRun); });
-  hud.$('tAct').addEventListener('pointerdown', (e) => { e.stopPropagation(); app.key('e'); });
+  let touchRun = false, fullPushT = 0; const ST = { v: 1, idle: 9, locked: false, flash: 0 }; window.__rw.stamina = ST; // RUN: hold to sprint; held > 350 ms and released while moving latches it (GTA SA mobile); a second tap cancels
+  let runLatch = false, runDown = 0; const runBtn = hud.$('tRun');
+  runBtn.addEventListener('pointerdown', (e) => { e.stopPropagation(); if (runLatch) { runLatch = false; touchRun = false; runBtn.classList.remove('on', 'latch'); return; } touchRun = true; runDown = performance.now(); runBtn.classList.add('on'); buzz(10); });
+  const runUp = () => { if (!touchRun || runLatch) return; if (performance.now() - runDown > 350 && (stick.x || stick.y)) { runLatch = true; runBtn.classList.add('latch'); buzz([10, 30, 10]); } else { touchRun = false; runBtn.classList.remove('on'); } };
+  runBtn.addEventListener('pointerup', runUp); runBtn.addEventListener('pointercancel', runUp);
+  // ACTION: tap = context verb, long-press (450 ms) = action wheel
+  let actT = null; const actBtn = hud.$('tAct');
+  actBtn.addEventListener('pointerdown', (e) => { e.stopPropagation(); clearTimeout(actT); actT = setTimeout(() => { actT = 'wheel'; buzz(12); app.wheel && app.wheel.open(true); }, 450); });
+  actBtn.addEventListener('pointerup', () => { if (actT === 'wheel') { actT = null; return; } clearTimeout(actT); actT = null; app.key('e'); });
+  actBtn.addEventListener('pointercancel', () => { clearTimeout(actT); actT = null; });
+  hud.$('tJump').addEventListener('pointerdown', (e) => { e.stopPropagation(); P.jumpReq = 0.15; });
+  hud.$('tPhone').addEventListener('pointerdown', (e) => { e.stopPropagation(); app.key('phone'); });
   if (isTouch) document.body.classList.add('is-touch');
 
   // ---------- interactions ----------
@@ -230,7 +240,7 @@ async function start() {
     app.inside = false; T.root.setEnabled(false); Object.values(T.lights).forEach(l => l.setEnabled(false)); cityLights.forEach(l => l.setEnabled(true)); if (glow) glow.intensity = 0.5; if (pipe) pipe.imageProcessing.exposure = 1.4;
     city.root.setEnabled(true); SKY.sky.setEnabled(true); FL.setEnabled(true); WET.setEnabled(true); traffic.cars.forEach(c => c.node.setEnabled(true)); traffic.parked.forEach(c => c.node.setEnabled(true)); traffic.peds.forEach(p => { p.av.root.setEnabled(true); p._on = undefined; });
     scene.clearColor = NIGHT; scene.fogDensity = 0.0028; scene.fogColor = new Color3(0.1, 0.105, 0.17); hud.interior(false);
-    P.x = ext.doorPos.x - Math.sin(ext.yaw) * 2.5; P.z = ext.doorPos.z - Math.cos(ext.yaw) * 2.5; P.heading = ext.yaw + Math.PI; C.yaw = P.heading; C.pitch = 0.2; C.dist = 6.2;
+    P.x = ext.doorPos.x - Math.sin(ext.yaw) * 2.5; P.z = ext.doorPos.z - Math.cos(ext.yaw) * 2.5; P.heading = ext.yaw + Math.PI; C.yaw = P.heading; C.pitch = 0.2; C.dist = 5.8;
     await EV.raveExit();
   });
   const AU = createAudio();
@@ -308,22 +318,33 @@ async function start() {
     if (mag > 0.05) { P.dancing = false; const fx = Math.sin(C.yaw), fz = Math.cos(C.yaw); const mx = fx * iz + fz * ix, mz = fz * iz - fx * ix; const L = Math.hypot(mx, mz);
       const h = Math.atan2(mx / L, mz / L); let dh = h - P.heading; while (dh > Math.PI) dh -= 2 * Math.PI; while (dh < -Math.PI) dh += 2 * Math.PI; P.heading += dh * Math.min(1, dt * (sprint ? 7 : 10)); P.mx = mx / L; P.mz = mz / L; }
     // envelope: accel 10 (14 sprinting) m/s^2, decel 22 m/s^2
-    if (sp > P.speed) P.speed = Math.min(sp, P.speed + (sprint ? 14 : 10) * dt); else P.speed = Math.max(sp, P.speed - 22 * dt);
+    if (sp > P.speed) P.speed = Math.min(sp, P.speed + (sprint ? 14 : 10) * dt * (P.air ? 0.3 : 1)); else P.speed = Math.max(sp, P.speed - (P.air ? 3 : 22) * dt);
+    // jump (Space / JUMP): ~1.1 m, 0.6 s in the air; context vault over a low wall/railing (<= 1.05 m) within 1.1 m at jog or faster
+    const GRAV = 24; if (P.jumpReq > 0) P.jumpReq -= dt;
+    if (!P.air && !app.paused && !app.title) {
+      let go = P.jumpReq > 0, vault = false;
+      if (!go && !app.inside && P.speed >= 1.8 && P.mx != null && mag > 0.3) { const gr = city.grid, ax = P.x + P.mx * 1.1, az = P.z + P.mz * 1.1, lo = gr.raycast(P.x, P.z, ax, az, 0.01);
+        if (lo < 0.8 && gr.raycast(P.x, P.z, ax, az, 1.06) >= 1) { go = true; vault = true; } }
+      if (go) { P.air = true; P.vy = 7.0; P.jumpReq = 0; P.vault = vault; if (vault) P.speed = Math.max(P.speed, 3.4); buzz(10); }
+    }
+    if (P.air) { P.y += P.vy * dt; P.vy -= GRAV * dt; if (P.y <= 0) { P.y = 0; P.air = false; P.vy = 0; P.vault = false; C.dip = 0.14; buzz(12); } }
     if (P.speed > 0.01 && P.mx != null) { P.x += P.mx * P.speed * dt; P.z += P.mz * P.speed * dt; }
-    const pp = { x: P.x, z: P.z }; (app.inside ? tGrid : city.grid).resolve(pp, 0.38); P.x = pp.x; P.z = pp.z;
+    const pp = { x: P.x, z: P.z }; (app.inside ? tGrid : city.grid).resolve(pp, 0.38, P.y - 0.02); P.x = pp.x; P.z = pp.z;
     const autoDance = app.inside && T.mode === 'rave' && T.danceFloor(P) && P.speed < 0.2 && !window.__rw.noAutoDance;
-    player.root.position.set(P.x, 0, P.z); player.root.rotation.y = P.heading; dust.emitter.set(P.x, 0.05, P.z); dust.emitRate = P.speed > 4.5 && !app.inside ? 45 : 0;
+    player.root.position.set(P.x, P.y, P.z); player.root.rotation.y = P.heading; dust.emitter.set(P.x, 0.05, P.z); dust.emitRate = P.speed > 4.5 && !app.inside ? 45 : 0;
     if (player.lightRig) player.lightRig(cam);
     SKY.update(cam);
-    if (player.animate) player.animate(dt, { speed: P.speed, dancing: P.dancing || autoDance }); else animateAvatar(player, dt, { speed: P.speed * 0.8, dancing: P.dancing || autoDance });
+    if (player.animate) player.animate(dt, { speed: P.speed, dancing: P.dancing || autoDance, air: P.air }); else animateAvatar(player, dt, { speed: P.speed * 0.8, dancing: P.dancing || autoDance });
     // camera with collision
-    tgt.set(P.x, 1.5, P.z);
-    const cp = Math.cos(C.pitch), want = C.dist; const ox = -Math.sin(C.yaw) * cp, oz = -Math.cos(C.yaw) * cp, oy = Math.sin(C.pitch);
+    C.dip = Math.max(0, C.dip - dt); const dipY = C.dip > 0 ? -0.14 * Math.sin(Math.PI * C.dip / 0.14) : 0; // 0.14 s landing dip
+    tgt.set(P.x, 1.5 + P.y * 0.55 + dipY, P.z);
+    C.arm += ((P.speed > 4.5 && !app.inside ? 6.6 / 5.8 : 1) - C.arm) * Math.min(1, dt * 2); // arm 5.8 m walking, 6.6 m sprinting
+    const cp = Math.cos(C.pitch), want = C.dist * C.arm; const ox = -Math.sin(C.yaw) * cp, oz = -Math.cos(C.yaw) * cp, oy = Math.sin(C.pitch);
     const camY = 1.5 + oy * want; const hit = (app.inside ? tGrid : city.grid).raycast(P.x, P.z, P.x + ox * want, P.z + oz * want, camY);
-    const d = Math.max(1.0, want * hit - (hit < 1 ? 0.35 : 0)); C.curDist += (d - C.curDist) * Math.min(1, dt * (d < C.curDist ? 18 : 4));
-    camPos.set(P.x + ox * C.curDist, Math.max(0.35, 1.5 + oy * C.curDist), P.z + oz * C.curDist);
+    const d = Math.max(1.0, want * hit - (hit < 1 ? 0.35 : 0)); C.curDist += (d - C.curDist) * Math.min(1, dt * (d < C.curDist ? 20 : 3.5)); // hide fast, restore lazily
+    camPos.set(P.x + ox * C.curDist, Math.max(0.35, 1.5 + P.y * 0.55 + dipY + oy * C.curDist), P.z + oz * C.curDist);
     // smoothed follow camera + slight FOV kick when sprinting
-    if (camSnap) { smPos.copyFrom(camPos); smTgt.copyFrom(tgt); camSnap = false; } else { const k = Math.min(1, dt * 12); Vector3.LerpToRef(smPos, camPos, k, smPos); Vector3.LerpToRef(smTgt, tgt, Math.min(1, dt * 16), smTgt); }
+    if (camSnap) { smPos.copyFrom(camPos); smTgt.copyFrom(tgt); camSnap = false; } else { const k = Math.min(1, dt * 8); Vector3.LerpToRef(smPos, camPos, k, smPos); Vector3.LerpToRef(smTgt, tgt, Math.min(1, dt * 14), smTgt); }
     cam.position.copyFrom(smPos); cam.setTarget(smTgt);
     const wantFov = 0.95 + (P.speed > 4.5 && !app.inside ? 0.09 : 0); cam.fov += (wantFov - cam.fov) * Math.min(1, dt * 3);
     if (app.title) { const f = flyover(window.__rwFly.at != null ? window.__rwFly.at : t - titleT0); cam.position.copyFrom(f.p); cam.setTarget(f.t); cam.fov = 0.9; camSnap = true; }
@@ -340,9 +361,9 @@ async function start() {
       else if (venueDoors.some(d => Math.hypot(P.x - d.x, P.z - d.z) < 3.2)) { const d = venueDoors.find(d => Math.hypot(P.x - d.x, P.z - d.z) < 3.2); interact = d.v.nostalgia ? { label: 'THE WARE-HOUSE · EST. · THE OLD PALM HOUSE / THREE SHEETS SITE', act: () => hud.toast('THE WARE-HOUSE · FOR THE ONES WHO WERE THERE') } : { label: `${d.v.name} · ${d.v.sub} · INSIDE COMING SOON`, act: () => hud.toast(`${d.v.name} OPENS IN A LATER BUILD`) }; }
       else if (Math.hypot(P.x - whDoor.x, P.z - whDoor.z) < 3.2) interact = { label: `THE WARE-HOUSE XL · INTERIOR COMING SOON`, act: () => hud.toast('THE WARE-HOUSE XL OPENS IN A LATER BUILD') };
       else if (RB.nearStop(P)) { const st = RB.nearStop(P); interact = { label: `<b>E</b> RAPID BUS · FAST TRAVEL`, act: () => RB.menu(st, P) }; }
-      else for (const ps of posters) if (Math.hypot(P.x - ps.ix, P.z - ps.iz) < 2.4) { const done = EV.postedToday(ps.id) || (!EV.getEmail() && ps.mesh.isEnabled()); interact = { label: done ? 'POSTER UP ✓' : `<b>E</b> ${ps.mesh.isEnabled() ? 'PASTE A FRESH POSTER' : 'PASTE A RECKLESS POSTER'}`, act: async () => { if (done) return; ps.mesh.setEnabled(true); localStorage.setItem('rw.poster.' + ps.id, '1'); const ev = await EV.posterPlaced(ps.id); hud.toast(ev && ev.blocked ? 'POSTER UP · ' + ev.blocked : ev ? 'POSTER UP · TEST EVENT QUEUED' : 'POSTER UP'); } }; break; }
+      else for (const ps of posters) if (Math.hypot(P.x - ps.ix, P.z - ps.iz) < 2.4) { const done = EV.postedToday(ps.id) || (!EV.getEmail() && ps.mesh.isEnabled()); interact = { label: done ? 'POSTER UP ✓' : `<b>E</b> ${ps.mesh.isEnabled() ? 'PASTE A FRESH POSTER' : 'PASTE A RECKLESS POSTER'}`, act: async () => { if (done) return; ps.mesh.setEnabled(true); localStorage.setItem('rw.poster.' + ps.id, '1'); buzz([20, 40, 20]); const ev = await EV.posterPlaced(ps.id); hud.toast(ev && ev.blocked ? 'POSTER UP · ' + ev.blocked : ev ? 'POSTER UP · TEST EVENT QUEUED' : 'POSTER UP'); } }; break; }
     } else if (P.z - INTERIOR_ORIGIN.z < 2.4 && Math.abs(P.x - INTERIOR_ORIGIN.x) < 2) interact = { label: `<b>E</b> EXIT TO CARLISLE CIRCUS`, act: exitTemple };
-    hud.prompt(interact ? interact.label : '');
+    hud.prompt(interact ? interact.label : ''); if (isTouch) { const ia = !!interact; if (ia && !app._ia) buzz(12); app._ia = ia; hud.$('tAct').classList.toggle('on', ia); }
     // HUD
     slowT -= dt; if (slowT <= 0) { slowT = 0.5; if (app.inside) EV.raveTick().then(ev => { if (!ev) return; if (ev.blocked) hud.note({ kicker: 'CREW', title: '10 MINUTES IN', body: ev.blocked }); else hud.stamp({ title: 'VISIT LOGGED', sub: 'THE TEMPLE · 10 MINUTES IN', lines: ['RAVE VISIT · TEST EVENT QUEUED', 'CREW ADDS XP AFTER LAUNCH'] }); }); state.street = app.inside ? 'THE TEMPLE' : nearestStreet(); state.district = app.inside ? (T.mode === 'day' ? 'NAVE · DAYLIGHT' : 'NAVE · RAVE') : nearestDistrict();
       { const dd = Math.hypot(P.x - ext.doorPos.x, P.z - ext.doorPos.z); AU.update({ inside: app.inside, dist: dd }); MU.setVolume(app.inside ? 90 : 22 + Math.max(0, 1 - dd / 90) * 30); }
@@ -381,7 +402,7 @@ async function start() {
     rave: () => ({ inside: !!app.inside, venue: 'THE TEMPLE', dwell: app.inside ? EV.dwell() : 0, need: EV.MIN_DWELL }),
     posters: () => posters.map(p => ({ name: spotName(p.id), done: EV.postedToday(p.id) || (!EV.getEmail() && p.mesh.isEnabled()), x: p.ix, z: p.iz })),
     crew: () => CREW.account ? { rank: 'CREW LEVEL ' + CR.playerLevel(CREW.xp), line: 'Signed in. Your crew rank unlocks wardrobe pieces.' } : { rank: 'SIGNED OUT', line: 'Sign in with your crew email to wear unlocked pieces.' },
-    setDest: setDestP });
+    setDest: setDestP, onUnread: (n) => { const b = document.getElementById('tPhoneN'); if (b) { b.textContent = n || ''; b.classList.toggle('on', n > 0); } } });
   app.wheel = createWheel({ root: uiRoot, run: (id) => {
     if (id === 'phone') return app.key('phone');
     if (id === 'radio') { if (!AU.on) app.key('n'); else MU.next(); return; }

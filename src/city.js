@@ -347,6 +347,7 @@ export async function buildCity(scene, { low = false } = {}) {
     const sl = toMesh('signalLamps', merge([color(xf(cyl(0.03, 0.08, 0.08, 10), { r: [Math.PI / 2, 0, 0], t: [0, 2.98, 0.26] }), hex('#ff2a1a')), color(xf(cyl(0.03, 0.08, 0.08, 10), { r: [Math.PI / 2, 0, 0], t: [0, 2.7, 0.26] }), hex('#40220a')), color(xf(cyl(0.03, 0.08, 0.08, 10), { r: [Math.PI / 2, 0, 0], t: [0, 2.42, 0.26] }), hex('#0a3018'))]), scene, sm);
     sl.thinInstanceSetBuffer('matrix', tiBuf(furn.signal, it => Matrix.Compose(Vector3.One(), Quaternion.FromEulerAngles(0, it[2], 0), new Vector3(it[0], 0, it[1]))), 16, true); sl.parent = root; }
   for (const b of furn.bollard) grid.add(b[0] - 0.1, b[1], b[0] + 0.1, b[1], 1);
+  for (const r of furn.railing) { const c = Math.cos(r[2]) * 1.5, s = Math.sin(r[2]) * 1.5; grid.add(r[0] - c, r[1] + s, r[0] + c, r[1] - s, 1.02); } // guard railings: 1.02 m, vaultable
 
   // ---------- street lamps (thin instances) + light pools ----------
   const poleM = new StandardMaterial('pole', scene); poleM.diffuseColor = hex('#4b4f5c'); poleM.specularColor = new Color3(0.3, 0.3, 0.3);

@@ -14,10 +14,11 @@ export class SegGrid {
     return out;
   }
   // push a circle out of walls
-  resolve(p, r) {
+  resolve(p, r, y = 0) {
     for (let it = 0; it < 3; it++) {
       let moved = false;
       for (const s of this.near(p.x, p.z, r + 1)) {
+        if (s.h <= y) continue;
         const dx = s.x1 - s.x0, dz = s.z1 - s.z0; const L2 = dx * dx + dz * dz || 1e-6;
         let t = ((p.x - s.x0) * dx + (p.z - s.z0) * dz) / L2; t = Math.max(0, Math.min(1, t));
         const cx = s.x0 + dx * t, cz = s.z0 + dz * t; const ex = p.x - cx, ez = p.z - cz; const d = Math.hypot(ex, ez);

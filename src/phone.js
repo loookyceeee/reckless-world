@@ -11,7 +11,8 @@ const WHEEL = [ // clockwise from north
 ];
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const clock = () => new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/London' });
-const buzz = (p) => { try { navigator.vibrate && navigator.vibrate(p); } catch (e) { } };
+export const haptics = { on: localStorage.getItem('rw.haptics') !== '0' };
+export const buzz = (p) => { if (!haptics.on) return; try { navigator.vibrate && navigator.vibrate(p); } catch (e) { } }; // Android Chrome; silent no-op on iOS
 
 export function createPhone(ctx) {
   // ctx: { root, open: {map, wardrobe, camera, credits, crew}, dance(), poster(), sound:{label(), toggle()}, quality:{get(), set(n)},
@@ -42,6 +43,7 @@ export function createPhone(ctx) {
     settings: () => { const q = ctx.quality.get();
       return frame('SETTINGS', `<div class="phcard"><small>QUALITY</small><div class="phrowb">${['low', 'med', 'high'].map(n => `<button class="phbtn${q === n ? ' on' : ''}" data-q="${n}">${n.toUpperCase()}</button>`).join('')}</div></div>
       <div class="phrowb"><button class="phbtn" data-act="sound">${esc(ctx.sound.label())}</button><button class="phbtn" data-act="credits">CREDITS</button></div>
+      <div class="phrowb"><button class="phbtn${haptics.on ? ' on' : ''}" data-act="haptics">HAPTICS ${haptics.on ? 'ON' : 'OFF'}</button></div>
       <p class="phfine">Map data © OpenStreetMap contributors. Terrain: LiDAR open data. Full credits in CREDITS.</p>`); },
     msgs: () => frame('MSGS', msgs.length ? `<div class="phlist">${msgs.map((m, i) => `<button class="phmsg" data-msg="${i}"><small>${esc(m.from)} · ${esc(m.t)}</small><b>${esc(m.title)}</b><span>${esc(m.body)}</span>${m.dest ? '<i>TAP TO SET GPS ›</i>' : ''}</button>`).join('')}</div>` : '<p class="phfine">No messages.</p>'),
   };
@@ -51,7 +53,7 @@ export function createPhone(ctx) {
     if (v === 'map') { api.close(); return ctx.open.map(); }
     if (v === 'camera') { api.close(); return ctx.open.camera(); }
     if (v === 'wardrobe') { api.close(); return ctx.open.wardrobe(); }
-    if (v === 'msgs') unread = 0;
+    if (v === 'msgs') { unread = 0; ctx.onUnread && ctx.onUnread(0); }
     view = v; render();
   };
   el.addEventListener('click', (e) => {
@@ -63,6 +65,7 @@ export function createPhone(ctx) {
     if (b.dataset.msg != null) { const m = msgs[+b.dataset.msg]; if (m && m.dest) { ctx.setDest(m.dest); api.close(); } return; }
     const a = b.dataset.act;
     if (a === 'close') return api.close();
+    if (a === 'haptics') { haptics.on = !haptics.on; localStorage.setItem('rw.haptics', haptics.on ? '1' : '0'); buzz(10); return render(); }
     if (a === 'sound') { ctx.sound.toggle(); return setTimeout(render, 50); }
     if (a === 'skip') { ctx.skip(); return setTimeout(render, 600); }
     if (a === 'credits') { api.close(); return ctx.open.credits(); }
@@ -77,10 +80,10 @@ export function createPhone(ctx) {
       clearInterval(tick); tick = setInterval(() => { if (S.open && (view === 'rave' || view === 'home' || view === 'radio')) render(); }, 1000); },
     close() { if (!S.open) return; S.open = false; clearInterval(tick); el.classList.remove('on'); el.classList.add('out'); veil.classList.add('hidden'); setTimeout(() => { if (!S.open) el.classList.add('hidden'); }, 180); },
     toggle() { S.open ? api.close() : api.open(); },
-    text(m) { msgs.unshift({ from: 'RECKLESS', t: clock(), ...m }); unread++; buzz([20, 40, 20]);
+    text(m) { msgs.unshift({ from: 'RECKLESS', t: clock(), ...m }); unread++; ctx.onUnread && ctx.onUnread(unread); buzz([20, 40, 20]);
       if (S.open) return render();
       const pk = document.createElement('button'); pk.className = 'phpeekf'; pk.innerHTML = `<small>RECKLESS · ${clock()}</small><b>${esc(m.title)}</b><span>${esc(m.body)}</span>`;
-      ctx.root.appendChild(pk); requestAnimationFrame(() => pk.classList.add('on')); pk.onclick = () => { pk.remove(); api.open('msgs'); unread = 0; };
+      ctx.root.appendChild(pk); requestAnimationFrame(() => pk.classList.add('on')); pk.onclick = () => { pk.remove(); api.open('msgs'); unread = 0; ctx.onUnread && ctx.onUnread(0); };
       setTimeout(() => { pk.classList.remove('on'); setTimeout(() => pk.remove(), 300); }, 4500); },
   };
   return api;
@@ -97,7 +100,7 @@ export function createWheel(ctx) {
     <circle cx="${R}" cy="${R}" r="${r0 - 6}" class="wc"/></svg><div class="wmid"><b></b><span></span></div>`;
   ctx.root.appendChild(el);
   let open = false, sel = 0, last = 0, t0 = 0, cx = 0, cy = 0, lastAng = null, touchOpen = false;
-  const setSel = (i) => { if (i === sel && el.querySelector('.ws.on')) return; sel = i; el.querySelectorAll('.ws').forEach((g, k) => g.classList.toggle('on', k === i)); el.querySelector('.wmid b').textContent = WHEEL[i][1]; el.querySelector('.wmid span').textContent = WHEEL[i][2]; buzz(8); };
+  const setSel = (i) => { if (i === sel && el.querySelector('.ws.on')) return; sel = i; el.querySelectorAll('.ws').forEach((g, k) => g.classList.toggle('on', k === i)); el.querySelector('.wmid b').textContent = WHEEL[i][1]; el.querySelector('.wmid span').textContent = WHEEL[i][2]; buzz(10); };
   const pick = (x, y) => { const dx = x - cx, dy = y - cy; if (Math.hypot(dx, dy) < 24) return; let a = Math.atan2(dx, -dy); if (a < 0) a += 2 * Math.PI;
     const deg = a * 180 / Math.PI; if (lastAng != null) { const d = Math.abs(((deg - lastAng + 540) % 360) - 180); if (d < 8) return; } lastAng = deg; setSel(Math.round(a / (2 * Math.PI / N)) % N); };
   const move = (e) => { if (open) pick(e.clientX, e.clientY); };
