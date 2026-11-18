@@ -184,7 +184,7 @@ async function start() {
   try { const meta = await (await fetch(import.meta.env.BASE_URL + 'data/minimap_meta.json')).json(); const im = await loadMinimapImage(import.meta.env.BASE_URL + 'data/' + meta.file, meta); if (im) mapBase = Object.assign(im, { bounds: mapBase.bounds, proc: mapBase }); } catch (e) { console.warn('minimap', e); }
   app.mapBase = mapBase;
   const hud = createHUD(app);
-  const RB = createRapid({ scene, traffic, hud, app }); window.__rw.RB = RB;
+  const RB = createRapid({ scene, traffic, hud, app, grid: city.grid }); window.__rw.RB = RB;
   hud.setLive(app.live);
   // ---------- input ----------
   const K = app.keys;

@@ -1,5 +1,6 @@
 // Stylised Belfast slice from OpenStreetMap (ODbL). Buildings extruded + clay-shaded, roads, lamps, venue beacons.
 import { Mesh } from '@babylonjs/core/Meshes/mesh';
+import { FresnelParameters } from '@babylonjs/core/Materials/fresnelParameters';
 import { VertexData } from '@babylonjs/core/Meshes/mesh.vertexData';
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
 import { Color3 } from '@babylonjs/core/Maths/math.color';
@@ -307,12 +308,13 @@ export async function buildCity(scene, { low = false } = {}) {
       const wm = new StandardMaterial('festoonWire', scene); wm.diffuseColor = hex('#151515'); wm.specularColor = Color3.Black();
       for (let i = 0; i < WI.length; i += 3000) { const w = toMesh('festoonWire', merge(WI.slice(i, i + 3000)), scene, wm); w.parent = root; w.isPickable = false; } } }
   // puddles: glossy dark patches near the kerbs that catch lamp and moon highlights (wet Belfast night)
-  { const pud = []; const rr = rng(31); for (const r of roadsOut) { if (!r.d || r.t === 'service') continue; for (let i = 0; i < r.pts.length - 1; i++) { const a = r.pts[i], b = r.pts[i + 1]; const L = Math.hypot(b[0] - a[0], b[1] - a[1]); const ux = (b[0] - a[0]) / L, uz = (b[1] - a[1]) / L;
+  { const pud = []; const rr = rng(31); for (const r of roadsOut) { if (!r.d || r.t === 'service') continue; for (let i = 0; i < r.pts.length - 1; i++) { const a = r.pts[i], b = r.pts[i + 1]; const L = Math.hypot(b[0] - a[0], b[1] - a[1]); if (!(L > 0.05)) continue; const ux = (b[0] - a[0]) / L, uz = (b[1] - a[1]) / L; // zero-length segments gave NaN matrices = screen-filling wedges/bands
       for (let s = rr() * 25; s < L; s += 18 + rr() * 30) { const sd = rr() < 0.5 ? -1 : 1, off = (r.w / 2 - 0.6 - rr() * 1.2) * sd; pud.push([a[0] + ux * s - uz * off, a[1] + uz * s + ux * off, Math.atan2(ux, uz), 0.8 + rr() * 1.6]); } } }
-    const pm = new StandardMaterial('puddle', scene); pm.diffuseColor = hex('#0e1016'); pm.specularColor = new Color3(1, 1, 1.05); pm.specularPower = 180; pm.emissiveColor = hex('#141a2a'); pm.alpha = 0.9;
-    const pv = color(xf(cyl(0.004, 1, 1, 12, true), { s: [1, 1, 0.6] }), new Color3(1, 1, 1)); const pmesh = toMesh('puddles', pv, scene, pm);
-    const buf = new Float32Array(pud.length * 16); pud.forEach((p, i) => Matrix.Compose(new Vector3(p[3], 1, p[3] * (0.6 + (i % 5) * 0.15)), Quaternion.FromEulerAngles(0, p[2] + i, 0), new Vector3(p[0], YM + 0.003, p[1])).copyToArray(buf, i * 16));
-    pmesh.thinInstanceSetBuffer('matrix', buf, 16, true); pmesh.parent = root; pmesh.isPickable = false; }
+    const pm = new StandardMaterial('puddle', scene); pm.diffuseColor = hex('#0e1016'); pm.specularColor = new Color3(1, 1, 1.05); pm.specularPower = 180; pm.emissiveColor = hex('#141a2a'); // opaque: a transparent thin-instance puddle broke the SSAO/prepass depth = dark wedges + bands across the screen
+    const parts = [];
+    pud.forEach((p, i) => parts.push(xf(color(cyl(0.004, 1, 1, 12, true), new Color3(1, 1, 1)), { s: [p[3], 1, p[3] * 0.6 * (0.6 + (i % 5) * 0.15)], r: [0, p[2] + i, 0], t: [p[0], YM + 0.003, p[1]] })));
+    // baked into plain static geometry (no thin instances): thin-instanced puddles rendered garbage into the SSAO/glow passes = dark wedges + a band across the screen
+    const pmesh = toMesh('puddles', merge(parts), scene, pm); pmesh.parent = root; pmesh.isPickable = false; }
   // street furniture thin instances
   const furnM = new StandardMaterial('furn', scene); furnM.diffuseColor = new Color3(1, 1, 1); furnM.specularColor = new Color3(0.3, 0.3, 0.3);
   const tiBuf = (list, f) => { const buf = new Float32Array(list.length * 16); list.forEach((it, i) => f(it).copyToArray(buf, i * 16)); return buf; };
@@ -379,6 +381,7 @@ export async function buildCity(scene, { low = false } = {}) {
 
   // ---------- venue beacons (sky searchlights), ground rings ----------
   const beamM = new StandardMaterial('beamM', scene); beamM.diffuseTexture = beamTex(scene); beamM.useAlphaFromDiffuseTexture = true; beamM.emissiveColor = new Color3(0.32, 0.3, 0.42); beamM.disableLighting = true; beamM.alphaMode = 1; beamM.backFaceCulling = false;
+  { const f = new FresnelParameters(); f.leftColor = Color3.Black(); f.rightColor = Color3.White(); f.bias = 0; f.power = 1.6; beamM.opacityFresnelParameters = f; } // soft volumetric edges instead of hard-edged bands across the sky
   const beacons = [];
   for (const v of VENUES.filter(v => v.inSlice)) {
     for (let k = 0; k < 2; k++) {
