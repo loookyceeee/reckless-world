@@ -1,0 +1,10 @@
+import puppeteer from 'puppeteer-core';
+const browser = await puppeteer.launch({ executablePath: '/usr/bin/google-chrome', headless: 'new', args: ['--no-sandbox', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
+const page = await browser.newPage(); await page.setViewport({ width: 1280, height: 720 });
+await page.goto('http://localhost:4173/?webgl' + (process.env.Q || ''), { waitUntil: 'load' });
+await page.waitForFunction(() => window.__rw && window.__rw.ready, { timeout: 180000 });
+await page.click('#play').catch(() => {});
+await page.evaluate(() => { const r = window.__rw; r.gotoStreet('Donegall Street', 0.62, 1); r.C.yaw = r.P.heading; });
+await new Promise(r => setTimeout(r, 3000));
+console.log(await page.evaluate(() => { const s = window.__rw.inst.scene; const A = s.getActiveMeshes(); const g = {}; for (let i = 0; i < A.length; i++) { const m = A.data[i]; const k = (m.material ? m.material.name : '-') ; g[k] = g[k] || [0, 0]; g[k][0]++; g[k][1] += m.getTotalIndices() * Math.max(1, m.thinInstanceCount || 0); } return Object.entries(g).sort((a, b) => b[1][0] - a[1][0]).map(e => e[0] + ' ' + e[1].join(' ')).join('\n'); }));
+await browser.close();

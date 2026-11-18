@@ -294,7 +294,7 @@ export async function buildCity(scene, { low = false } = {}) {
   const tiBuf = (list, f) => { const buf = new Float32Array(list.length * 16); list.forEach((it, i) => f(it).copyToArray(buf, i * 16)); return buf; };
   const place = (name, vd, list, rotIdx) => { if (!list.length) return null; const me = toMesh(name, vd, scene, furnM); me.thinInstanceSetBuffer('matrix', tiBuf(list, (it) => Matrix.Compose(Vector3.One(), Quaternion.FromEulerAngles(0, rotIdx != null ? it[rotIdx] : 0, 0), new Vector3(it[0], 0, it[1]))), 16, true); me.parent = root; me.isPickable = false; return me; };
   const BLK = hex('#1c1c20'), WHT = hex('#f2f2f2');
-  place('bollards', merge([color(xf(cyl(0.95, 0.08, 0.1, 10), { t: [0, 0.475, 0] }), BLK), color(xf(cyl(0.06, 0.085, 0.085, 10), { t: [0, 0.82, 0] }), WHT), color(xf(sphere(8), { s: [0.085, 0.05, 0.085], t: [0, 0.95, 0] }), BLK)]), furn.bollard);
+  place('bollards', merge([color(xf(cyl(0.95, 0.08, 0.1, 7), { t: [0, 0.475, 0] }), BLK), color(xf(cyl(0.06, 0.085, 0.085, 7, false), { t: [0, 0.82, 0] }), WHT), color(xf(sphere(3), { s: [0.085, 0.05, 0.085], t: [0, 0.95, 0] }), BLK)]), furn.bollard);
   const beaconPole = []; for (let k = 0; k < 8; k++) beaconPole.push(color(xf(cyl(0.3, 0.06, 0.06, 8), { t: [0, 0.15 + k * 0.3, 0] }), k % 2 ? WHT : BLK));
   place('beaconPoles', merge(beaconPole), furn.beacon);
   if (furn.beacon.length) { const gm2 = new StandardMaterial('belisha', scene); gm2.emissiveColor = hex('#ffa21a'); gm2.disableLighting = true; const g = toMesh('belishaGlobe', xf(sphere(10), { s: [0.2, 0.2, 0.2], t: [0, 2.55, 0] }), scene, gm2); g.thinInstanceSetBuffer('matrix', tiBuf(furn.beacon, it => Matrix.Translation(it[0], 0, it[1])), 16, true); g.parent = root; }
@@ -344,7 +344,7 @@ export async function buildCity(scene, { low = false } = {}) {
     const leafM = new StandardMaterial('leaf', scene); leafM.diffuseColor = new Color3(1, 1, 1); leafM.specularColor = new Color3(0.06, 0.08, 0.06);
     const trunk = toMesh('trunk', xf(cyl(1, 0.09, 0.14, 7), { t: [0, 0.5, 0] }), scene, trunkM);
     const G1 = hex('#3f6b3a'), G2 = hex('#557f44'), G3 = hex('#2f5530');
-    const canopy = toMesh('canopy', merge([color(xf(sphere(6), { s: [0.5, 0.42, 0.5], t: [0, 0.62, 0] }), G1), color(xf(sphere(4), { s: [0.34, 0.3, 0.34], t: [0.22, 0.78, 0.1] }), G2), color(xf(sphere(4), { s: [0.32, 0.28, 0.32], t: [-0.2, 0.74, -0.14] }), G3), color(xf(sphere(4), { s: [0.28, 0.26, 0.28], t: [0.02, 0.95, 0.02] }), G2)]), scene, leafM);
+    const canopy = toMesh('canopy', merge([color(xf(sphere(4), { s: [0.5, 0.42, 0.5], t: [0, 0.62, 0] }), G1), color(xf(sphere(3), { s: [0.34, 0.3, 0.34], t: [0.22, 0.78, 0.1] }), G2), color(xf(sphere(3), { s: [0.32, 0.28, 0.32], t: [-0.2, 0.74, -0.14] }), G3), color(xf(sphere(3), { s: [0.28, 0.26, 0.28], t: [0.02, 0.95, 0.02] }), G2)]), scene, leafM);
     const tm = [], cm = [];
     for (const [x, z, h, s] of SF.trees) { const rot = Quaternion.FromEulerAngles(0, (x * 7.13 + z * 3.7) % 6.28, 0);
       tm.push(Matrix.Compose(new Vector3(1, h * 0.45, 1), rot, new Vector3(x, 0, z))); cm.push(Matrix.Compose(new Vector3(s * 1.1, h * 0.9, s * 1.1), rot, new Vector3(x, h * 0.1, z))); grid.add(x - 0.15, z, x + 0.15, z, 3); }

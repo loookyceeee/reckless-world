@@ -1,3 +1,4 @@
+import { QuadraticErrorSimplification } from '@babylonjs/core/Meshes/meshSimplification';
 // RECKLESS avatar: procedural stylised clay figure, skinned to a 17-bone humanoid skeleton,
 // with procedural idle / walk / run / rave-dance cycles and swappable Drop 018 outfits.
 import { Skeleton } from '@babylonjs/core/Bones/skeleton';
@@ -375,7 +376,7 @@ function animateProcedural(av, dt, { speed = 0, dancing = false } = {}) {
 }
 
 // ---- instanced crowd: bake N dance poses x outfit variants into static meshes for thin instancing ----
-export function bakeCrowdVariants(scene, { poses = 4, lod = 0.35 } = {}) {
+export function bakeCrowdVariants(scene, { poses = 4, lod = 0.35, simplify = 0 } = {}) {
   const VARS = [
     { outfit: 'skate', palette: { tee: hex('#111114'), denim: hex('#6f8fb3') } },
     { outfit: 'stan', palette: { hoodie: hex('#111114'), denim: hex('#4a5f80') } },
@@ -402,5 +403,7 @@ export function bakeCrowdVariants(scene, { poses = 4, lod = 0.35 } = {}) {
     }
     for (const m of av.allMeshes()) m.dispose(); av.root.dispose(); av.skeleton.dispose();
   });
+  // decimate the baked crowd bodies in the background (static meshes, ~30% of the triangles); swaps geometry in place when done
+  if (simplify) for (const it of out) { try { const far = it.body.clone(it.body.name + '-far'); far.makeGeometryUnique(); it.far = far; const q = new QuadraticErrorSimplification(far); q.simplify({ quality: simplify, distance: 0, optimizeMesh: false }, (nm) => { const vd = VertexData.ExtractFromMesh(nm); vd.applyToMesh(far, false); nm.dispose(); it.farReady = true; }); } catch (e) { console.warn('simplify', e); } }
   return { list: out, variants: VARS.length, poses };
 }

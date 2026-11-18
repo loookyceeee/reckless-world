@@ -364,7 +364,7 @@ export function buildTempleInterior(scene, { glow, low = false, makeDancer, bake
     const sM = mat(scene, 'tBarSignM', { unlit: true, two: true }); sM.emissiveTexture = sT; const sign = toMesh('barSign', xf(plane(1.6, 0.6), { r: [0, -Math.PI / 2, 0], t: [7.2, 2.7, 6.5] }), scene, sM); sign.parent = root;
     segs.push([6.8, 4, 6.8, 9]); }
   // ---- crowd (thin instances) ----
-  const crowdN = low ? 90 : 170;
+  const crowdN = low ? 80 : 150;
   const crowd = [];
   for (let i = 0; i < crowdN; i++) {
     let x, z; do { x = (R() - 0.5) * 2 * (AW - 0.6); z = 10.5 + Math.pow(R(), 0.6) * 23; } while (Math.abs(Math.abs(x) - NW) < 0.8 && (z % 6 < 0.8 || z % 6 > 5.2));
@@ -372,7 +372,7 @@ export function buildTempleInterior(scene, { glow, low = false, makeDancer, bake
   }
   // instanced avatars: baked mocap dance poses x Drop 018 outfit variants (thin instances, swapped on the beat)
   const CV = bakeCrowd ? bakeCrowd() : null; const cvMeshes = [];
-  if (CV) for (const it of CV.list) for (const m of [it.body, it.head]) { if (!m) continue; m.parent = root; m.isPickable = false; m.alwaysSelectAsActiveMesh = true; m._buf = new Float32Array(crowdN * 16); m.thinInstanceSetBuffer('matrix', m._buf, 16, false); m.thinInstanceCount = 0; cvMeshes.push(m); }
+  if (CV) for (const it of CV.list) for (const m of [it.body, it.head, it.far]) { if (!m) continue; m.parent = root; m.isPickable = false; m.alwaysSelectAsActiveMesh = true; m._buf = new Float32Array(crowdN * 16); m.thinInstanceSetBuffer('matrix', m._buf, 16, false); m.thinInstanceCount = 0; cvMeshes.push(m); }
   const cMeshes = cvMeshes; const bufs = null; const cBody = null, cLegs = null, cHead = null, cHair = null, cArm = null;
   // a few full avatars dancing at the barrier
   const dancers = [];
@@ -389,7 +389,7 @@ export function buildTempleInterior(scene, { glow, low = false, makeDancer, bake
   const T = {
     root, crowd, segs: segs.map(([a, b, c, d]) => [a + OFF.x, b + OFF.z, c + OFF.x, d + OFF.z]),
     spawn: new Vector3(0, 0, 7).add(OFF), exitPos: new Vector3(0, 0, 1.2).add(OFF), lights, mode: 'rave', dancers,
-    glowSkip: () => [...beams.map(b => b.m), ...hazes, shaftMesh, wash, halo, floor],
+    glowSkip: () => [...beams.map(b => b.m), ...hazes, shaftMesh, wash, halo, floor, ...cMeshes],
     meshes: { ledW, ledR, wash, halo, shaftMesh, hazes, beams, crowd: [...cMeshes], CVL: CV ? CV.list : null, sideGlassM, altarGlassM, roseM, ledWM, ledRM, bwM, brM, washM, haloM, beamM, blastM, exitM, beamRM },
     danceFloor: (p) => p.z - OFF.z > 4 && p.z - OFF.z < 34 && Math.abs(p.x - OFF.x) < AW,
     CV,
@@ -421,14 +421,17 @@ export function updateTempleInterior(T, t, dt) {
   const M = T.meshes;
   // crowd: pick the baked pose on the half-beat, bounce on the kick
   if (M.CVL) {
-    for (const it of M.CVL) { it.n = 0; if (it.hn !== undefined) it.hn = 0; }
+    for (const it of M.CVL) { it.n = 0; it.fn = 0; }
+    const cp = T.cam ? T.cam.position : null, rp = T.root.position, FAR2 = 13 * 13;
     T.crowd.forEach((c) => {
       const pose = Math.floor(beat * 2 + c.ph) % T.CV.poses; const it = T.CV.list[c.v * T.CV.poses + pose];
       const b = Math.max(0, Math.sin((beat + c.ph) * Math.PI)); const sway = Math.sin(beat * 0.5 * Math.PI + c.ph) * 0.12;
       Quaternion.FromEulerAnglesToRef(0, c.yaw + sway * 0.5, 0, q4); s4.set(c.s, c.s, c.s); v4.set(c.x, b * 0.06, c.z); Matrix.ComposeToRef(s4, q4, v4, m4);
-      m4.copyToArray(it.body._buf, it.n * 16); if (it.head) m4.copyToArray(it.head._buf, it.n * 16); it.n++;
+      const far = it.farReady && cp && ((c.x + rp.x - cp.x) ** 2 + (c.z + rp.z - cp.z) ** 2) > FAR2;
+      if (far) { m4.copyToArray(it.far._buf, it.fn * 16); it.fn++; } else { m4.copyToArray(it.body._buf, it.n * 16); it.n++; }
+      if (it.head) { m4.copyToArray(it.head._buf, (it.hn2 = (it.hn2 || 0)) * 16); it.hn2++; }
     });
-    for (const it of M.CVL) { it.body.thinInstanceCount = it.n; it.body.thinInstanceBufferUpdated('matrix'); if (it.head) { it.head.thinInstanceCount = it.n; it.head.thinInstanceBufferUpdated('matrix'); } }
+    for (const it of M.CVL) { it.body.thinInstanceCount = it.n; it.body.thinInstanceBufferUpdated('matrix'); if (it.far) { it.far.thinInstanceCount = it.fn; it.far.thinInstanceBufferUpdated('matrix'); } if (it.head) { it.head.thinInstanceCount = it.hn2 || 0; it.head.thinInstanceBufferUpdated('matrix'); it.hn2 = 0; } }
   }
   // lights
   const strobe = (Math.floor(beat) % 16) >= 14 ? (Math.floor(beat * 4) % 2) : 0;

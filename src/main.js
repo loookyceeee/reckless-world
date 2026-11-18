@@ -30,6 +30,7 @@ import '@babylonjs/core/Engines/WebGPU/Extensions/engine.dynamicTexture'; import
 import '@babylonjs/core/Rendering/edgesRenderer';
 import '@babylonjs/core/Animations/animatable';
 import { buildCity, updateCity } from './city.js';
+import { chunkStatic, freezeMaterials, TIERS } from './perf.js';
 import { buildTempleExterior, updateTempleExterior, buildTempleInterior, setTempleMode, updateTempleInterior, INTERIOR_ORIGIN } from './temple.js';
 import { createAvatar, animateAvatar, OUTFITS, loadAnims, bakeCrowdVariants } from './character.js';
 import { buildGraph, buildTraffic, updateTraffic } from './traffic.js';
@@ -86,9 +87,13 @@ async function start() {
   await loadAnims(import.meta.env.BASE_URL + 'data/anims.json').catch(e => console.warn('anims', e));
 
   const city = await buildCity(scene, { low: LOW }); bar(55);
+  // perf: split merged + thin-instanced static city meshes into 96 m cells, freeze them, distance-cull per tier
+  const culler = Q.has('nochunk') ? null : chunkStatic(city.root, { cell: Number(Q.get('cell')) || 128, skip: city.beacons.map(b => b.m.name) });
+  freezeMaterials(scene, ['trunk', 'leaf', 'furn', 'lampPoleM', 'pave', 'roads', 'pavement', 'markings']);
   const templeB = city.buildings.find(b => b.temple);
   const ext = buildTempleExterior(scene, templeB, city.grid); ext.root.parent = city.root;
-  const T = buildTempleInterior(scene, { glow, low: LOW, bakeCrowd: () => bakeCrowdVariants(scene, { lod: LOW ? 0.28 : 0.33 }), makeDancer: (i) => { const a = createAvatar(scene, { name: 'dancer' + i, outfit: ['skate', 'stan', 'base', 'stanfull', 'skate', 'base'][i], decals: true, lod: 0.5 }); return a; } });
+  const T = buildTempleInterior(scene, { glow, low: LOW, bakeCrowd: () => bakeCrowdVariants(scene, { lod: LOW ? 0.28 : 0.33, simplify: Q.has('nosimp') ? 0 : 0.3 }), makeDancer: (i) => { const a = createAvatar(scene, { name: 'dancer' + i, outfit: ['skate', 'stan', 'base', 'stanfull', 'skate', 'base'][i], decals: true, lod: 0.5 }); return a; } });
+  T.cam = cam;
   T.root.setEnabled(false);
   const tGrid = new SegGrid(8); for (const s of T.segs) tGrid.add(s[0], s[1], s[2], s[3], 99);
   const LM = buildLandmarks(scene, city, city.grid); LM.root.parent = city.root;
@@ -127,7 +132,7 @@ async function start() {
     if (!best) return null; const m = toMesh('poster-' + sp.id, plane(1.2, 1.7), scene, posterM); m.position.set(best.x + best.nx * 0.05, 2.1, best.z + best.nz * 0.05); m.rotation.y = Math.atan2(-best.nx, -best.nz); m.parent = city.root; m.setEnabled(!!localStorage.getItem('rw.poster.' + sp.id));
     return { ...sp, mesh: m, ix: best.x + best.nx * 1.4, iz: best.z + best.nz * 1.4 }; }).filter(Boolean);
 
-  if (glow) { for (const n of ['walls', 'roads', 'roofs', 'ground', 'pool', 'poolLED', 'canopy', 'trunk', 'lampPole', 'hlBeam', 'pavement', 'markings', 'puddles']) { const me = scene.getMeshByName(n); if (me) glow.addExcludedMesh(me); }
+  if (glow) { const GX = ['walls', 'roads', 'roofs', 'ground', 'pool', 'poolLED', 'canopy', 'trunk', 'lampPole', 'hlBeam', 'pavement', 'markings', 'puddles', 'bollards', 'railings', 'signalPoles', 'beaconPoles', 'kerbs']; for (const me of scene.meshes) { const base = ((me.metadata && me.metadata.chunkOf) || me.name).split(','); if (base.some(b => GX.includes(b))) glow.addExcludedMesh(me); }
     for (const me of scene.meshes) if (/-(body|head|skate|stan|barrel|stanb)$/.test(me.name) || me.name.startsWith('car-') || me.name === 'ci') glow.addExcludedMesh(me); }
   if (glow) for (const me of T.glowSkip()) glow.addExcludedMesh(me);
   let mapBase = buildMinimapBase(city);
@@ -169,7 +174,7 @@ async function start() {
   });
   const exitTemple = async () => fadeTo(async () => {
     app.inside = false; T.root.setEnabled(false); Object.values(T.lights).forEach(l => l.setEnabled(false)); cityLights.forEach(l => l.setEnabled(true)); if (glow) glow.intensity = 0.7; if (pipe) pipe.imageProcessing.exposure = 1.4;
-    city.root.setEnabled(true); traffic.cars.forEach(c => c.node.setEnabled(true)); traffic.parked.forEach(c => c.node.setEnabled(true)); traffic.peds.forEach(p => p.av.root.setEnabled(true));
+    city.root.setEnabled(true); traffic.cars.forEach(c => c.node.setEnabled(true)); traffic.parked.forEach(c => c.node.setEnabled(true)); traffic.peds.forEach(p => { p.av.root.setEnabled(true); p._on = undefined; });
     scene.clearColor = NIGHT; scene.fogDensity = 0.0028; scene.fogColor = new Color3(0.1, 0.105, 0.17); hud.interior(false);
     P.x = ext.doorPos.x - Math.sin(ext.yaw) * 2.5; P.z = ext.doorPos.z - Math.cos(ext.yaw) * 2.5; P.heading = ext.yaw + Math.PI; C.yaw = P.heading; C.pitch = 0.2; C.dist = 6.2;
     await EV.raveExit();
@@ -207,6 +212,12 @@ async function start() {
   const dX = ext.doorPos.x, dZ = ext.doorPos.z; const _sl = Math.hypot(ext.spawn.x - dX, ext.spawn.z - dZ) || 1; const fwx = (ext.spawn.x - dX) / _sl, fwz = (ext.spawn.z - dZ) / _sl;
   const KP = [[420, 120, -520], [250, 55, -330], [60, 34, -120], [-70, 20, 20], [-200, 32, 130], [dX + fwx * 120, 38, dZ + fwz * 120], [dX + fwx * 44, 7.5, dZ + fwz * 44]].map(a => new Vector3(...a));
   const KT = [[146, 30, -249], [146, 45, -249], [-40, 6, -10], [-200, 6, 120], [dX, 6, dZ], [dX, 8, dZ], [dX, 8.5, dZ]].map(a => new Vector3(...a));
+  // auto quality tier (low/med/high): ?q=low|med|high pins it, otherwise start med on phones / high on desktop and adapt to measured FPS
+  let tier = Q.get('q') || (LOW ? 'low' : isTouch ? 'med' : 'high'); if (!TIERS[tier]) tier = 'high'; const autoTier = !Q.get('q') && !Q.has('webgl'); let tierT = 0, tierF = [], tierUp = false, cullT = 0;
+  const baseScale = 1 / Math.min(1.5, devicePixelRatio || 1);
+  function setTier(n) { tier = n; const T0 = TIERS[n]; engine.setHardwareScalingLevel(T0.scale === 1 ? baseScale : Math.max(baseScale, isTouch ? T0.scale : Math.min(T0.scale, 1.25)));
+    if (pipe) { pipe.bloomEnabled = T0.bloom; pipe.grainEnabled = T0.grain; } if (glow) glow.isEnabled = T0.glow; window.__rw.tier = n; console.log('[rw] quality tier', n); }
+  setTier(tier);
   const FLY = 26; let titleT0 = 0;
   const flyover = (s) => { const u = Math.min(1, Math.max(0, s / FLY)); const e = u < 0.5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2; const n = KP.length - 1, x = e * n, i = Math.min(n - 1, Math.floor(x)), f = x - i;
     const g = (A, j) => A[Math.max(0, Math.min(n, j))]; return { p: Vector3.CatmullRom(g(KP, i - 1), g(KP, i), g(KP, i + 1), g(KP, i + 2), f), t: Vector3.CatmullRom(g(KT, i - 1), g(KT, i), g(KT, i + 1), g(KT, i + 2), f) }; };
@@ -257,7 +268,11 @@ async function start() {
       const tv = VENUES[0]; state.objective = app.inside ? '' : `▲ THE TEMPLE <b>${Math.round(Math.hypot(P.x - ext.doorPos.x, P.z - ext.doorPos.z))}M</b>`; }
     hud.update(dt, { x: P.x, z: P.z, heading: P.heading, camYaw: C.yaw, inside: app.inside, lx: P.x - INTERIOR_ORIGIN.x, lz: P.z - INTERIOR_ORIGIN.z, ...state });
     fpsT += dt; if (fpsT > 0.5) { fpsT = 0; hud.fps(Math.round(engine.getFps())); }
+    cullT -= dt; if (culler && cullT <= 0 && !app.inside) { cullT = 0.25; culler.setDist(app.title ? 900 : TIERS[tier].dist); culler.update(cam.position); const pd = TIERS[tier].dist * 0.3; for (const p of traffic.peds) { const on = Math.hypot(p.av.root.position.x - cam.position.x, p.av.root.position.z - cam.position.z) < pd; if (p._on !== on) { p._on = on; p.av.root.setEnabled(on); } } }
+    if (!app.title && !app.inside && autoTier) { tierT += engine.getDeltaTime() / 1000; tierF.push(engine.getFps()); if (tierT > 4) { const avg = tierF.reduce((a, b) => a + b, 0) / tierF.length; tierF = []; tierT = 0;
+      const order = ['low', 'med', 'high'], i = order.indexOf(tier); if (avg < 24 && i > 0) setTier(order[i - 1]); else if (avg > 55 && i < 2 && !tierUp) { tierUp = true; setTier(order[i + 1]); } } }
   });
+  window.__rw.setTier = setTier; window.__rw.culler = culler;
   window.__rw.manual = (on) => { if (on) engine.stopRenderLoop(); else engine.runRenderLoop(() => scene.render()); }; window.__rw.renderFrame = (n = 1) => { for (let i = 0; i < n; i++) scene.render(); return true; };
   window.__rw.inst = new SceneInstrumentation(scene); window.__rw.inst.captureFrameTime = true;
   engine.runRenderLoop(() => scene.render());
