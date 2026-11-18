@@ -7,7 +7,16 @@ LAT0, LON0 = 54.6050, -5.9310
 KX = math.cos(math.radians(LAT0)) * 111320.0; KZ = 110540.0
 X0, X1, Z0, Z1, M = -830, 660, -1520, 660, 60
 def xz(c): return ((c[0] - LON0) * KX, (c[1] - LAT0) * KZ)
-def inside(x, z): return X0 - M < x < X1 + M and Z0 - M < z < Z1 + M
+
+# Lisburn Road corridor down to LOCATION X (149 Lisburn Rd): Shaftesbury Sq -> Bradbury Pl -> Lisburn Rd
+CORR = [(-215, -1480), (-210, -1714), (-268, -1839), (-658, -2177), (-914, -2393), (-1010, -2475)]
+CW = 115
+def in_corr(x, z, m=0):
+    for (ax, az), (bx, bz) in zip(CORR, CORR[1:]):
+        dx, dz = bx - ax, bz - az; t = max(0, min(1, ((x - ax) * dx + (z - az) * dz) / (dx * dx + dz * dz)))
+        if (x - ax - t * dx) ** 2 + (z - az - t * dz) ** 2 < (CW + m) ** 2: return True
+    return False
+def inside(x, z): return (X0 - M < x < X1 + M and Z0 - M < z < Z1 + M) or in_corr(x, z, 20)
 def load(n): return json.load(open(f'{G}/{n}.geojson'))['features']
 def f(v, d):
     try: return float(str(v).split(';')[0])

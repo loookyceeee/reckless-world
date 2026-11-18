@@ -10,7 +10,16 @@ SRC = sys.argv[1] if len(sys.argv) > 1 else 'data/osm.json'
 # World extent in local metres (x east, z north). Extended south to City Hall, Weavers Cross and Bankmore.
 X0, X1, Z0, Z1 = -830, 660, -1520, 660
 d = json.load(open(SRC))
-def inside(x, z, m=0): return X0 - m < x < X1 + m and Z0 - m < z < Z1 + m
+
+# Lisburn Road corridor down to LOCATION X (149 Lisburn Rd): Shaftesbury Sq -> Bradbury Pl -> Lisburn Rd
+CORR = [(-215, -1480), (-210, -1714), (-268, -1839), (-658, -2177), (-914, -2393), (-1010, -2475)]
+CW = 115
+def in_corr(x, z, m=0):
+    for (ax, az), (bx, bz) in zip(CORR, CORR[1:]):
+        dx, dz = bx - ax, bz - az; t = max(0, min(1, ((x - ax) * dx + (z - az) * dz) / (dx * dx + dz * dz)))
+        if (x - ax - t * dx) ** 2 + (z - az - t * dz) ** 2 < (CW + m) ** 2: return True
+    return False
+def inside(x, z, m=0): return (X0 - m < x < X1 + m and Z0 - m < z < Z1 + m) or in_corr(x, z, m)
 nodes = {e['id']: (e['lat'], e['lon']) for e in d['elements'] if e['type'] == 'node'}
 DRIVE = {'motorway':(3,12),'motorway_link':(1,7),'trunk':(2,11),'trunk_link':(1,7),'primary':(2,10),'primary_link':(1,7),
          'secondary':(2,9),'secondary_link':(1,7),'tertiary':(2,8),'tertiary_link':(1,6),'unclassified':(1,7),'residential':(1,7),

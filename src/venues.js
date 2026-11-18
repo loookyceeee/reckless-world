@@ -8,7 +8,7 @@ export const VENUES = [
   { id: 'thompsons', name: 'THOMPSONS', sub: "THOMPSON'S GARAGE · PATTERSONS PLACE", lat: 54.59725, lon: -5.92905, pin: 'G', inSlice: true },
   { id: 'terminus', name: 'TERMINUS', sub: 'HALT · WEAVERS CROSS · 10 GLENGALL ST', lat: 54.5953385, lon: -5.9363266, pin: 'U', inSlice: true },
   { id: 'warehouse', name: 'THE WARE-HOUSE', sub: 'EST. · NOSTALGIA · 1 BANKMORE SQ (PALM HOUSE / THREE SHEETS SITE)', lat: 54.592256, lon: -5.930879, pin: 'H', inSlice: true, nostalgia: true },
-  { id: 'locationx', name: 'LOCATION X', sub: '149 LISBURN RD', lat: 54.583353, lon: -5.945171, pin: 'X', inSlice: false },
+  { id: 'locationx', name: 'LOCATION X', sub: '149 LISBURN RD', lat: 54.583353, lon: -5.945171, pin: 'X', inSlice: true },
 ].map(v => ({ ...v, ...ll2xz(v.lat, v.lon) }));
 // Districts for the GTA-style area label
 export const DISTRICTS = [
@@ -23,6 +23,9 @@ export const DISTRICTS = [
   { name: 'LINEN QUARTER', x: -130, z: -1170, r: 190 },
   { name: 'WEAVERS CROSS', x: -390, z: -1150, r: 190 },
   { name: 'DUBLIN ROAD', x: 10, z: -1420, r: 190 },
+  { name: 'SHAFTESBURY SQUARE', x: -215, z: -1720, r: 130 },
+  { name: 'LISBURN ROAD', x: -650, z: -2170, r: 260 },
+  { name: 'LISBURN ROAD', x: -914, z: -2393, r: 200 },
 ];
 // Poster spots (wheat-paste walls) — logs poster_placed test events only.
 export const POSTER_SPOTS = [

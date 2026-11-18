@@ -148,7 +148,7 @@ async function start() {
     const s = toMesh('tSign', plane(6, 1.1), scene, sm); s.position.set(ext.doorPos.x, 4.6, ext.doorPos.z); s.position.addInPlace(new Vector3(Math.sin(ext.yaw), 0, Math.cos(ext.yaw)).scale(0.9)); s.rotation.y = ext.yaw; s.parent = city.root; }
   // other Reckless venues in the world: fascia sign on the real facade nearest the venue point + entrance ring + prompt
   const venueDoors = [];
-  for (const v of VENUES.filter(v => v.inSlice && ['thompsons', 'terminus', 'warehouse'].includes(v.id))) {
+  for (const v of VENUES.filter(v => v.inSlice && ['thompsons', 'terminus', 'warehouse', 'locationx'].includes(v.id))) {
     let best = null, bd = 1e9; for (const sg of city.grid.near(v.x, v.z, 45)) { const dx = sg.x1 - sg.x0, dz = sg.z1 - sg.z0, L2 = dx * dx + dz * dz; if (L2 < 30 || sg.h < 3 || sg.h === 30.5) continue; const L = Math.sqrt(L2), m0 = Math.min(0.45, 3.2 / L);
       const t = Math.max(m0, Math.min(1 - m0, ((v.x - sg.x0) * dx + (v.z - sg.z0) * dz) / L2)); const px = sg.x0 + dx * t, pz = sg.z0 + dz * t, d = Math.hypot(px - v.x, pz - v.z);
       if (d < bd) { let nx = -dz / L, nz = dx / L; if ((px - v.x) * nx + (pz - v.z) * nz < 0) { nx = -nx; nz = -nz; } bd = d; best = { wx: px, wz: pz, nx, nz, h: sg.h }; } }
