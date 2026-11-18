@@ -32,6 +32,7 @@ import '@babylonjs/core/Animations/animatable';
 import { buildCity, updateCity } from './city.js';
 import { chunkStatic, freezeMaterials, TIERS } from './perf.js';
 import { buildSky, applyWet } from './sky.js';
+import { buildFlavour } from './flavour.js';
 import { buildTempleExterior, updateTempleExterior, buildTempleInterior, setTempleMode, updateTempleInterior, INTERIOR_ORIGIN } from './temple.js';
 import { createAvatar, animateAvatar, OUTFITS, loadAnims, bakeCrowdVariants } from './character.js';
 import { buildGraph, buildTraffic, updateTraffic } from './traffic.js';
@@ -127,12 +128,12 @@ async function start() {
     const s = toMesh('whSign', plane(9, 1.7), scene, sm); s.position.set(whDoor.wx + whDoor.nx * 0.3, 6.5, whDoor.wz + whDoor.nz * 0.3); s.rotation.y = Math.atan2(-whDoor.nx, -whDoor.nz); s.parent = city.root; }
   { const sm = new StandardMaterial('tSign', scene); sm.emissiveTexture = signTex('THE TEMPLE'); sm.disableLighting = true; sm.backFaceCulling = false;
     const s = toMesh('tSign', plane(6, 1.1), scene, sm); s.position.set(ext.doorPos.x, 4.6, ext.doorPos.z); s.position.addInPlace(new Vector3(Math.sin(ext.yaw), 0, Math.cos(ext.yaw)).scale(0.9)); s.rotation.y = ext.yaw; s.parent = city.root; }
+  const FL = buildFlavour(scene, city, { low: LOW });
   // posters: snap each spot to the nearest wall
   const posterM = new StandardMaterial('poster', scene); posterM.emissiveTexture = signTex('RECKLESS', 512, 720); posterM.disableLighting = true;
   { const c = posterM.emissiveTexture.getContext(); c.fillStyle = '#000'; c.fillRect(0, 0, 512, 720); const img = new Image(); img.src = import.meta.env.BASE_URL + 'img/logo.png'; await img.decode().catch(() => {}); c.drawImage(img, 56, 140, 400, 347); c.fillStyle = '#fff'; c.font = '800 54px Unbounded'; c.textAlign = 'center'; c.fillText('RECKLESS', 256, 580); c.font = '600 30px "DM Sans"'; c.fillText('BELFAST · THE TEMPLE', 256, 640); posterM.emissiveTexture.update(); }
-  posterM.emissiveTexture.uScale = -1;
   const posters = POSTER_SPOTS.map(sp => { let best = null, bd = 1e9; for (const s of city.grid.near(sp.x, sp.z, 40)) { const dx = s.x1 - s.x0, dz = s.z1 - s.z0, L2 = dx * dx + dz * dz; if (L2 < 4 || s.h === 30.5 || s.h < 3) continue; let t = ((sp.x - s.x0) * dx + (sp.z - s.z0) * dz) / L2; t = Math.max(0.2, Math.min(0.8, t)); const px = s.x0 + dx * t, pz = s.z0 + dz * t; const d = Math.hypot(px - sp.x, pz - sp.z); if (d < bd) { bd = d; const L = Math.sqrt(L2); best = { x: px, z: pz, nx: dz / L, nz: -dx / L }; } }
-    if (!best) return null; const m = toMesh('poster-' + sp.id, plane(1.2, 1.7), scene, posterM); m.position.set(best.x + best.nx * 0.05, 2.1, best.z + best.nz * 0.05); m.rotation.y = Math.atan2(-best.nx, -best.nz); m.parent = city.root; m.setEnabled(!!localStorage.getItem('rw.poster.' + sp.id));
+    if (!best) return null; const m = toMesh('poster-' + sp.id, plane(1.2, 1.7), scene, posterM); m.position.set(best.x + best.nx * 0.05, 2.1, best.z + best.nz * 0.05); m.rotation.y = Math.atan2(-best.nx, -best.nz); m.scaling.x = -1; m.parent = city.root; m.setEnabled(!!localStorage.getItem('rw.poster.' + sp.id));
     return { ...sp, mesh: m, ix: best.x + best.nx * 1.4, iz: best.z + best.nz * 1.4 }; }).filter(Boolean);
 
   if (glow) { const GX = ['walls', 'roads', 'roofs', 'ground', 'pool', 'poolLED', 'canopy', 'trunk', 'lampPole', 'hlBeam', 'pavement', 'markings', 'puddles', 'bollards', 'railings', 'signalPoles', 'beaconPoles', 'kerbs']; for (const me of scene.meshes) { const base = ((me.metadata && me.metadata.chunkOf) || me.name).split(','); if (base.some(b => GX.includes(b))) glow.addExcludedMesh(me); }
@@ -169,7 +170,7 @@ async function start() {
   const fadeTo = async (fn) => { hud.fade(true); await new Promise(r => setTimeout(r, 380)); await fn(); await new Promise(r => setTimeout(r, 120)); hud.fade(false); };
   const cityLights = [hemi, moon, ext.light];
   const enterTemple = async () => fadeTo(() => {
-    app.inside = true; city.root.setEnabled(false); SKY.sky.setEnabled(false); traffic.cars.forEach(c => c.node.setEnabled(false)); traffic.parked.forEach(c => c.node.setEnabled(false)); traffic.peds.forEach(p => p.av.root.setEnabled(false));
+    app.inside = true; city.root.setEnabled(false); SKY.sky.setEnabled(false); FL.setEnabled(false); traffic.cars.forEach(c => c.node.setEnabled(false)); traffic.parked.forEach(c => c.node.setEnabled(false)); traffic.peds.forEach(p => p.av.root.setEnabled(false));
     cityLights.forEach(l => l.setEnabled(false)); Object.values(T.lights).forEach(l => l.setEnabled(true)); T.root.setEnabled(true); if (glow) glow.intensity = 0.55; if (pipe) pipe.imageProcessing.exposure = 2.0;
     setTempleMode(T, scene, Q.get('lights') === 'day' ? 'day' : 'rave'); hud.interior(true, T.mode);
     P.x = T.spawn.x; P.z = T.spawn.z; P.heading = 0; C.yaw = 0; C.pitch = 0.16; C.dist = 4.6; C.curDist = 4.6; // hero view: the chancel arch
@@ -177,7 +178,7 @@ async function start() {
   });
   const exitTemple = async () => fadeTo(async () => {
     app.inside = false; T.root.setEnabled(false); Object.values(T.lights).forEach(l => l.setEnabled(false)); cityLights.forEach(l => l.setEnabled(true)); if (glow) glow.intensity = 0.7; if (pipe) pipe.imageProcessing.exposure = 1.4;
-    city.root.setEnabled(true); SKY.sky.setEnabled(true); traffic.cars.forEach(c => c.node.setEnabled(true)); traffic.parked.forEach(c => c.node.setEnabled(true)); traffic.peds.forEach(p => { p.av.root.setEnabled(true); p._on = undefined; });
+    city.root.setEnabled(true); SKY.sky.setEnabled(true); FL.setEnabled(true); traffic.cars.forEach(c => c.node.setEnabled(true)); traffic.parked.forEach(c => c.node.setEnabled(true)); traffic.peds.forEach(p => { p.av.root.setEnabled(true); p._on = undefined; });
     scene.clearColor = NIGHT; scene.fogDensity = 0.0028; scene.fogColor = new Color3(0.1, 0.105, 0.17); hud.interior(false);
     P.x = ext.doorPos.x - Math.sin(ext.yaw) * 2.5; P.z = ext.doorPos.z - Math.cos(ext.yaw) * 2.5; P.heading = ext.yaw + Math.PI; C.yaw = P.heading; C.pitch = 0.2; C.dist = 6.2;
     await EV.raveExit();
@@ -275,7 +276,7 @@ async function start() {
     if (!app.title && !app.inside && autoTier) { tierT += engine.getDeltaTime() / 1000; tierF.push(engine.getFps()); if (tierT > 4) { const avg = tierF.reduce((a, b) => a + b, 0) / tierF.length; tierF = []; tierT = 0;
       const order = ['low', 'med', 'high'], i = order.indexOf(tier); if (avg < 24 && i > 0) setTier(order[i - 1]); else if (avg > 55 && i < 2 && !tierUp) { tierUp = true; setTier(order[i + 1]); } } }
   });
-  window.__rw.setTier = setTier; window.__rw.culler = culler;
+  window.__rw.setTier = setTier; window.__rw.culler = culler; window.__rw.FL = FL;
   window.__rw.manual = (on) => { if (on) engine.stopRenderLoop(); else engine.runRenderLoop(() => scene.render()); }; window.__rw.renderFrame = (n = 1) => { for (let i = 0; i < n; i++) scene.render(); return true; };
   window.__rw.inst = new SceneInstrumentation(scene); window.__rw.inst.captureFrameTime = true;
   engine.runRenderLoop(() => scene.render());
