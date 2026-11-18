@@ -47,7 +47,7 @@ export function createHUD(app) {
   hud.innerHTML = `
   <div class="brand"><img src="${import.meta.env.BASE_URL}img/logo.png" alt="Reckless"/><div><b>RECKLESS WORLD</b><span>BELFAST · PROTOTYPE 0.1</span></div></div>
   <div class="topright"><div class="fps" id="fps">— FPS</div><div class="live" id="live"><i></i><span>RAVE MODE · DEMO</span> <a href="https://www.recklessraves.co.uk" target="_blank" rel="noopener">TICKETS</a></div><div class="objective" id="objective"></div><a class="np" id="np" target="_blank" rel="noopener"></a></div>
-  <div class="mapwrap"><canvas id="minimap" width="220" height="220"></canvas><div class="street" id="street"></div><div class="district" id="district"></div></div>
+  <div class="mapwrap"><canvas id="minimap" width="220" height="220"></canvas><canvas id="stam" width="240" height="240"></canvas><div class="street" id="street"></div><div class="district" id="district"></div></div>
   <div class="prompt" id="prompt"></div>
   <div class="toast" id="toast"></div>
   <div class="btns"><button data-k="m">MAP</button><button data-k="o">WARDROBE</button><button data-k="f">DANCE</button><button data-k="p">PHOTO</button><button data-k="c">CREDITS</button><button data-k="n" id="sndBtn">SOUND: OFF</button><button data-k="l" id="lightsBtn" class="hide">LIGHTS: RAVE</button></div>
@@ -59,7 +59,7 @@ export function createHUD(app) {
   const open = (html, cls = '') => { overlay.className = 'overlay ' + cls; overlay.innerHTML = `<div class="panel">${html}<button class="close">CLOSE</button></div>`; overlay.querySelector('.close').onclick = close; app.paused = true; };
   const close = () => { overlay.className = 'overlay hidden'; overlay.innerHTML = ''; app.paused = false; };
   const isOpen = () => !overlay.classList.contains('hidden');
-  const mm = $('minimap'), mg = mm.getContext('2d'); const base = app.mapBase;
+  let stamVis = 0; const mm = $('minimap'), mg = mm.getContext('2d'); const base = app.mapBase;
   const dpr = Math.min(2, window.devicePixelRatio || 1); const MS = 220; mm.width = mm.height = MS * dpr; mg.scale(dpr, dpr);
   let toastT = 0;
   const api = {
@@ -71,6 +71,10 @@ export function createHUD(app) {
     fps(v) { $('fps').textContent = v + ' FPS'; },
     interior(on, mode) { $('lightsBtn').classList.toggle('hide', !on); $('lightsBtn').textContent = 'LIGHTS: ' + (mode === 'day' ? 'DAY' : 'RAVE'); hud.classList.toggle('inside', on); },
     update(dt, st) {
+      // ---- stamina half-ring under the minimap: invisible when full, fades 1.2 s after refilling, pulses red when emptied ----
+      { const c = $('stam'); if (c) { const g = c.getContext('2d'); const v = st.stamina == null ? 1 : st.stamina; stamVis = v < 0.999 ? 1 : Math.max(0, stamVis - dt / 1.2);
+        g.clearRect(0, 0, 240, 240); if (stamVis > 0) { g.globalAlpha = stamVis; g.lineWidth = 4; g.lineCap = 'round'; g.strokeStyle = 'rgba(255,255,255,0.22)'; g.beginPath(); g.arc(120, 120, 114, Math.PI, 0, true); g.stroke();
+          g.strokeStyle = st.stamFlash > 0 && Math.floor(st.stamFlash * 10) % 2 === 0 ? '#ff2a2a' : '#fff'; g.beginPath(); g.arc(120, 120, 114, Math.PI, Math.PI - Math.PI * v, true); g.stroke(); g.globalAlpha = 1; } } }
       // ---- minimap ----
       const R = MS / 2, zoom = st.inside ? 6 : 0.62;
       mg.save(); mg.clearRect(0, 0, MS, MS); mg.beginPath(); mg.arc(R, R, R - 3, 0, Math.PI * 2); mg.clip();

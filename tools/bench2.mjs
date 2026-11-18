@@ -1,0 +1,13 @@
+import puppeteer from 'puppeteer-core';
+const browser = await puppeteer.launch({ executablePath: '/usr/bin/google-chrome', headless: 'new', args: ['--no-sandbox', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
+const page = await browser.newPage(); await page.setViewport({ width: 1280, height: 720 });
+page.on('pageerror', e => console.log('PE', e.message));
+await page.goto('http://localhost:4173/?webgl' + (process.env.Q || ''), { waitUntil: 'load' });
+await page.waitForFunction(() => window.__rw && window.__rw.ready, { timeout: 120000 });
+const t0 = Date.now();
+const r = await page.evaluate(() => new Promise(res => { const s = __rw.scene; let n = 0, tb = 0, tr = 0; const o1 = s.onBeforeRenderObservable.add(() => { s.__t = performance.now(); }, -1, true); const o2 = s.onBeforeRenderObservable.add(() => { tb += performance.now() - s.__t; }); const o3 = s.onAfterRenderObservable.add(() => { n++; }); const t0 = performance.now(); setTimeout(() => res({ frames: n, ms: performance.now() - t0, beforeMs: tb / Math.max(1, n) }), 4000); }));
+console.log('title', JSON.stringify(r), Date.now() - t0);
+await page.evaluate(() => document.getElementById('play').click());
+const r2 = await page.evaluate(() => new Promise(res => { const s = __rw.scene; let n = 0, tb = 0; s.onBeforeRenderObservable.add(() => { s.__t = performance.now(); }, -1, true); s.onBeforeRenderObservable.add(() => { tb += performance.now() - s.__t; }); s.onAfterRenderObservable.add(() => { n++; }); const t0 = performance.now(); setTimeout(() => res({ frames: n, ms: performance.now() - t0, beforeMs: tb / Math.max(1, n) }), 6000); }));
+console.log('play', JSON.stringify(r2));
+await browser.close();
