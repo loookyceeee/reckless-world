@@ -132,7 +132,7 @@ export async function buildCity(scene, { low = false } = {}) {
   const R = rng(42);
   // ---------- ground ----------
   const gm = new StandardMaterial('ground', scene); gm.diffuseColor = hex('#2b2f2a'); gm.specularColor = new Color3(0.05, 0.05, 0.08);
-  const ground = toMesh('ground', xf(box(2400, 0.2, 2400), { t: [0, -0.22, 0] }), scene, gm); ground.parent = root;
+  const ground = toMesh('ground', xf(box(2200, 0.2, 2900), { t: [-85, -0.22, -430] }), scene, gm); ground.parent = root;
   // ---------- buildings ----------
   const { d, e } = windowTextures(scene);
   const wm = new StandardMaterial('walls', scene); wm.diffuseTexture = d; wm.emissiveTexture = e; wm.specularColor = new Color3(0.12, 0.12, 0.14); wm.specularPower = 24; wm.backFaceCulling = false;
