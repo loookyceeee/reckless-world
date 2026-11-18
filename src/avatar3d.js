@@ -17,18 +17,19 @@ import { PointLight } from '@babylonjs/core/Lights/pointLight';
 const KINDS = ['tee', 'crop', 'long', 'hoodie', 'jeans', 'pants', 'cuffed', 'shorts'];
 const SKIN = Color3.FromHexString('#ead3cb'), HAIR = Color3.FromHexString('#141214');
 
-export async function loadAvatar3D(scene, { name = 'player', base = import.meta.env.BASE_URL } = {}) {
+export async function loadAvatar3D(scene, { name = 'player', base = import.meta.env.BASE_URL, kind = 'male' } = {}) {
+  const FEM = kind === 'female';
   // meshopt-compressed glb (tools/blender/build_avatar.py -> gltf-transform resample/prune/dedup/meshopt), served as .json so the
   // host brotli-compresses it (~240 KB on the wire); decoder is the local meshoptimizer build, no CDN
   MeshoptCompression.Configuration.decoder.url = base + 'models/meshopt_decoder.js';
-  const res = await SceneLoader.ImportMeshAsync('', base + 'models/', 'avatar.glb.json', scene, null, '.glb');
+  const res = await SceneLoader.ImportMeshAsync('', base + 'models/', FEM ? 'avatar_f.glb.json' : 'avatar.glb.json', scene, null, '.glb');
   const root = new TransformNode(name, scene);
   const gltfRoot = res.meshes[0]; gltfRoot.parent = root; gltfRoot.name = name + '-gltf';
   const byName = {}; for (const m of res.meshes) { if (m === gltfRoot) continue; const n = m.name.replace(/_primitive\d+$/, '').split('.')[0]; (byName[n] = byName[n] || []).push(m); m.isPickable = false; m.alwaysSelectAsActiveMesh = true; m.name = 'av3d-' + n; }
   // Materials: every visible part carries a texture projected from the app's own crew renders (tools/bake_avatar_tex.py),
   // so face, hair, tee print and stonewash denim match the app. The renders already hold soft studio shading, so the
   // material lights them gently: half-Lambert-like fill through emissive (wrap lighting), low specular, no glow (main.js).
-  const TEX = base + 'models/tex/';
+  const TEX = base + (FEM ? 'models/tex_f/' : 'models/tex/');
   const tex = (f, onErr) => { const t = new Texture(TEX + f + '.webp', scene, false, false, Texture.TRILINEAR_SAMPLINGMODE, null, () => onErr && onErr()); t.anisotropicFilteringLevel = 4; return t; };
   const mat = (id, col, { rough = 0.75, t = null, fill = 0.42 } = {}) => { const m = new StandardMaterial('av3d-' + id, scene); m.diffuseColor = col.clone(); const sp = (1 - rough) * 0.3; m.specularColor = new Color3(sp, sp, sp); m.specularPower = 28; m.ambientColor = new Color3(0.3, 0.3, 0.32);
     if (t) { m.diffuseTexture = t; m.emissiveTexture = t; m.emissiveColor = new Color3(fill, fill, fill); m.diffuseColor = new Color3(0.78, 0.78, 0.78); } return m; };
@@ -39,8 +40,12 @@ export async function loadAvatar3D(scene, { name = 'player', base = import.meta.
   // keep the loader's winding (glTF is right-handed): new materials must copy sideOrientation or every shell renders inside-out
   const SO = (res.meshes.find(m => m.material) || {}).material?.sideOrientation;
   const set = (n, m) => (byName[n] || []).forEach(x => { if (SO != null) m.sideOrientation = SO; x.material = m; });
+  const curlM = mat('curls', HAIR, { rough: 0.7 }); curlM.diffuseColor = Color3.FromHexString('#1a1412'); curlM.specularColor = new Color3(0.12, 0.1, 0.09); curlM.specularPower = 18; curlM.emissiveColor = new Color3(0.03, 0.025, 0.022);
+  const studM = mat('stud', Color3.FromHexString('#d8dce4'), { rough: 0.1 }); studM.specularColor = new Color3(1, 1, 1); studM.specularPower = 64; studM.emissiveColor = new Color3(0.35, 0.36, 0.4);
+  set('Curls', curlM); set('Stud', studM);
   set('Body', skinM); set('Hair', hairM); set('Eyebrows', browM); set('Eyes', eyeM);
   (byName.Eyebrows || []).forEach(x => x.setEnabled(false)); // brows are painted into the projected face texture
+  set('G_bra', mat('bra', Color3.FromHexString('#0e0e10'), { rough: 0.7 })); // female base layer: a black sports bra under every top, so bare-torso looks stay covered
   set('G_briefs', mat('briefs', Color3.FromHexString('#111113'), { rough: 0.8 }));
   set('G_shoes', mat('shoes', Color3.FromHexString('#101012'), { rough: 0.45, t: tex('shoes'), fill: 0.38 }));
   const gm = {}; for (const k of KINDS) { gm[k] = mat('g-' + k, Color3.White(), { rough: k === 'jeans' ? 0.9 : 0.85 }); set('G_' + k, gm[k]); (byName['G_' + k] || []).forEach(x => x.setEnabled(false)); }
@@ -56,7 +61,7 @@ export async function loadAvatar3D(scene, { name = 'player', base = import.meta.
   const AG = {}; for (const g of res.animationGroups) { g.stop(); AG[g.name] = g; }
   for (const k of ['idle', 'walk', 'jog', 'sprint', 'dance', 'jumpLoop', 'sit']) if (AG[k]) { AG[k].start(true, 1.0); AG[k].setWeightForAllAnimatables(k === 'idle' ? 1 : 0); }
   const w = { idle: 1, walk: 0, jog: 0, sprint: 0, dance: 0, jumpLoop: 0, sit: 0 };
-  const av = { root, isGlb: true, parts: byName, ag: AG, fit: null };
+  const av = { root, isGlb: true, parts: byName, ag: AG, fit: null, kind: FEM ? 'female' : 'male' };
   av.setFit = (f, vis) => { av.fit = f; av._vis = vis; const V = vis(f.top, f.outer, f.legs), up = V.upper, lo = V.lower;
     for (const k of KINDS) (byName['G_' + k] || []).forEach(x => x.setEnabled(false));
     const show = (g, kind) => { if (!g) return; (byName['G_' + kind] || []).forEach(x => x.setEnabled(true)); wear(kind, g); };

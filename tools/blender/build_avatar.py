@@ -8,23 +8,25 @@ import bpy, bmesh, sys, math
 from mathutils import Vector, Euler
 OUT = sys.argv[sys.argv.index('--') + 1]
 Q = "/workspace/reckless-world/research/assets/quaternius/"
-BASE = Q + "universal-base-characters/Universal Base Characters[Standard]/Base Characters/Godot - UE/Superhero_Male_FullBody.gltf"
+FEM = __import__("os").environ.get("AVB", "male") == "female"   # female crew base (research/avatar_female_*_ref.png)
+BASE = Q + "universal-base-characters/Universal Base Characters[Standard]/Base Characters/Godot - UE/" + ("Superhero_Female_FullBody.gltf" if FEM else "Superhero_Male_FullBody.gltf")
 HAIR = Q + "universal-base-characters/Universal Base Characters[Standard]/Hairstyles/Rigged to Head Bone/glTF (Godot -Unreal)/" + (sys.argv[sys.argv.index('--') + 2] if len(sys.argv) > sys.argv.index('--') + 2 else "Hair_SimpleParted.gltf")
 UAL = Q + "universal-animation-library/Universal Animation Library[Standard]/Unreal-Godot/UAL1_Standard.glb"
 CLIPS = {'Walk_Loop': 'walk', 'Jog_Fwd_Loop': 'jog', 'Sprint_Loop': 'sprint', 'Jump_Start': 'jumpStart', 'Jump_Loop': 'jumpLoop', 'Jump_Land': 'jumpLand', 'Dance_Loop': 'dance', 'Sitting_Idle_Loop': 'sit'}
 USE_QHAIR = False  # the app's short textured crop with a fade is built as a scalp shell below
 SMOOTH_IT = int(__import__('os').environ.get('SMIT', '0'))
 HEAD_S = 1.88
-HEAD_AX = (1.24, 1.0, 1.2)    # app render (front overlay, shots/pass8): head ~4.2 heads tall figure, taller oval skull
+HEAD_AX = (1.24, 1.07, 1.2)    # app render (front overlay, shots/pass8): head ~4.2 heads tall figure, taller oval skull
 LEG_F = 0.86     # app figure has shorter legs than the superhero base     # app renders: ~5.6 heads tall
 TARGET_H = 1.74   # metres, matches cars (~4.3 m) and lanes
+if FEM: HEAD_S, HEAD_AX, LEG_F, TARGET_H = 1.8, (1.18, 1.05, 1.2), 0.9, 1.66
 
 bpy.ops.wm.read_factory_settings(use_empty=True)
 bpy.ops.import_scene.gltf(filepath=BASE)
 for o in list(bpy.context.scene.objects):
     if o.name.startswith('Icosphere'): bpy.data.objects.remove(o, do_unlink=True)
 arm = [o for o in bpy.context.scene.objects if o.type == 'ARMATURE'][0]
-body = bpy.data.objects['SuperHero_Male']
+body = bpy.data.objects['Superhero_Female' if FEM else 'SuperHero_Male']
 _bw = bmesh.new(); _bw.from_mesh(body.data); bmesh.ops.remove_doubles(_bw, verts=_bw.verts, dist=1e-5); _bw.to_mesh(body.data); _bw.free()  # weld glTF seams so shells never crack
 before = set(bpy.context.scene.objects)
 if USE_QHAIR: bpy.ops.import_scene.gltf(filepath=HAIR)
@@ -67,6 +69,7 @@ for o in meshes:
 
 # --- slim the superhero build toward the app's lean figure (radial scale about each bone axis) ---
 SLIM = {'upperarm': 1.12, 'lowerarm': 1.04, 'spine_03': 1.28, 'spine_02': 1.28, 'spine_01': 1.26, 'pelvis': 1.05, 'clavicle': 0.95, 'thigh': 1.22, 'calf': 1.24, 'neck_01': 0.92}  # tuned on the front overlay vs the app body render
+if FEM: SLIM = {'upperarm': 1.0, 'lowerarm': 0.98, 'spine_03': 1.1, 'spine_02': 1.1, 'spine_01': 1.08, 'pelvis': 1.0, 'clavicle': 0.95, 'thigh': 1.06, 'calf': 1.08, 'neck_01': 0.9}
 def axis_pt(p, bn):
     h, t = bone_ws(bn); a = t - h; u = max(0.0, min(1.0, (p - h).dot(a) / a.length_squared)); return h + a * u
 Wb = wmap(body); toAb = arm.matrix_world.inverted() @ body.matrix_world
@@ -102,7 +105,7 @@ for eb in arm.data.edit_bones:
     else: eb.head = T_up(eb.head); eb.tail = T_up(eb.tail)
 bpy.ops.object.mode_set(mode='OBJECT')
 # --- arms: the app figure's arms are ~18% longer (fingertips at mid-thigh) and the shoulders sit wider ---
-ARM_L, SH_OUT = 1.18, 0.04
+ARM_L, SH_OUT = (1.12, 0.02) if FEM else (1.18, 0.04)
 def _bws(n): b = arm.data.bones[n]; return b.head_local.copy(), b.tail_local.copy()
 ADESC = {sd: {b.name for b in arm.data.bones if b.name == 'upperarm' + sd or any(q.name == 'upperarm' + sd for q in b.parent_recursive)} for sd in ('_l', '_r')}
 SJ = {sd: _bws('upperarm' + sd)[0] for sd in ADESC}
@@ -175,7 +178,7 @@ hc = (mn + mx) / 2; ex = (mx - mn) / 2
 print('head bbox', [round(c, 3) for c in (mx - mn)], 'centre', [round(c, 3) for c in hc])
 def hn(p): q = p - hc; return Vector((q.x / ex.x, q.y / ex.y, q.z / ex.z))
 def scalp(n):
-    zth = 0.30 - max(0.0, min(1.0, (n.y + 0.45) / 1.1)) * 0.78   # hairline: high at the forehead, low at the nape
+    zth = 0.30 - max(0.0, min(1.0, (n.y + 0.45) / 1.1)) * (0.95 if FEM else 0.78)   # hairline: high at the forehead, low at the nape
     if abs(n.x) > 0.78 and n.z < 0.32 and n.y > -0.4: return False   # keep the ears clear
     return n.z > zth
 HSEL = {i for i in hv if scalp(hn(Ph[i]))}
@@ -188,8 +191,9 @@ for v in bm.verts:
     n = hn(Ph[v.index]); top = smooth(0.30, 0.80, n.z)      # crop: volume on top, faded short sides
     edge = smooth(0.0, 0.14, n.z - (0.30 - max(0.0, min(1.0, (n.y + 0.45) / 1.1)) * 0.78))  # thin to nothing at the hairline
     th = (0.0025 + 0.022 * top * (1 - 0.45 * smooth(0.45, 0.95, abs(n.x)))) * (0.25 + 0.75 * edge) + 0.004 * smooth(0.6, 0.9, abs(n.x)) * smooth(0.05, 0.45, n.z) * edge + (0.010 * smooth(-0.2, -0.75, n.y) * smooth(0.25, 0.6, n.z))  # extra fringe volume at the front
+    if FEM: th = (0.004 + 0.006 * top) * (0.3 + 0.7 * edge)   # sleek, pulled back into the bun
     d = norms[v.index] * th
-    if n.y < -0.35 and n.z > 0.25: d += Vector((0, -0.006, -0.004)) * top   # fringe pushed forward over the brow
+    if n.y < -0.35 and n.z > 0.25 and not FEM: d += Vector((0, -0.006, -0.004)) * top   # fringe pushed forward over the brow
     v.co = v.co + (toA.inverted().to_3x3() @ d)
 bmesh.ops.delete(bm, geom=[v for v in bm.verts if v.index not in HSEL], context='VERTS')
 bm.to_mesh(o.data); bm.free()
@@ -206,6 +210,102 @@ for i, v in enumerate(o.data.vertices):
     ca.data[i].color = tuple(sk[k] * (1 - f) * 0.55 + dk[k] * (0.45 + 0.55 * f) for k in range(3)) + (1.0,)
 o.data.materials.clear(); o.data.materials.append(bpy.data.materials.new('M_hair'))
 print('hair shell', len(o.data.vertices))
+# --- curls: tight curly top as sculpted clumps (turnaround sheet), skinned to the Head bone; high skin fade below (texture) ---
+HB = [toA @ v.co for v in o.data.vertices]; hz0 = min(p.z for p in HB); hz1 = max(p.z for p in HB)
+def hfrac(p): return (p.z - hz0) / max(1e-4, hz1 - hz0)
+def curl_line(n): return 0.6 - 0.3 * smooth(-0.25, -0.75, n.y)   # high fade on the sides/back, hairline lower at the front
+random.seed(11); cand = []
+o.data.calc_loop_triangles(); HN = [toA.to_3x3() @ v.normal for v in o.data.vertices]
+for lt in o.data.loop_triangles:  # area-uniform samples over the shell
+    A_, B_, C_ = (HB[i] for i in lt.vertices); na, nb, nc = (HN[i] for i in lt.vertices); ar = (B_ - A_).cross(C_ - A_).length / 2
+    for _ in range(int(ar / 0.00002) + (1 if random.random() < (ar / 0.00002) % 1 else 0)):
+        u, w = random.random(), random.random()
+        if u + w > 1: u, w = 1 - u, 1 - w
+        p = A_ + (B_ - A_) * u + (C_ - A_) * w
+        if hfrac(p) > curl_line(hn(p)) - 0.02: cand.append((p, (na * (1 - u - w) + nb * u + nc * w)))
+random.shuffle(cand); print('curl candidates', len(cand))
+cbm = bmesh.new(); picked = []
+for p, nv in cand:
+    if len(picked) >= 1400: break
+    r = 0.0072 + random.random() * 0.0038
+    if any((p - q).length < (r + rq) * 0.55 for q, rq in picked): continue
+    picked.append((p, r)); nn = nv.normalized(); top = smooth(0.55, 0.95, hfrac(p))
+    c = p + nn * (r * (0.15 + 0.4 * top) + 0.002)
+    g = bmesh.ops.create_icosphere(cbm, subdivisions=1, radius=r)
+    rot = Euler((random.random() * 6.28, random.random() * 6.28, random.random() * 6.28)).to_matrix()
+    for v in g['verts']: q = rot @ v.co; v.co = toA.inverted() @ (c + Vector((q.x * (0.9 + random.random() * 0.25), q.y * (0.9 + random.random() * 0.25), q.z * 0.85)))
+oc = body.copy(); oc.data = bpy.data.meshes.new('Curls'); cbm.to_mesh(oc.data); cbm.free(); oc.name = 'Curls'; bpy.context.collection.objects.link(oc)
+hg = oc.vertex_groups.get('Head') or oc.vertex_groups.new(name='Head'); hg.add(list(range(len(oc.data.vertices))), 1.0, 'REPLACE')
+oc.data.materials.append(bpy.data.materials.new('M_curls')); print('curls', len(picked), len(oc.data.vertices))
+# drop the shell below the fade (bare skin there): its sliver UVs at the nape smeared texels; the bake anchors the fade at the crown
+HSPAN = hz1 - hz0
+if not FEM:
+    _b = bmesh.new(); _b.from_mesh(o.data); _b.verts.ensure_lookup_table()
+    bmesh.ops.delete(_b, geom=[f for f in _b.faces if all(hfrac(toA @ v.co) < 0.27 for v in f.verts)], context='FACES')
+    bmesh.ops.delete(_b, geom=[v for v in _b.verts if not v.link_faces], context='VERTS'); _b.to_mesh(o.data); _b.free()
+# --- stud earring on the left ear lobe ---
+lobe = max((Ph[i] for i in hv if -0.42 < hn(Ph[i]).z < -0.12 and hn(Ph[i]).y > -0.3), key=lambda q: q.x)
+sbm = bmesh.new(); g = bmesh.ops.create_icosphere(sbm, subdivisions=2, radius=0.0042)
+for v in g['verts']: v.co = toA.inverted() @ (lobe + Vector((0.003, -0.002, 0)) + v.co)
+os_ = body.copy(); os_.data = bpy.data.meshes.new('Stud'); sbm.to_mesh(os_.data); sbm.free(); os_.name = 'Stud'; bpy.context.collection.objects.link(os_)
+sg_ = os_.vertex_groups.get('Head') or os_.vertex_groups.new(name='Head'); sg_.add(list(range(len(os_.data.vertices))), 1.0, 'REPLACE')
+os_.data.materials.append(bpy.data.materials.new('M_stud')); print('stud at', [round(c, 3) for c in lobe])
+if FEM:  # replace the curls with a high top bun + loose face strands, and the stud with big silver hoops (both ears)
+    def skinned(name, bm_, matn):
+        ob = bpy.data.objects.get(name)
+        if ob: bpy.data.objects.remove(ob, do_unlink=True)
+        ob = body.copy(); ob.data = bpy.data.meshes.new(name); bm_.to_mesh(ob.data); bm_.free(); ob.name = name; bpy.context.collection.objects.link(ob)
+        g_ = ob.vertex_groups.get('Head') or ob.vertex_groups.new(name='Head'); g_.add(list(range(len(ob.data.vertices))), 1.0, 'REPLACE')
+        ob.data.materials.append(bpy.data.materials.get(matn) or bpy.data.materials.new(matn)); return ob
+    TI = toA.inverted(); bb = bmesh.new(); random.seed(21)
+    RB = ex.x * 0.58; crown = hc + Vector((0, ex.y * 0.3, ex.z * 0.98 + RB * 0.25))
+    # bun: a ball of coiled rope (stacked tilted tori) sitting high on the crown
+    for k in range(7):
+        a_ = 0.35 + k / 6 * (math.pi - 0.7); rr = RB * (0.12 + 0.72 * math.sin(a_)); zc = crown.z + RB * 0.62 * math.cos(a_)
+        g = bmesh.ops.create_cone(bb, cap_ends=False, segments=3, radius1=0.001, radius2=0.001, depth=0.001) if False else None
+        tor = bmesh.ops.create_circle(bb, segments=24, radius=1.0)
+        ring = []
+        for v in tor['verts']: ring.append(v)
+        bmesh.ops.delete(bb, geom=ring, context='VERTS')
+        tilt = Euler((random.uniform(-0.5, 0.5), random.uniform(-0.5, 0.5), random.uniform(0, 6.28))).to_matrix()
+        R1, R2 = max(0.004, rr * 0.8), RB * 0.3
+        segU, segV = 26, 8; vs = []
+        for i in range(segU):
+            u = i / segU * 6.283
+            for j in range(segV):
+                w = j / segV * 6.283; tw = R2 * (1 + 0.15 * math.sin(u * 5))
+                q = Vector(((R1 + tw * math.cos(w)) * math.cos(u), (R1 + tw * math.cos(w)) * math.sin(u), tw * math.sin(w)))
+                vs.append(bb.verts.new(TI @ (Vector((crown.x, crown.y, zc)) + tilt @ q)))
+        for i in range(segU):
+            for j in range(segV):
+                a0 = vs[i * segV + j]; a1 = vs[((i + 1) % segU) * segV + j]; a2 = vs[((i + 1) % segU) * segV + (j + 1) % segV]; a3 = vs[i * segV + (j + 1) % segV]
+                bb.faces.new((a0, a1, a2, a3))
+    # loose face strands: tapered tubes from the temples down past the cheek, in front of the ears
+    for sd in (-1, 1):
+        for off in (0.0, 0.05):
+            pts = [hc + Vector((sd * ex.x * (0.78 - 0.05 * t + off * 0.3), -ex.y * (0.42 + 0.12 * math.sin(t * 2.5) - off), ex.z * (0.45 - 1.05 * t))) for t in [i / 9 for i in range(10)]]
+            prev = None
+            for i, c in enumerate(pts):
+                r = 0.0042 * (1 - 0.7 * i / 9); ring = []
+                for j in range(6):
+                    w = j / 6 * 6.283; ring.append(bb.verts.new(TI @ (c + Vector((math.cos(w) * r, math.sin(w) * r * 0.6, 0)))))
+                if prev:
+                    for j in range(6): bb.faces.new((prev[j], prev[(j + 1) % 6], ring[(j + 1) % 6], ring[j]))
+                prev = ring
+    skinned('Curls', bb, 'M_curls')
+    hb = bmesh.new()
+    for sd in (-1, 1):
+        lb = (max if sd > 0 else min)((Ph[i] for i in hv if -0.42 < hn(Ph[i]).z < -0.12 and hn(Ph[i]).y > -0.3), key=lambda q: q.x)
+        cen = lb + Vector((sd * 0.004, -0.002, -0.026)); segU, segV, R1, R2 = 32, 6, 0.024, 0.0028; vs = []
+        for i in range(segU):
+            u = i / segU * 6.283
+            for j in range(segV):
+                w = j / segV * 6.283; vs.append(hb.verts.new(TI @ (cen + Vector((sd * R2 * math.cos(w) * 1.0, (R1 + R2 * math.sin(w)) * math.sin(u), (R1 + R2 * math.sin(w)) * math.cos(u))))))
+        for i in range(segU):
+            for j in range(segV):
+                a0 = vs[i * segV + j]; a1 = vs[((i + 1) % segU) * segV + j]; a2 = vs[((i + 1) % segU) * segV + (j + 1) % segV]; a3 = vs[i * segV + (j + 1) % segV]
+                hb.faces.new((a0, a1, a2, a3))
+    skinned('Stud', hb, 'M_stud'); print('female hair: bun + strands + hoops')
 # brows: thicker and darker like the app's heavy straight brows
 eb = bpy.data.objects.get('Eyebrows')
 if eb:
@@ -233,7 +333,7 @@ def region(kind):
         b = dom(d)
         if b is None: continue
         side = b[-2:] if b[-2:] in ('_l', '_r') else ''
-        up = kind in ('tee', 'long', 'crop', 'hoodie')
+        up = kind in ('tee', 'long', 'crop', 'hoodie', 'bra')
         if up:
             ok = b in TORSO or (b == 'neck_01' and p.z < z_neck + 0.03) or (b == 'pelvis' and p.z > z_pelvis + (-0.07 if kind in ('tee', 'long') else 0.02 if kind != 'hoodie' else -0.05))
             if b.startswith('thigh') and kind in ('tee', 'long'): ok = p.z > z_pelvis - 0.07
@@ -243,6 +343,7 @@ def region(kind):
             if kind == 'hoodie' and b == 'Head':
                 hc = (hh + ht) / 2; q = p - hc
                 ok = q.y > 0.05 and q.z < -0.04   # hood down: only a bunched hood behind the nape, never over the skull
+            if kind == 'bra': ok = (b in TORSO or b.startswith('clavicle')) and z_neck - 0.27 < p.z < z_neck - 0.05 and (p.z < z_neck - 0.13 or abs(p.x) > 0.055) and not b.startswith('upperarm')  # black sports bra: base layer under bare-torso looks
             if ok: sel.add(i)
         else:
             ok = False
@@ -253,7 +354,7 @@ def region(kind):
             if kind == 'shoes': ok = b.startswith('foot') or b.startswith('ball') or (b.startswith('calf') and tparam(p, b) > 0.9)
             if ok: sel.add(i)
     return sel
-PUSH = {'tee': 0.012, 'crop': 0.011, 'long': 0.012, 'hoodie': 0.026, 'jeans': 0.016, 'pants': 0.014, 'cuffed': 0.014, 'shorts': 0.016, 'briefs': 0.004, 'shoes': 0.02}
+PUSH = {'tee': 0.012, 'crop': 0.011, 'long': 0.012, 'hoodie': 0.026, 'jeans': 0.016, 'pants': 0.014, 'cuffed': 0.014, 'shorts': 0.016, 'briefs': 0.004, 'shoes': 0.026, 'bra': 0.005}
 # torso half-width / half-depth per 1 cm slice (body only, torso bones) for the boxy tee fit
 TW, TD = {}, {}
 _cy = axis_pt(Vector((0, 0, 1.0)), 'spine_02').y + 0.01
@@ -275,29 +376,29 @@ def make(kind):
         if v.index not in sel: continue
         p = toA @ v.co; d = PUSH[kind]; b = dom(W[v.index]) or ''
         k = 1.0
-        if kind in ('tee', 'crop'): k = (1.12 + 0.95 * tparam(p, b) ** 1.2) if b.startswith('upperarm') else 1.27  # no puff over the shoulder, flares to the hem  # sleeve flares toward the hem
+        if kind in ('tee', 'crop'): k = ((1.12 + 0.95 * tparam(p, b) ** 1.2) * (1.12 if FEM else 1.0)) if b.startswith('upperarm') else 1.27  # no puff over the shoulder, flares to the hem  # sleeve flares toward the hem
         elif kind == 'long': k = 1.35 if b.startswith(('upperarm', 'lowerarm')) else 1.1
         elif kind == 'hoodie': k = 1.45 if b.startswith(('upperarm', 'lowerarm')) else (1.0 if b == 'Head' else 1.2)
         elif kind == 'jeans': k = (1.35 if b.startswith('thigh') else 1.95 if b.startswith('calf') else 1.12)
         elif kind == 'pants': k = (1.3 if b.startswith('thigh') else 1.6 if b.startswith('calf') else 1.1)
         elif kind == 'cuffed': k = (1.3 if b.startswith('thigh') else 1.45 if b.startswith('calf') else 1.1)
         elif kind == 'shorts': k = 1.4 if b.startswith('thigh') else 1.12
-        elif kind == 'briefs': k = 1.04
-        elif kind == 'shoes': k = 1.62
+        elif kind in ('briefs', 'bra'): k = 1.04
+        elif kind == 'shoes': k = 1.85
         if kind in ('jeans', 'pants', 'cuffed', 'shorts') and p.z > z_pelvis - 0.03:  # waistband tucks under any top
             f = max(0.0, min(1.0, (p.z - (z_pelvis - 0.03)) / 0.04)); k = k + (1.02 - k) * f; d = d + (0.005 - d) * f
         if k != 1.0 and b and b != 'Head':
             c = axis_pt(p, b) if not b.startswith(('spine', 'pelvis', 'clavicle', 'neck')) else Vector((0, axis_pt(p, b).y * 0 + (axis_pt(p, 'spine_02').y), p.z))
             if b.startswith(('spine', 'pelvis', 'clavicle', 'neck')): c = Vector((0.0, axis_pt(p, 'spine_02').y + 0.01, p.z))
             if kind == 'jeans' and b.startswith(('thigh', 'calf')):  # straight-leg baggy: near-constant radius from mid-thigh to the hem
-                r = (p - c).length; R = max(r * 1.16, 0.098 if b.startswith('thigh') else 0.096); q = c + (p - c) * (R / max(r, 1e-4))
-                if (q.x - p.x) * (1 if p.x > 0 else -1) < 0: q.x = p.x + (q.x - p.x) * 0.2   # inner leg hugs: legs split high like the app
+                r = (p - c).length; R = max(r * 1.3, 0.104 if b.startswith('thigh') else 0.112 + 0.012 * tparam(p, b)); q = c + (p - c) * (R / max(r, 1e-4)); q.y = c.y + (q.y - c.y) * 1.2 + 0.012 * (tparam(p, b) if b.startswith('calf') else 0.5)  # deep, baggy, sits back over the heel
+                if (q.x - p.x) * (1 if p.x > 0 else -1) < 0: q.x = p.x + (q.x - p.x) * (0.2 if b.startswith('thigh') else 0.55)   # inner leg hugs: legs split high like the app
             elif b.startswith(('spine', 'pelvis', 'clavicle', 'neck')):  # torso: loose in depth, barely wider (no shoulder pads)
                 kx = 1 + (k - 1) * (0.3 if kind in ('tee', 'crop', 'long', 'hoodie') else 0.4); dq = p - c
                 if kind in ('tee', 'long', 'crop') and p.z < z_neck - 0.1:  # boxy oversized fit: sides hang straight to the hem
-                    xm = TW.get(round(p.z, 2), 0.15); tgt = 0.25 * (abs(dq.x) / max(xm, 1e-3)); kb = min(1.6, tgt / max(abs(dq.x), 1e-3))
+                    xm = TW.get(round(p.z, 2), 0.15); tgt = (0.28 if FEM else 0.25) * (abs(dq.x) / max(xm, 1e-3)); kb = min(1.6, tgt / max(abs(dq.x), 1e-3))
                     fz = max(0.0, min(1.0, ((z_neck - 0.13) - p.z) / 0.08)); kx = max(kx, kx + (kb - kx) * fz)   # boxy below the chest, follows the shoulder slope above (no shoulder block)
-                    k = 1.04; ext = (TFR if dq.y < 0 else TBK) * 1.02 * max(0.0, 1 - 0.7 * min(1.0, abs(dq.x) / max(xm, 1e-3)) ** 2); ny = dq.y * k
+                    k = 1.0; ext = (TFR if dq.y < 0 else TBK) * 0.97 * max(0.0, 1 - 0.7 * min(1.0, abs(dq.x) / max(xm, 1e-3)) ** 2); ny = dq.y * k
                     if abs(ny) < ext: ny = math.copysign(abs(ny) + (ext - abs(ny)) * fz, dq.y if dq.y != 0 else -1.0)
                     q = c + Vector((dq.x * kx, ny, 0))
                 else: q = c + Vector((dq.x * kx, dq.y * k, 0))
@@ -346,13 +447,13 @@ def make(kind):
     if kind in ('jeans', 'pants', 'cuffed'):
         cutp(Vector((0, 0, z_pelvis + 0.035)), Vector((0, 0, 1)))
     if kind == 'jeans':
-        for sd in ('_l', '_r'): pt, dr = along('calf' + sd, 0.965); cutp(pt, dr, only=('calf' + sd, 'foot' + sd))
+        for sd in ('_l', '_r'): pt, dr = along('calf' + sd, 1.0); cutp(pt + Vector((0, 0, -0.035)), dr, only=('calf' + sd, 'foot' + sd))
     bm.to_mesh(o.data); bm.free()
     o.data.materials.clear(); mat = bpy.data.materials.get('M_' + kind) or bpy.data.materials.new('M_' + kind); o.data.materials.append(mat)
     for poly in o.data.polygons: poly.use_smooth = True
     print('garment', kind, len(o.data.vertices))
     return o
-for k in ['briefs', 'shoes', 'tee', 'crop', 'long', 'hoodie', 'jeans', 'pants', 'cuffed', 'shorts']: make(k)
+for k in ['briefs', 'shoes', 'tee', 'crop', 'long', 'hoodie', 'jeans', 'pants', 'cuffed', 'shorts'] + (['bra'] if FEM else []): make(k)
 for o in [o for o in bpy.context.scene.objects if o.type == 'MESH']:
     for poly in o.data.polygons: poly.use_smooth = True
 body.name = 'Body'
@@ -387,7 +488,7 @@ def stance(br):
     for pb in arm.pose.bones: pb.rotation_mode = 'QUATERNION'; pb.matrix_basis.identity()
     for sd in ('_l', '_r'):
         sx = 1 if arm.data.bones['upperarm' + sd].head_local.x > 0 else -1
-        aim('upperarm' + sd, Vector((sx * (0.37 + br * 0.015), 0.03, -1)))  # ~11 deg out: clear gap to the torso like the app render
+        aim('upperarm' + sd, Vector((sx * (0.43 + br * 0.015), 0.03, -1)))  # ~11 deg out: clear gap to the torso like the app render
         aim('lowerarm' + sd, Vector((sx * 0.16, -0.1, -1)))
         aim('hand' + sd, Vector((sx * 0.12, -0.06, -1)))
         aim('thigh' + sd, Vector((sx * 0.045, 0.0, -1))); aim('calf' + sd, Vector((sx * 0.03, 0.012, -1)))
@@ -412,7 +513,7 @@ for a in keep:
 arm.animation_data.action = None
 s = TARGET_H / hcur; arm.scale = (arm.scale[0] * s, arm.scale[1] * s, arm.scale[2] * s)
 for o in list(bpy.context.scene.objects):  # drop helper spheres (42-vert Icosphere shipped with the base kit)
-    if o.type == 'MESH' and (o.name.startswith('Icosphere') or len(o.data.vertices) < 60): bpy.data.objects.remove(o, do_unlink=True)
+    if o.type == 'MESH' and o.name not in ('Stud', 'Curls') and (o.name.startswith('Icosphere') or len(o.data.vertices) < 60): bpy.data.objects.remove(o, do_unlink=True)
 # --- bake UVs + projection dump: every visible part gets a fresh non-overlapping UV layout (smart project) and its posed
 # (idle frame 1 = the app's stance) loop positions/normals are dumped so tools/bake_avatar_tex.py can project the app's
 # front renders onto it (face, hair, skin, every wardrobe garment). See research/techniques-sources.md (texture projection).
@@ -441,7 +542,7 @@ for o in TEXM:
     tri = np.array([tuple(t.loops) for t in me.loop_triangles], np.int32)
     D[o.name + '|co'] = co[lv]; D[o.name + '|n'] = ln; D[o.name + '|uv'] = uv; D[o.name + '|tri'] = tri
     oe.to_mesh_clear()
-np.savez_compressed(BAKE, **D); print('dumped', BAKE, len(TEXM))
+D['Hair|span'] = np.array([HSPAN * arm.matrix_world.to_scale().z], np.float32); np.savez_compressed(BAKE, **D); print('dumped', BAKE, len(TEXM))
 arm.animation_data.action = None; bpy.context.scene.frame_set(0)
 for o in bpy.context.scene.objects:  # lean export: one UV set, no vertex colours
     if o.type != 'MESH': continue

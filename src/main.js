@@ -140,8 +140,17 @@ async function start() {
   const CREW = { fit: CR.loadFit(), xp: null, account: CR.getAccount() };
   const applyFit = (f) => { f = CR.allowedFit(f, CR.playerLevel(CREW.xp)); CREW.fit = f; CR.saveFit(f); player.setFit(f, CR.visibleFor); }; applyFit(CREW.fit); window.__rw.applyFit = (f) => applyFit(f); window.__rw.fitRaw = (f) => player.setFit(f, CR.visibleFor); window.__rw.CR = CR;
   // smooth rigged crew avatar (models/avatar.glb); the procedural figure stands in until it loads (?procav keeps it)
-  if (!Q.has('procav')) loadAvatar3D(scene, { name: 'player3d' }).then(av => { if (glow) av.root.getChildMeshes().forEach(m => glow.addExcludedMesh(m)); const old = player; av.root.position.copyFrom(old.root.position); av.root.rotation.y = old.root.rotation.y; old.root.setEnabled(false); old.allMeshes().forEach(m => m.setEnabled(false)); player = av; window.__rw.player = av; player.setFit(CREW.fit, CR.visibleFor); if (glow) for (const m of av.allMeshes()) glow.addExcludedMesh(m); DG.log('avatar3d loaded'); }).catch(e => console.warn('avatar3d', e));
-  const loadCrew = async () => { if (!CREW.account) return; try { const r = await CR.readCrew(CREW.account); if (r) { CREW.xp = r.xp; if (r.fit.top || r.fit.outer || r.fit.legs) applyFit(r.fit); } } catch (e) { } }; loadCrew();
+  // crew base (MALE / FEMALE): ?base= for tests, else the app's avatar_base when signed in (read-only), else the local pick
+  CREW.base = ['male', 'female'].includes(Q.get('base')) ? Q.get('base') : (CR.getLocalBase() || 'male'); CREW.baseFromApp = false;
+  const swapAvatar = (kind) => { if (Q.has('procav')) return; const tok = (swapAvatar.n = (swapAvatar.n || 0) + 1);
+    loadAvatar3D(scene, { name: 'player3d', kind }).then(av => { if (tok !== swapAvatar.n) { av.root.dispose(false, true); Object.values(av.ag).forEach(g => g.dispose()); return; }
+      const old = player; av.root.position.copyFrom(old.root.position); av.root.rotation.y = old.root.rotation.y;
+      if (old.isGlb) { old.root.dispose(false, true); Object.values(old.ag).forEach(g => g.dispose()); } else { old.root.setEnabled(false); old.allMeshes().forEach(m => m.setEnabled(false)); }
+      player = av; window.__rw.player = av; player.setFit(CREW.fit, CR.visibleFor); if (glow) for (const m of av.allMeshes()) glow.addExcludedMesh(m); DG.log('avatar3d loaded ' + kind); }).catch(e => console.warn('avatar3d', e)); };
+  window.__rw.swapAvatar = swapAvatar; swapAvatar(CREW.base);
+  const setBase = (b, fromApp = false) => { if (!['male', 'female'].includes(b)) return; if (!fromApp) CR.setLocalBase(b); CREW.baseFromApp = fromApp; if (b !== CREW.base) { CREW.base = b; swapAvatar(b); } };
+  const loadBase = async () => { if (!CREW.account || Q.get('base')) return null; const b = await CR.readAvatarBase(CREW.account); if (b) setBase(b, true); return b; };
+  const loadCrew = async () => { if (!CREW.account) return; CREW.basePending = loadBase(); try { const r = await CR.readCrew(CREW.account); if (r) { CREW.xp = r.xp; if (r.fit.top || r.fit.outer || r.fit.legs) applyFit(r.fit); } } catch (e) { } }; loadCrew();
   const P = { x: ext.spawn.x, z: ext.spawn.z, heading: 0, speed: 0, dancing: false }; window.__rw.P = P; window.__rw.grid = () => city.grid;
   { const dx = ext.doorPos.x - P.x, dz = ext.doorPos.z - P.z; P.heading = Math.atan2(dx, dz); }
   // footstep dust puffs when sprinting
@@ -322,7 +331,7 @@ async function start() {
     if (k === 'm') { if (hud.isOpen()) return hud.close(); return hud.openMap(mapCtx()); }
     if (k === 'o') { if (hud.isOpen()) return hud.close(); const reopen = () => { hud.close(); app.key('o'); };
       return hud.openWardrobe(CR, { fit: { ...CREW.fit }, xp: CREW.xp, account: CREW.account, email: EV.getEmail(), setEmail: EV.setEmail, apply: applyFit,
-        signIn: async (e) => { CREW.account = await CR.signIn(e); await loadCrew(); reopen(); }, signOut: () => { CR.signOut(); CREW.account = null; CREW.xp = null; applyFit(CREW.fit); reopen(); } }); }
+        signIn: async (e) => { CREW.account = await CR.signIn(e); await loadCrew(); reopen(); }, base: CREW.base, baseFromApp: CREW.baseFromApp, setBase: (b) => setBase(b), signOut: () => { CR.signOut(); CREW.account = null; CREW.xp = null; CREW.baseFromApp = false; if (CR.getLocalBase()) setBase(CR.getLocalBase()); applyFit(CREW.fit); reopen(); } }); }
     if (k === 'f') { if (app.inside && T.mode === 'rave' && T.danceFloor(P) && DANCE && !DANCE.active()) { standUp(); return DANCE.start({ venue: T.name, t }); } P.dancing = !P.dancing; return; }
     if (k === 'l' && app.inside) { setMode(T.mode === 'day' ? 'rave' : 'day'); hud.interior(true, T.mode); return; }
     if (k === 'p') return photo();
@@ -533,7 +542,7 @@ async function start() {
     const temple = pad ? [['X', 'DANCE'], ['Y', 'PHONE · LIGHTS']] : [['F', 'DANCE'], ['L', 'LIGHTS'], ['TAB', 'PHONE']];
     hud.keys(ctxt === 'temple' ? temple : base, 6500); };
   app.keyHints = keyHints;
-  const startGame = () => { if (!app.title) return; setTimeout(showHints, 1800); setTimeout(() => keyHints(), localStorage.getItem('rw.hints') ? 2500 : 9500); setTimeout(posterText, 9000); const ti = document.getElementById('title'); ti.classList.add('gone'); app.title = false; camSnap = true; hud.hud.classList.remove('titlehide'); removeEventListener('keydown', anyKey); setTimeout(() => hud.note({ kicker: 'RECKLESS', title: 'TONIGHT AT THE TEMPLE', body: 'Doors open at 8 Carlisle Circus. Follow the red line, or ' + (isTouch ? 'open MAP on the phone' : 'press M') + ' to pick a venue.', hold: 7 }), 1200); if (!Q.has('mute')) { AU.unlock(); sndLbl(); } };
+  const startGame = () => { if (!app.title) return; if (!CR.getLocalBase() && !Q.get('base') && !Q.has('nobase')) (CREW.basePending || Promise.resolve(null)).then(b => { if (!b) setTimeout(() => hud.chooseBase((k) => setBase(k)), 400); }); setTimeout(showHints, 1800); setTimeout(() => keyHints(), localStorage.getItem('rw.hints') ? 2500 : 9500); setTimeout(posterText, 9000); const ti = document.getElementById('title'); ti.classList.add('gone'); app.title = false; camSnap = true; hud.hud.classList.remove('titlehide'); removeEventListener('keydown', anyKey); setTimeout(() => hud.note({ kicker: 'RECKLESS', title: 'TONIGHT AT THE TEMPLE', body: 'Doors open at 8 Carlisle Circus. Follow the red line, or ' + (isTouch ? 'open MAP on the phone' : 'press M') + ' to pick a venue.', hold: 7 }), 1200); if (!Q.has('mute')) { AU.unlock(); sndLbl(); } };
   const anyKey = (e) => { if (app.title) startGame(); }; addEventListener('keydown', anyKey);
   document.getElementById('play').onclick = startGame; document.getElementById('title').addEventListener('pointerdown', (e) => { if (document.getElementById('title').classList.contains('ready')) startGame(); });
   if (isTouch) document.getElementById('play').textContent = 'TAP TO ENTER';

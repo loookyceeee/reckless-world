@@ -107,3 +107,16 @@ export async function loadCrewConfig() {
   const live = await get(API + '/api/crew/config', 2500); if (applyCrewConfig(live, 'api')) return CREW_RULES;
   const local = await get(import.meta.env.BASE_URL + 'data/crew_config.json', 5000); applyCrewConfig(local, 'bundled'); return CREW_RULES;
 }
+
+// ---- avatar base (MALE / FEMALE) ----
+// Signed in: APP DEV's crew API owns the choice, GET /api/crew/avatar-base?email= -> {"avatarBase":"male"|"female"}.
+// The game only reads it (never PUTs). Signed out, offline or no answer: the local pick from the first-launch select.
+export const BASES = ['male', 'female'];
+export const getLocalBase = () => { const b = localStorage.getItem('rw.avatarBase'); return BASES.includes(b) ? b : null; };
+export const setLocalBase = (b) => { if (BASES.includes(b)) localStorage.setItem('rw.avatarBase', b); };
+export async function readAvatarBase(acct = getAccount(), ms = 6000) {
+  if (!acct || !acct.email) return null;
+  const ac = new AbortController(); const t = setTimeout(() => ac.abort(), ms);
+  try { const r = await fetch(API + '/api/crew/avatar-base?email=' + encodeURIComponent(acct.email), { signal: ac.signal, cache: 'no-cache' }); if (!r.ok) return null;
+    const p = await r.json(); return BASES.includes(p && p.avatarBase) ? p.avatarBase : null; } catch (e) { return null; } finally { clearTimeout(t); }
+}

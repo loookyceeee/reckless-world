@@ -264,3 +264,11 @@ body.vfon .hud .mapwrap,body.vfon .hud .notes,body.vfon .hud .prompt{opacity:.2}
 .phcards{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}.phcards .pcd{aspect-ratio:5/7;background:#111;border:1px solid #444;display:flex;align-items:center;justify-content:center;color:#555;font:800 14px var(--f1)}
 .phcards img{width:100%;display:block}
 .phshots{display:grid;grid-template-columns:repeat(2,1fr);gap:6px}.phshots div{background:#111;border:1px solid #444;aspect-ratio:16/9;display:flex;align-items:flex-end;color:#fff;font:700 9px var(--f1);letter-spacing:.06em;background-size:cover;background-position:center;padding:4px}
+
+/* crew base select (first launch + wardrobe) */
+.basesel { display: flex; gap: 10px; margin: 8px 0 14px; }
+.basesel button { flex: 1; padding: 12px 0; background: #111; color: #fff; border: 2px solid #444; font: 800 14px Unbounded, sans-serif; letter-spacing: .08em; cursor: pointer; }
+.basesel button.sel { border-color: #fff; background: #fff; color: #000; }
+.basesel button[disabled] { opacity: .55; cursor: default; }
+.basesel.big button { padding: 34px 0; font-size: 22px; }
+.basesel.big button:hover { border-color: #ff2a3c; }

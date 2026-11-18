@@ -8,9 +8,10 @@ import numpy as np, os, sys, json
 from PIL import Image
 from scipy import ndimage as ndi
 L = '/workspace/reckless-world/avatar-refs/canonical-looks/'
-OUT = os.path.join(os.path.dirname(__file__), '..', 'public', 'models', 'tex'); os.makedirs(OUT, exist_ok=True)
+FEM = os.environ.get('AVB', 'male') == 'female'  # female base: face/skin/hair/shoes from her turnaround sheet's front view (tools/ref/female_front.png)
+OUT = os.path.join(os.path.dirname(__file__), '..', 'public', 'models', 'tex_f' if FEM else 'tex'); os.makedirs(OUT, exist_ok=True)
 DBG = '/workspace/reckless-world/.scratch/bake'; os.makedirs(DBG, exist_ok=True)
-D = np.load(os.environ.get('AV_DUMP', '/tmp/av_dump.npz'))
+D = np.load(os.environ.get('AV_DUMP', '/tmp/av_dump_f.npz' if FEM else '/tmp/av_dump.npz'))
 def part(n): return D[n + '|co'], D[n + '|n'], D[n + '|uv'], D[n + '|tri']
 
 def raster(P2, tri, attrs, W, H, zbuf=None, depth=None):
@@ -39,6 +40,7 @@ def raster(P2, tri, attrs, W, H, zbuf=None, depth=None):
     return out, m
 
 def load(name):
+    if FEM and name == 'tee-jeans': name = '../../game/tools/ref/female_front'
     im = np.array(Image.open(L + name + '.png').convert('RGBA')).astype(np.float32) / 255.0
     return im[..., :3], im[..., 3] > 0.5
 def skin_mask(rgb):
@@ -145,7 +147,8 @@ if __name__ == '__main__':
     sk = skin_mask(rgb) & alpha
     skin_c = np.median(rgb[sk], 0); print('skin', skin_c)
     # body skin: head region (face, ears, neck) projected with the head map; rest = arm skin with in-painting
-    head_front = fill(rgb, alpha & (skin_mask(rgb) | (rgb.mean(-1) < 0.5)), 2)  # keep eyes/brows/lips (dark) on the face
+    de_ = abs(er[1][0] - er[0][0]); scalp_ = np.zeros_like(alpha); scalp_[:int(eyy - 0.62 * de_)] = True  # above the brows: the app's hair
+    head_front = fill(rgb, alpha & (skin_mask(rgb) | ((rgb.mean(-1) < 0.5) & ~scalp_)), 2)  # keep eyes/brows/lips (dark) on the face; scalp = skin under the fade
     ska = sk.copy(); ska[int(gm(0, 0.78)[1]):] = False  # arms/hands only (shoe leather reads as skin)
     body_front = fill(rgb, ska, 2)
     plate = np.ones_like(rgb) * skin_c * 0.97
@@ -155,7 +158,7 @@ if __name__ == '__main__':
     vis_body = depth_buffer(['Body'])
     skin_only = fill(rgb, sk & (rgb.mean(-1) > 0.45), 2); face_lo = np.stack([ndi.median_filter(skin_only[..., c], size=25) for c in range(3)], -1); face_lo = ndi.gaussian_filter(face_lo, (10, 10, 0))
     cH = bake('Body', 1024, head_front, face_lo, hm, vis_body, (0.12, 0.5)); # torso / arms / hands from the shirtless 'jeans' look so bare torsos carry the app's abs and arm shading
-    rgbJ, alphaJ = load('jeans'); gmJ = global_map(alphaJ, BODY + ['G_jeans', 'G_shoes'])
+    rgbJ, alphaJ = load('tee-jeans' if FEM else 'jeans'); gmJ = global_map(alphaJ, BODY + ['G_jeans', 'G_shoes'])
     skJ = skin_mask(rgbJ) & alphaJ; skJ[int(gmJ(0, 0.78)[1]):] = False; skJ = ndi.binary_erosion(skJ, iterations=2)
     cB = bake('Body', 1024, fill(rgbJ, skJ, 2), plate, gmJ, vis_body, (-0.15, 0.3))
     save(cH * hw + cB * (1 - hw), 'body')
@@ -171,7 +174,27 @@ if __name__ == '__main__':
     A_, m_ = texels('Hair', 256); px_, py_ = hm(A_[..., 0], A_[..., 2]); ff = smooth(0.35, 0.7, -A_[..., 4])
     a_ = sample(hm_soft[..., None], px_, py_)[..., 0]; al = np.clip(1 - ff * (1 - a_), 0, 1)
     _, (iy, ix) = ndi.distance_transform_edt(~m_, return_indices=True); al = al[iy, ix]
-    Image.fromarray((np.dstack([np.clip(hcol, 0, 1), al]) * 255).astype(np.uint8), 'RGBA').save(os.path.join(OUT, 'hair.webp'), quality=90, method=6)
+    # turnaround sheet: curls live on the Curls mesh; the shell carries a high skin fade (dense stubble at the curl line,
+    # thinning to bare skin) as an alpha-tested speckle, near-black under the curls. Procedural, 1024 px.
+    A_, m_ = texels('Hair', 1024); Z_, Y_ = A_[..., 2], A_[..., 1]; zz = Z_[m_]; yy = Y_[m_]
+    sp_ = float(D['Hair|span'][0]) if 'Hair|span' in D else zz.max() - zz.min(); f_ = (Z_ - (zz.max() - sp_)) / max(1e-4, sp_);  # f_ anchored at the crown (the shell below the fade is cut)
+    ny_ = (Y_ - (yy.min() + yy.max()) / 2) / max(1e-4, (yy.max() - yy.min()) / 2)
+    cl_ = 0.6 - 0.3 * smooth(-0.25, -0.75, ny_)
+    rs = np.random.RandomState(5); nz_ = ndi.gaussian_filter(rs.rand(1024, 1024), 0.8); nz_ = (np.argsort(np.argsort(nz_.ravel())).reshape(nz_.shape) + 0.5) / nz_.size  # rank -> uniform
+    dens = 0.97 * smooth(0.1, 1.0, np.clip((f_ - 0.1) / np.maximum(cl_ - 0.1, 1e-3), 0, 1)) ** 2.0 * (1 - smooth(-0.5, -0.7, ny_))
+    over = f_ >= cl_ - 0.015
+    # colour fade (reads at any distance, mips can't wash it out): skin -> stubble -> near-black; speckled alpha only at the bottom edge
+    al = np.where(over | (dens > 0.18), 1.0, (nz_ < dens / 0.18).astype(np.float32))
+    g_ = 0.05 + 0.03 * rs.rand(1024, 1024); dark = np.dstack([g_ * 1.15, g_, g_ * 0.92])
+    skinT = np.clip(skin_c * 1.12, 0, 1) * (0.94 + 0.06 * rs.rand(1024, 1024))[..., None]
+    stub = np.clip(dens + (nz_ - 0.5) * 0.25, 0, 1)[..., None] ** 0.7
+    hcol = np.where(over[..., None], dark, skinT * (1 - stub) + dark * 1.6 * stub)
+    if FEM:  # sleek pulled-back hair: opaque, near-black with fine combed streaks
+        st2 = ndi.gaussian_filter(rs.rand(1024, 1024), (0.6, 6)); st2 = (st2 - st2.mean()) / (st2.std() + 1e-6)
+        g2 = np.clip(0.06 + 0.018 * st2, 0.02, 0.12); hcol = np.dstack([g2 * 1.2, g2, g2 * 0.9]); al = np.ones_like(al)
+    dd_, (iy, ix) = ndi.distance_transform_edt(~m_, return_indices=True); al = al[iy, ix] * (dd_ <= 3); hcol = hcol[iy, ix]
+    if not FEM: lowf = (f_[iy, ix] < 0.26); al[lowf] = 0; hcol[lowf] = np.clip(skin_c * 1.12, 0, 1)  # bottom rim: always bare skin  # alpha never bleeds far: slivers at the nape stay clear
+    Image.fromarray((np.dstack([np.clip(hcol, 0, 1), al]) * 255).astype(np.uint8), 'RGBA').save(os.path.join(OUT, 'hair.webp'), quality=92, method=6)
     save(bake('Eyes', 128, rgb, rgb, hm, None, (-1, -0.5)), 'eyes')
     # shoes: below the jeans hem, not denim/skin
     blue = (rgb[..., 2] > rgb[..., 0] + 0.04) & alpha
