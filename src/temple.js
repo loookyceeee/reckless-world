@@ -442,10 +442,10 @@ export function updateTempleInterior(T, t, dt) {
   M.brM.emissiveColor.set(1, 0.08 + 0.1 * kick, 0.12);
   M.beams.forEach(b => {
     if (b.kind === 'mh') { const s = t * 0.9 + b.i * 0.8; b.m.rotation.x = 1.0 + Math.sin(s) * 0.35; b.m.rotation.z = Math.sin(s * 0.7 + b.i) * 0.6; b.m.visibility = 0.65 + 0.35 * kick; }
-    else if (b.kind === 'side') { const s = t * 0.6 + b.i; b.m.rotation.z = -b.sd * (0.9 + Math.sin(s) * 0.4); b.m.rotation.x = Math.sin(s * 0.8) * 0.5; b.m.visibility = (Math.floor(beat / 4) % 2 ? 0.8 : 0.15) * (0.6 + 0.4 * kick); }
+    else if (b.kind === 'side') { const s = t * 0.6 + b.i; b.m.rotation.z = -b.sd * (0.9 + Math.sin(s) * 0.4); b.m.rotation.x = Math.sin(s * 0.8) * 0.5; b.m.visibility = (Math.floor(beat / 4) % 2 ? 1 : 0.4) * (0.65 + 0.35 * kick); }
     else { b.m.rotation.x = -1.45 + Math.sin(t * 0.3 + b.i) * 0.05; b.m.rotation.z = (b.i - 1.5) * 0.12 + Math.sin(t * 0.5 + b.i) * 0.08; b.m.visibility = (Math.floor(beat) % 8 < 4 ? 0.55 : 0.25) + 0.35 * kick; }
   });
-  M.beamM.emissiveColor.set(0.42 + strobe * 0.4, 0.46 + strobe * 0.4, 0.56 + strobe * 0.4); M.blastM.emissiveColor.set(0.12, 0.18, 0.32); if (M.beamRM) M.beamRM.emissiveColor.set(0.5, 0.04, 0.1);
+  M.beamM.emissiveColor.set(0.42 + strobe * 0.4, 0.46 + strobe * 0.4, 0.56 + strobe * 0.4); M.blastM.emissiveColor.set(0.12, 0.18, 0.32); if (M.beamRM) M.beamRM.emissiveColor.set(1.0, 0.07, 0.16);
   T.lights.hemi.intensity = 0.5 + strobe * 0.9;
   T.lights.red.intensity = 0.7 + 0.6 * kick; T.lights.blue.intensity = 0.45 + 0.45 * kick;
   M.hazes.forEach((h, k) => { h.position.x = Math.sin(t * 0.07 + k) * 3; h.rotation.y = Math.PI; });

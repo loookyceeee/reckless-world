@@ -43,9 +43,11 @@ function carVD(kind, body) {
     P.push(color(xf(rbox(2.5, 2.6, 11.8, 0.12, 10), { t: [0, 1.65, 0] }), body));
     P.push(color(xf(box(2.54, 1.0, 10.6), { t: [0, 2.1, -0.3] }), glass));
     P.push(color(xf(box(2.3, 1.6, 0.05), { t: [0, 2.0, 5.92] }), glass));
-    P.push(color(xf(rbox(2.52, 0.25, 11.82, 0.2, 8), { t: [0, 0.48, 0] }), hex('#1b1530')));
+    P.push(color(xf(rbox(2.52, 0.25, 11.82, 0.2, 8), { t: [0, 0.48, 0] }), hex('#3a1446')));
     P.push(color(xf(rbox(2.3, 0.3, 4.0, 0.3, 8), { t: [0, 3.05, -2] }), Color3.Lerp(body, hex('#ffffff'), 0.15)));
     P.push(color(xf(box(1.6, 0.25, 0.04), { t: [0, 2.95, 5.93] }), hex('#ffb000')));
+    P.push(color(xf(box(2.56, 2.5, 0.45), { t: [0, 1.75, -1.2] }), hex('#1a1420'))); // articulation bellows (bendy rapid-transit look)
+    P.push(color(xf(box(2.53, 0.12, 11.0), { t: [0, 1.05, 0] }), hex('#e8e0ee'))); // pale waist band
   } else if (kind === 'cab') { // Belfast black cab (classic tall hackney shape)
     P.push(color(xf(rbox(1.9, 0.85, 4.55, 0.28, 10), { t: [0, 0.78, 0] }), body));
     P.push(color(xf(rbox(1.75, 1.0, 2.7, 0.3, 10), { t: [0, 1.6, -0.35] }), body));
@@ -106,7 +108,7 @@ export function buildTraffic(scene, city, { low = false, stops = [] } = {}) {
   const N = low ? 24 : 58;
   const spawnSpec = [];
   for (let i = 0; i < N; i++) { const kind = ['saloon', 'hatch', 'saloon', 'cab', 'hatch', 'saloon', 'cab'][i % 7]; const col = kind === 'cab' ? hex('#121214') : COLS[Math.floor(R() * COLS.length)]; spawnSpec.push({ kind, col, key: kind + (kind === 'cab' ? '' : COLS.indexOf(col)) }); }
-  for (let i = 0; i < (low ? 1 : 3); i++) spawnSpec.push({ kind: 'bus', col: hex('#482884'), key: 'bus' });
+  for (let i = 0; i < (low ? 1 : 3); i++) spawnSpec.push({ kind: 'bus', col: hex('#7e2a91'), key: 'bus' });
   spawnSpec.push({ kind: 'saloon', col: hex('#eef0f2'), key: 'patrolcar', patrol: true }, { kind: 'saloon', col: hex('#eef0f2'), key: 'patrolcar', patrol: true });
   spawnSpec.push({ kind: 'wagon', col: hex('#e8eaec'), key: 'patrolwagon', patrol: true }, { kind: 'wagon', col: hex('#5d646c'), key: 'patrolwagon2', patrol: true });
   for (const s of spawnSpec) {
@@ -140,7 +142,7 @@ export function buildTraffic(scene, city, { low = false, stops = [] } = {}) {
   { const near = (x, z) => { let best = null, bd = 1e9; for (const r of city.roads) { if (!r.d || r.t === 'service') continue; for (let i = 0; i < r.pts.length - 1; i++) { const a = r.pts[i], b = r.pts[i + 1]; const dx = b[0] - a[0], dz = b[1] - a[1], L = Math.hypot(dx, dz); if (L < 16) continue; const t = Math.max(0.2, Math.min(0.8, ((x - a[0]) * dx + (z - a[1]) * dz) / (L * L))); const px = a[0] + dx * t, pz = a[1] + dz * t; const d = Math.hypot(px - x, pz - z); if (d < bd) { bd = d; best = { px, pz, ux: dx / L, uz: dz / L, w: r.w, L }; } } } return best; };
     const tp = city.templeDoor; if (tp) { const s = near(tp.x + 30, tp.z - 10); if (s) for (let k = 0; k < 3; k++) park('cab', 'cab', hex('#121214'), s.px - s.ux * k * 5.4 - s.uz * (s.w / 2 - 1.1), s.pz - s.uz * k * 5.4 + s.ux * (s.w / 2 - 1.1), Math.atan2(s.ux, s.uz), { lights: true }); }
     const ref = tp || { x: 0, z: 0 }; let stop = null, sd = 1e9; for (const st of stops) { const d = Math.hypot(st[0] - ref.x, st[1] - ref.z); if (d < sd) { sd = d; stop = st; } }
-    if (stop) { const s = near(stop[0], stop[1]); if (s) { const bx = s.px - s.uz * (s.w / 2 - 1.5), bz = s.pz + s.ux * (s.w / 2 - 1.5); park('bus', 'bus', hex('#482884'), bx, bz, Math.atan2(s.ux, s.uz), { lights: true }); busStop = { x: bx - s.uz * 3.2, z: bz + s.ux * 3.2, h: Math.atan2(s.ux, s.uz) }; } } }
+    if (stop) { const s = near(stop[0], stop[1]); if (s) { const bx = s.px - s.uz * (s.w / 2 - 1.5), bz = s.pz + s.ux * (s.w / 2 - 1.5); park('bus', 'bus', hex('#7e2a91'), bx, bz, Math.atan2(s.ux, s.uz), { lights: true }); busStop = { x: bx - s.uz * 3.2, z: bz + s.ux * 3.2, h: Math.atan2(s.ux, s.uz) }; } } }
   if (busStop) { // bus shelter with a lit Reckless ad panel
     const shM = new StandardMaterial('shelter', scene); shM.diffuseColor = new Color3(1, 1, 1); shM.specularColor = new Color3(0.4, 0.4, 0.4);
     const sh = toMesh('busShelter', merge([color(xf(box(3.6, 0.08, 1.5), { t: [0, 2.5, 0] }), hex('#30343c')), ...[-1.75, 1.75].map(x => color(xf(box(0.08, 2.5, 0.08), { t: [x, 1.25, -0.65] }), hex('#30343c'))), color(xf(box(3.5, 2.1, 0.03), { t: [0, 1.25, -0.7] }), hex('#8fa4b8')), color(xf(box(2.2, 0.08, 0.4), { t: [0, 0.5, -0.45] }), hex('#30343c'))]), scene, shM);

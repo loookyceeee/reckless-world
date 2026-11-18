@@ -238,7 +238,7 @@ export function faceMaterial(scene) {
   if (faceMat) return faceMat; const base = avatarMaterial(scene);
   const m = new StandardMaterial('face', scene); m.diffuseTexture = new Texture(import.meta.env.BASE_URL + 'data/face.png', scene);
   m.diffuseTexture.wrapU = m.diffuseTexture.wrapV = Texture.CLAMP_ADDRESSMODE;
-  m.specularColor = base.specularColor.clone(); m.specularPower = base.specularPower; m.emissiveColor = base.emissiveColor.clone(); m.emissiveFresnelParameters = base.emissiveFresnelParameters.clone();
+  m.specularColor = base.specularColor.clone(); m.specularPower = base.specularPower; m.emissiveColor = base.emissiveColor.scale(0.6); m.emissiveFresnelParameters = base.emissiveFresnelParameters.clone(); m.emissiveFresnelParameters.leftColor = m.emissiveFresnelParameters.leftColor.scale(0.55);
   return (faceMat = m);
 }
 export function createAvatar(scene, { name = 'avatar', palette = null, outfit = 'stan', decals = true, lod = 1 } = {}) {
