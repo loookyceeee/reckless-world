@@ -3,7 +3,7 @@
   "status": "approved",
   "status_note": "APPROVED by Luke 2026-11-18 15:10 (curve, game XP cut, wardrobe spread). Takes effect at launch with the XP reset (Mon 23 Nov 2026 00:00 Europe/London); status becomes 'live' then. xp_to_enter_previous / unlock_level_previous / history keep the old values.",
   "owner": "RECKLESS CREW LOYALTY (writes this file); APP DEV + RECKLESS WORLD read it, never edit",
-  "updated_at": "2026-11-18T15:15:00Z",
+  "updated_at": "2026-11-18T15:45:00Z",
   "account_key": "email, trimmed + lowercased",
   "launch": {
     "xp_start_instant_utc": "2026-11-23T00:00:00Z",
@@ -656,17 +656,17 @@
     "email",
     "from_crew",
     "to_crew",
+    "skipped_crews",
     "code",
     "percent",
-    "channel",
-    "notes",
-    "skipped_crews",
     "trigger_event_id",
     "xp_total_at_issue",
     "status",
     "emailed_at",
     "redeemed_at",
-    "redeemed_order_id"
+    "redeemed_order_id",
+    "channel",
+    "notes"
   ],
   "issued_status_values": [
     "minted",
@@ -695,6 +695,10 @@
         },
         "weekly_cap_xp": 400
       }
+    },
+    {
+      "at": "2026-11-18T15:45:00Z",
+      "change": "issued_tab_columns reordered to match the server Issued writer (server/crew.mjs queueRow) and the Sheet header"
     }
   ],
   "issued_tab_note": "Sheet 'Issued' A:O in this order (A-H unchanged from before, I-O added 18 Nov). APP DEV appends one row per code.",
