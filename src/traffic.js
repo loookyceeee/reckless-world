@@ -139,15 +139,19 @@ export function buildTraffic(scene, city, { low = false, stops = [], signals = [
   const patrolDeco = (node, kind) => {
     const W = kind === 'wagon';
     if (models && models[MODEL_OF[kind]]) { // modelled patrol vehicles: Battenburg baked into the wagon body; plain POLICE lettering + blue bar here
-      const mw = W ? 1.135 : 0.965;
+      const mw = W ? 1.025 : 0.965;
       const PE = !W && models.pestate; // patrol estate model has the Battenburg baked in
       if (!W && !PE) { if (!bbM.__vc) { bbM.__vc = new StandardMaterial('bbVC', scene); bbM.__vc.diffuseColor = Color3.White(); bbM.__vc.emissiveColor = new Color3(0.07, 0.07, 0.07); bbM.__vc.specularColor = new Color3(0.3, 0.3, 0.3); }
         const Q = [], Y = hex('#d4ec1a'), B = hex('#123a9e'), n = 20, sq = 3.8 / n; // retro-reflective Battenburg: two rows of square checks
         for (const sd of [-1, 1]) for (let i = 0; i < n; i++) for (let j = 0; j < 2; j++) Q.push(color(xf(box(0.02, sq, sq), { t: [sd * mw, 0.72 + (j - 0.5) * sq, -1.85 + (i + 0.5) * sq] }), (i + j) % 2 ? B : Y));
         const p = toMesh('bb', merge(Q), scene, bodyM); p.parent = node; } // same material as the wagon's baked checks -> identical crisp yellow/blue
-      if (W) for (const sd of [-1, 1]) { const pl = toMesh('polS', xf(plane(1.5, 0.38), {}), scene, polM); pl.parent = node; pl.rotation.y = sd > 0 ? -Math.PI / 2 : Math.PI / 2; pl.position.set(sd * (mw + 0.01), 2.2, -1.75); }
+      if (W) for (const sd of [-1, 1]) { const pl = toMesh('polS', xf(plane(1.5, 0.38), {}), scene, polM); pl.parent = node; pl.rotation.y = sd > 0 ? -Math.PI / 2 : Math.PI / 2; pl.position.set(sd * (mw + 0.016), 1.95, -1.55); pl.scaling.set(0.8, 0.8, 1); }
       const pf = toMesh('polF', xf(plane(W ? 0.95 : 0.8, W ? 0.23 : 0.19), {}), scene, polM); pf.parent = node; pf.rotation.y = Math.PI;
-      if (W) pf.position.set(0, 1.3, 2.565); else if (PE) { pf.rotation.x = Math.PI / 2 - 0.12; pf.position.set(0, 0.875, 1.85); } else { pf.rotation.x = Math.PI / 2 - 0.2; pf.position.set(0, 1.07, 1.75); }
+      if (W) pf.position.set(0, 2.38, 1.345); else if (PE) { pf.rotation.x = Math.PI / 2 - 0.12; pf.position.set(0, 0.875, 1.85); } else { pf.rotation.x = Math.PI / 2 - 0.2; pf.position.set(0, 1.07, 1.75); }
+      if (W) { // armoured wagon: two blue lights at the front corners of the roof pod, alternating; small blues in the bumper
+        for (const sd of [-1, 1]) { const d = toMesh('wBlue', xf(box(0.3, 0.16, 0.24), { t: [sd * 0.62, 2.92, 1.02] }), scene, sd < 0 ? barM : barM2); d.parent = node; }
+        for (const sd of [-1, 1]) { const g = toMesh('grillB', xf(box(0.14, 0.07, 0.03), { t: [sd * 0.72, 0.8, 2.66] }), scene, sd < 0 ? barM : barM2); g.parent = node; }
+        return; }
       const by = W ? 3.12 : PE ? 1.6 : 1.8, bz = W ? 0.9 : PE ? -0.6 : -0.1, bw = W ? 1.9 : 1.3;
       const base = toMesh('lbB', xf(box(bw + 0.08, 0.06, 0.32), { t: [0, by - 0.07, bz] }), scene, darkM); base.parent = node;
       const b1 = toMesh('bar1', xf(box(bw / 2 - 0.02, 0.13, 0.28), { t: [-bw / 4, by, bz] }), scene, barM); b1.parent = node;

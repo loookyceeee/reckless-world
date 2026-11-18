@@ -78,7 +78,7 @@ def _ofs(m, a, b, c, col, ref):  # triangle wound so its normal faces along ref
     n = (u[1] * w[2] - u[2] * w[1], u[2] * w[0] - u[0] * w[2], u[0] * w[1] - u[1] * w[0])
     m.tri(a, b, c, col) if sum(n[k] * ref[k] for k in range(3)) >= 0 else m.tri(a, c, b, col)
 
-def wheel2(m, x, y, z, r, w, rim='rim', spokes=5, seg=30, dish=0.05):
+def wheel2(m, x, y, z, r, w, rim='rim', spokes=5, seg=30, dish=0.05, hub='hub'):
     """tyre with rounded shoulders and a bulged sidewall, a bright rim lip, a recessed spoked dish and a hub cap.
     Axis along x; profile points are (axial offset from centre, outward sign s; radius)."""
     s = 1 if x > 0 else -1
@@ -116,8 +116,8 @@ def wheel2(m, x, y, z, r, w, rim='rim', spokes=5, seg=30, dish=0.05):
             pass
     hc = m.v((x + s * (ad + 0.025), y, z)); hr = ring(ad + 0.005, rh)
     for k in range(seg):
-        k2 = (k + 1) % seg; _ofs(m, hr[k], hr[k2], hc, 'hub', (s, 0, 0))
-        _ofs(m, inner[k], inner[k2], hr[k2], 'hub', (s, 0, 0)); _ofs(m, inner[k], hr[k2], hr[k], 'hub', (s, 0, 0))
+        k2 = (k + 1) % seg; _ofs(m, hr[k], hr[k2], hc, hub, (s, 0, 0))
+        _ofs(m, inner[k], inner[k2], hr[k2], hub, (s, 0, 0)); _ofs(m, inner[k], hr[k2], hr[k], hub, (s, 0, 0))
         _ofs(m, innerG[k], innerG[k2], inner[k2], 'rimD', (s, 0, 0)); _ofs(m, innerG[k], inner[k2], inner[k], 'rimD', (s, 0, 0))
     # nuts
     for q in range(5):
@@ -185,53 +185,87 @@ def glider():
     return m
 
 def wagon():
-    m = M(); W = 2.25
-    def col(c, n):
-        x, y, z = c; nx, ny, nz = n
-        if ny > 0.75: return 'white'
-        if abs(nx) > 0.6:
-            if 0.95 < y < 1.75:  # Battenburg: two rows of 0.4 m squares
-                u = int(math.floor((z + 2.6) / 0.4)); v = 0 if y < 1.35 else 1
-                return 'bbY' if (u + v) % 2 == 0 else 'bbB'
-            if 2.0 < y < 2.5 and ((-0.9 < z < 0.4) or (1.0 < z < 1.9)): return 'glass'
-            if y < 0.62: return 'black'
-            return 'white'
-        if nz > 0.4:
-            if 1.95 < y < 2.55 and z < 2.5: return 'glass'
-            return 'white' if y > 0.62 else 'black'
-        if nz < -0.4:
-            if 0.75 < y < 1.0 and abs(x) > 0.75: return 'tail'
-            if 2.1 < y < 2.5 and abs(x) < 0.7: return 'glass'
-            return 'white' if y > 0.62 else 'black'
-        return 'white' if y > 0.62 else 'black'
-    rings = []
-    for z in [x * 0.2 - 2.6 for x in range(26)] + [2.55]:
-        w, h, r, y0 = W, 2.55, 0.14, 0.42
-        tf = max(0.0, (z - 1.75) / 0.8)
-        if tf > 0: h = 2.55 - 0.85 * tf ** 1.4; r = 0.14 + 0.06 * tf  # raked armoured screen / bonnet
-        if z > 2.3: h = min(h, 1.45)
-        top = y0 + h; y0 = 0.5   # 0.5 m ground clearance under the sills
-        for zw in (1.75, -1.75):  # round wheel arches with a clear gap above the tyre
-            d = abs(z - zw)
-            if d < 0.56: y0 = max(y0, 0.44 + math.sqrt(max(0.0, 0.56 ** 2 - d * d)))
-        h = top - y0
-        rings.append((z, rr_ring(w, h, r, y0, 4, (0.62, 0.95, 1.35, 1.75, 2.0, 2.5), 0.4)))
-    loft(m, rings, col)
-    for sd in (-1, 1): box(m, (sd * 0.8, 0.86, 2.565), (0.36, 0.16, 0.03), 'head')       # headlamps
-    box(m, (0, 1.05, 2.562), (0.9, 0.3, 0.03), 'black')                                     # plain grille (no badge)
-    for i in range(5):                                                                       # Battenburg across the nose
-        for j in range(2): box(m, (-0.9 + i * 0.45, 1.33 + j * 0.2, 2.566), (0.45, 0.2, 0.02), 'bbY' if (i + j) % 2 == 0 else 'bbB')
-    box(m, (0, 0.62, 2.72), (2.3, 0.3, 0.2), 'steel')            # plain steel bumper / push bar
-    for x in (-0.75, 0.75): box(m, (x, 0.95, 2.78), (0.08, 0.6, 0.08), 'steel')
-    box(m, (0, 0.95, 2.82), (1.6, 0.06, 0.06), 'steel')
+    """armoured Defender-style patrol wagon: short and boxy, flat bonnet with a black mesh grille and bull bar, black armoured
+    skirt and arch guards, tall white box body with small barred windows, roof pod with AC units (blue lights added in traffic.js),
+    two-row yellow/blue Battenburg band, black steel wheels. No crest, plate, maker badge or force name."""
+    m = M(); BW = 2.05; hw = BW / 2
+    ZR, ZC, ZF = -2.35, 1.3, 2.45            # rear face, cab front (windscreen), bonnet front
+    FA, RA, WR = 1.55, -1.25, 0.42           # front / rear axle z, wheel radius
+    AH = 0.55                                # arch half-length
+    YS, YB, YT = 0.55, 0.98, 2.62            # skirt bottom, body (white) bottom, roof
+    # armoured lower skirt (black), split around the arches
+    for z0, z1 in ((ZR, RA - AH), (RA + AH, FA - AH), (FA + AH, ZF)):
+        box(m, (0, (YS + YB) / 2, (z0 + z1) / 2), (BW, YB - YS, z1 - z0), 'black')
+    box(m, (0, 0.5, 0.05), (1.5, 0.2, 4.4), 'black')                       # chassis rails underneath
+    # tall white box body (rear body + cab) and the low flat bonnet with wings
+    box(m, (0, (YB + YT) / 2, (ZR + ZC) / 2), (BW, YT - YB, ZC - ZR), 'white', {'-y': 'black'})
+    box(m, (0, (YB + 1.44) / 2, (ZC + ZF) / 2), (BW, 1.44 - YB, ZF - ZC), 'white', {'-y': 'black'})
+    box(m, (0, 1.455, (ZC + ZF) / 2 - 0.02), (1.36, 0.03, ZF - ZC - 0.12), 'white')   # raised bonnet panel
+    for sd in (-1, 1): box(m, (sd * 0.69, 1.45, (ZC + ZF) / 2), (0.02, 0.025, ZF - ZC - 0.1), 'trim')  # bonnet shut lines
+    # arch guards: black flared top + legs, dark well liner
+    for zc in (FA, RA):
+        box(m, (0, YB - 0.03, zc), (BW - 0.04, 0.06, 2 * AH), 'black')
+        for sd in (-1, 1):
+            box(m, (sd * (hw + 0.05), YB + 0.03, zc), (0.12, 0.1, 2 * AH + 0.16), 'black')
+            for e in (-1, 1): box(m, (sd * (hw + 0.05), (YS + YB) / 2 + 0.02, zc + e * (AH + 0.04)), (0.12, YB - YS + 0.04, 0.08), 'black')
+    # two-row Battenburg band (decal skin 4 mm proud) along both sides and the back, above the arch tops
+    SQ = 0.22; y0 = 1.0
     for sd in (-1, 1):
-        box(m, (sd * (W / 2 + 0.03), 0.62, 0), (0.07, 0.2, 2.3), 'black')  # armoured sill between the arches
-        for k in range(4): box(m, (sd * (W / 2 + 0.02), 2.06 + k * 0.12, 1.45), (0.03, 0.03, 0.95), 'steel')  # window grilles
-        box(m, (sd * (W / 2 + 0.1), 2.0, 1.95), (0.06, 0.22, 0.14), 'black')  # mirrors
-    box(m, (0, 1.4, -2.72), (0.9, 0.9, 0.18), 'black')                 # rear spare wheel cover
-    box(m, (0, 3.0, -0.6), (1.5, 0.05, 2.6), 'steel')                  # roof rack
-    for z in (1.75, -1.75):
-        for x in (-0.96, 0.96): wheel2(m, x, 0.44, z, 0.44, 0.3, rim='steel', spokes=8, dish=0.06)
+        n = int(round((ZF - 0.02 - ZR) / SQ))
+        for i in range(n):
+            for j in range(2):
+                box(m, (sd * (hw + 0.004), y0 + (j + 0.5) * SQ, ZR + (i + 0.5) * (ZF - 0.02 - ZR) / n), (0.008, SQ, (ZF - 0.02 - ZR) / n), 'bbY' if (i + j) % 2 == 0 else 'bbB')
+    nb = 9
+    for i in range(nb):
+        for j in range(2):
+            box(m, (-hw + (i + 0.5) * BW / nb, y0 + (j + 0.5) * SQ, ZR - 0.004), (BW / nb, SQ, 0.008), 'bbY' if (i + j) % 2 == 1 else 'bbB')
+    # front: black mesh grille between round-ish lamps, bumper, bull bar
+    box(m, (0, 1.16, ZF + 0.012), (0.98, 0.44, 0.02), 'grille')
+    for k in range(7): box(m, (-0.42 + k * 0.14, 1.16, ZF + 0.026), (0.018, 0.42, 0.012), 'trim')
+    for k in range(4): box(m, (0, 0.99 + k * 0.11, ZF + 0.028), (0.96, 0.016, 0.012), 'trim')
+    for sd in (-1, 1):
+        box(m, (sd * 0.72, 1.18, ZF + 0.01), (0.3, 0.3, 0.02), 'black')        # lamp bezel
+        box(m, (sd * 0.72, 1.18, ZF + 0.024), (0.2, 0.2, 0.012), 'head')       # headlamp
+        box(m, (sd * 0.72, 1.18, ZF + 0.028), (0.12, 0.12, 0.01), 'head')
+        box(m, (sd * 0.9, 1.0, ZF + 0.016), (0.1, 0.06, 0.012), 'amber')       # indicator
+    box(m, (0, 0.8, ZF + 0.1), (BW + 0.04, 0.26, 0.2), 'black')               # armoured bumper
+    for sd in (-1, 1):
+        box(m, (sd * 0.46, 1.06, ZF + 0.25), (0.07, 0.6, 0.07), 'trim')        # bull bar uprights
+        box(m, (sd * 0.46, 0.78, ZF + 0.2), (0.07, 0.07, 0.14), 'trim')
+    box(m, (0, 1.36, ZF + 0.25), (1.0, 0.07, 0.07), 'trim')
+    box(m, (0, 0.98, ZF + 0.25), (1.0, 0.06, 0.06), 'trim')
+    box(m, (0, 0.62, ZF + 0.14), (1.2, 0.08, 0.12), 'trim')                    # towing eye / spoiler plate
+    # cab: small upright armoured windscreen in two panes, black frame; roof-front sign board for POLICE (traffic.js)
+    box(m, (0, 1.88, ZC + 0.01), (1.72, 0.54, 0.02), 'black')
+    for sd in (-1, 1): box(m, (sd * 0.42, 1.88, ZC + 0.024), (0.76, 0.42, 0.01), 'glass')
+    box(m, (0, 2.38, ZC + 0.012), (1.1, 0.26, 0.02), 'black')
+    # side: door shut lines, small barred windows, mirrors
+    for sd in (-1, 1):
+        x = sd * (hw + 0.009)
+        for zz in (0.42, 1.27): box(m, (x, 1.8, zz), (0.006, 1.6, 0.02), 'trim')
+        for (za, zb) in ((0.58, 1.12), (-0.72, -0.12)):
+            box(m, (x, 1.96, (za + zb) / 2), (0.006, 0.5, zb - za + 0.08), 'black')
+            box(m, (x + sd * 0.002, 1.96, (za + zb) / 2), (0.006, 0.42, zb - za), 'glass')
+            for k in range(4): box(m, (x + sd * 0.008, 1.96, za + (k + 0.5) * (zb - za) / 4), (0.01, 0.44, 0.025), 'trim')
+        box(m, (sd * (hw + 0.14), 2.0, ZC - 0.05), (0.04, 0.04, 0.12), 'black')  # mirror arm
+        box(m, (sd * (hw + 0.2), 1.95, ZC - 0.05), (0.06, 0.26, 0.16), 'black')
+        box(m, (sd * (hw + 0.03), 0.72, 0.15), (0.05, 0.1, 0.9), 'trim')        # side step
+    # rear: door, small barred window, tail lamps, black step
+    box(m, (0, 1.75, ZR - 0.009), (1.1, 1.55, 0.006), 'trim')
+    box(m, (0, 1.75, ZR - 0.012), (1.06, 1.51, 0.006), 'white')
+    box(m, (0, 2.05, ZR - 0.016), (0.6, 0.4, 0.006), 'glass')
+    for k in range(3): box(m, (-0.2 + k * 0.2, 2.05, ZR - 0.022), (0.025, 0.42, 0.01), 'trim')
+    for sd in (-1, 1): box(m, (sd * 0.86, 1.65, ZR - 0.012), (0.14, 0.34, 0.012), 'tail'); box(m, (sd * 0.86, 1.4, ZR - 0.012), (0.14, 0.1, 0.012), 'amber')
+    box(m, (0, 0.74, ZR - 0.08), (BW, 0.2, 0.16), 'black')
+    # roof pod (white) with AC units and dark light bases at the front corners
+    box(m, (0, YT + 0.09, -0.35), (1.8, 0.18, 3.2), 'white')
+    for zc in (-0.6, -1.45):
+        box(m, (0, YT + 0.3, zc), (1.0, 0.24, 0.7), 'pod')
+        for sd in (-1, 1): box(m, (sd * 0.25, YT + 0.425, zc), (0.36, 0.012, 0.36), 'black')
+    for sd in (-1, 1): box(m, (sd * 0.62, YT + 0.21, 1.02), (0.36, 0.06, 0.3), 'trim')
+    # black steel wheels
+    for z in (FA, RA):
+        for x in (-0.86, 0.86): wheel2(m, x, WR, z, WR, 0.3, rim='trim', spokes=8, dish=0.06, hub='black')
     return m
 
 def pestate():
