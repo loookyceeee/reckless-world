@@ -78,12 +78,12 @@ PAL = {'purple': (0.52, 0.17, 0.66), 'purpleD': (0.25, 0.07, 0.32), 'roof': (0.5
        'skirt': (0.16, 0.12, 0.2), 'bellows': (0.13, 0.13, 0.15), 'tyre': (0.06, 0.06, 0.07), 'hub': (0.2, 0.2, 0.23), 'pod': (0.7, 0.72, 0.76),
        'led': (0.85, 0.9, 1.0), 'head': (1.0, 0.97, 0.88), 'tail': (1.0, 0.08, 0.06), 'dest': (1.0, 0.62, 0.1), 'door': (0.09, 0.1, 0.13), 'frame': (0.3, 0.3, 0.34),
        'white': (0.93, 0.94, 0.95), 'bbY': (0.83, 0.92, 0.1), 'bbB': (0.07, 0.2, 0.62), 'black': (0.08, 0.08, 0.09), 'blue': (0.16, 0.42, 1.0), 'steel': (0.32, 0.33, 0.36),
-       'amber': (1.0, 0.6, 0.08), 'glassLit': (0.17, 0.18, 0.21)}
-EMIT = {'led', 'head', 'tail', 'dest', 'amber', 'glassLit'}
+       'amber': (1.0, 0.6, 0.08), 'glassLit': (0.17, 0.18, 0.21), 'cabin': (0.42, 0.4, 0.34)}
+EMIT = {'led', 'head', 'tail', 'dest', 'amber', 'glassLit', 'cabin'}
 
 def glider():
     m = M(); W, Y0, H = 2.55, 0.3, 2.95
-    GYS = (0.5, 1.06, 1.32, 1.4, 2.56, 2.66, 2.74)
+    GYS = (0.5, 1.06, 1.32, 1.4, 2.47, 2.56, 2.66, 2.74)
     DOORS = [7.75, 3.9, -3.2, -7.2]  # nearside (-x) doors, UK left-hand kerb
     def col(c, n, front=None):
         x, y, z = c; nx, ny, nz = n
@@ -102,7 +102,8 @@ def glider():
         if abs(nx) > 0.5:
             if x < 0 and any(abs(z - d) < 0.6 for d in DOORS) and 0.5 < y < 2.56: return 'door'
             if 2.66 < y < 2.74: return 'led'
-            if 1.4 < y < 2.56: return 'glassLit'
+            if 2.47 < y < 2.56: return 'cabin'  # interior ceiling light-line seen through the tint
+            if 1.4 < y < 2.47: return 'glass'  # dark tinted side glass (reflective body material)
             if 1.06 < y < 1.32: return 'silver'
             if y < 0.5: return 'skirt'
             return 'purple'

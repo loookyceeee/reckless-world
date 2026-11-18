@@ -151,10 +151,15 @@ export function createHUD(app) {
       const toW = (sx, sy) => [(sx * dpr - c.width / 2) / (V.s * dpr) + V.cx, -(sy * dpr - c.height / 2) / (V.s * dpr) + V.cz];
       let route = null; const reroute = () => { const d = st.getDest(); route = d ? st.route(P.x, P.z, d.x, d.z) : null; };
       reroute();
+      const clampV = () => { // GTA-style: the map always fills the view (no void past the edge)
+        const mx0 = base.img ? base.x0 : base.bounds.mnx - 20 / base.S, mz1 = base.img ? base.ztop : base.bounds.mxz + 20 / base.S;
+        const mw = base.canvas.width / base.S, mh = base.canvas.height / base.S, vw = c.width / dpr, vh = c.height / dpr;
+        V.s = Math.max(V.s, vw / mw, vh / mh); const hw = vw / 2 / V.s, hh = vh / 2 / V.s;
+        V.cx = Math.min(Math.max(V.cx, mx0 + hw), mx0 + mw - hw); V.cz = Math.min(Math.max(V.cz, mz1 - mh + hh), mz1 - hh); };
       const draw = () => {
-        const W = c.width, H = c.height; g.setTransform(1, 0, 0, 1, 0, 0); g.fillStyle = '#000'; g.fillRect(0, 0, W, H);
+        clampV(); const W = c.width, H = c.height; g.setTransform(1, 0, 0, 1, 0, 0); g.fillStyle = '#1a1a1e'; g.fillRect(0, 0, W, H);
         const k = V.s * dpr / base.S; const [ox, oy] = toS(base.img ? base.x0 : base.bounds.mnx, base.img ? base.ztop : base.bounds.mxz);
-        g.imageSmoothingEnabled = true; if (base.img) g.drawImage(base.canvas, ox, oy, base.canvas.width * k, base.canvas.height * k); else g.drawImage(base.canvas, ox - 20 * k, oy - 20 * k, base.canvas.width * k, base.canvas.height * k);
+        g.imageSmoothingEnabled = true; if (base.img && base.proc) { const pb = base.proc, kp = V.s * dpr / pb.S, [px0, py0] = toS(pb.bounds.mnx, pb.bounds.mxz); g.globalAlpha = 0.85; g.drawImage(pb.canvas, px0 - 20 * kp, py0 - 20 * kp, pb.canvas.width * kp, pb.canvas.height * kp); g.globalAlpha = 1; } if (base.img) g.drawImage(base.canvas, ox, oy, base.canvas.width * k, base.canvas.height * k); else g.drawImage(base.canvas, ox - 20 * k, oy - 20 * k, base.canvas.width * k, base.canvas.height * k);
         g.strokeStyle = 'rgba(255,255,255,0.06)'; g.lineWidth = 1; const step = 250; const [wx0, wz1] = toW(0, 0), [wx1, wz0] = toW(W / dpr, H / dpr);
         for (let x = Math.ceil(wx0 / step) * step; x < wx1; x += step) { const [a] = toS(x, 0); g.beginPath(); g.moveTo(a, 0); g.lineTo(a, H); g.stroke(); }
         for (let z = Math.ceil(wz0 / step) * step; z < wz1; z += step) { const [, b] = toS(0, z); g.beginPath(); g.moveTo(0, b); g.lineTo(W, b); g.stroke(); }
@@ -186,7 +191,7 @@ export function createHUD(app) {
       c.addEventListener('pointerup', up); c.addEventListener('pointercancel', (e) => { pts.delete(e.pointerId); pinch0 = null; });
       c.addEventListener('wheel', (e) => { e.preventDefault(); zoomAt(Math.exp(-e.deltaY * 0.0015), e.offsetX, e.offsetY); }, { passive: false });
       overlay.querySelectorAll('.pmzoom button').forEach(b => b.onclick = () => { if (b.dataset.z === 'me') { V.cx = P.x; V.cz = P.z; draw(); } else { const r = c.getBoundingClientRect(); zoomAt(Number(b.dataset.z), r.width / 2, r.height / 2); } });
-      overlay.querySelectorAll('.pmv').forEach(b => b.onclick = () => { const v = (st.venues || []).find(q => q.id === b.dataset.v); if (!v) return; st.setDest({ x: v.x, z: v.z, label: v.name, kind: 'venue', id: v.id }); reroute(); V.cx = (P.x + v.x) / 2; V.cz = (P.z + v.z) / 2; draw(); });
+      overlay.querySelectorAll('.pmv').forEach(b => b.onclick = () => { const v = (st.venues || []).find(q => q.id === b.dataset.v); if (!v) return; st.setDest({ x: v.x, z: v.z, label: v.name, kind: 'venue', id: v.id }); reroute(); V.cx = v.x; V.cz = v.z; V.s = Math.max(V.s, 0.6); overlay.querySelectorAll('.pmv').forEach(q => q.classList.toggle('sel', q === b)); draw(); });
       overlay.querySelectorAll('.pmleg input').forEach(i => i.onchange = () => { api.setFilter(i.dataset.f, i.checked); draw(); });
       overlay.querySelector('#pmclear').onclick = () => { st.setDest(null); reroute(); draw(); };
       api._mapResize = () => { if (!overlay.querySelector('#bigmap')) return removeEventListener('resize', api._mapResize); fit(); draw(); }; addEventListener('resize', api._mapResize);

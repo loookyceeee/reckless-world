@@ -142,7 +142,7 @@ export function buildTraffic(scene, city, { low = false, stops = [], signals = [
       if (!W) { if (!bbM.__vc) { bbM.__vc = new StandardMaterial('bbVC', scene); bbM.__vc.diffuseColor = Color3.White(); bbM.__vc.emissiveColor = new Color3(0.07, 0.07, 0.07); bbM.__vc.specularColor = new Color3(0.3, 0.3, 0.3); }
         const Q = [], Y = hex('#d4ec1a'), B = hex('#123a9e'), n = 20, sq = 3.8 / n; // retro-reflective Battenburg: two rows of square checks
         for (const sd of [-1, 1]) for (let i = 0; i < n; i++) for (let j = 0; j < 2; j++) Q.push(color(xf(box(0.02, sq, sq), { t: [sd * mw, 0.72 + (j - 0.5) * sq, -1.85 + (i + 0.5) * sq] }), (i + j) % 2 ? B : Y));
-        const p = toMesh('bb', merge(Q), scene, bbM.__vc); p.parent = node; }
+        const p = toMesh('bb', merge(Q), scene, bodyM); p.parent = node; } // same material as the wagon's baked checks -> identical crisp yellow/blue
       if (W) for (const sd of [-1, 1]) { const pl = toMesh('polS', xf(plane(1.5, 0.38), {}), scene, polM); pl.parent = node; pl.rotation.y = sd > 0 ? -Math.PI / 2 : Math.PI / 2; pl.position.set(sd * (mw + 0.01), 2.2, -1.75); }
       const pf = toMesh('polF', xf(plane(W ? 0.95 : 0.8, W ? 0.23 : 0.19), {}), scene, polM); pf.parent = node; pf.rotation.y = Math.PI;
       if (W) pf.position.set(0, 1.3, 2.565); else { pf.rotation.x = Math.PI / 2 - 0.2; pf.position.set(0, 1.07, 1.75); }
@@ -177,7 +177,7 @@ export function buildTraffic(scene, city, { low = false, stops = [], signals = [
   const spawnSpec = [];
   for (let i = 0; i < N; i++) { const kind = models ? ['saloon', 'hatch', 'suv', 'cab', 'saloon', 'van', 'cab', 'hatch', 'saloon', 'taxi'][i % 10] : ['saloon', 'hatch', 'saloon', 'cab', 'hatch', 'saloon', 'cab'][i % 7]; const col = kind === 'cab' ? hex('#121214') : kind === 'taxi' ? hex('#f4c21a') : COLS[Math.floor(R() * COLS.length)]; spawnSpec.push({ kind, col, key: kind + (kind === 'cab' ? '' : COLS.indexOf(col)) }); }
   for (let i = 0; i < (low ? 1 : 3); i++) spawnSpec.push({ kind: 'bus', col: hex('#7e2a91'), key: 'bus' });
-  spawnSpec.push({ kind: 'estate', col: hex('#b9bdc4'), key: 'patrolcar', patrol: true }, { kind: 'estate', col: hex('#b9bdc4'), key: 'patrolcar', patrol: true });
+  spawnSpec.push({ kind: 'estate', col: hex('#9ea2aa'), key: 'patrolcar', patrol: true }, { kind: 'estate', col: hex('#9ea2aa'), key: 'patrolcar', patrol: true });
   spawnSpec.push({ kind: 'wagon', col: hex('#d6d9dd'), key: 'patrolwagon', patrol: true }, { kind: 'wagon', col: hex('#b9bec4'), key: 'patrolwagon2', patrol: true });
   for (const s of spawnSpec) {
     const t = tpl(s.key, s.kind, s.col);

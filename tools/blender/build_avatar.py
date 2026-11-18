@@ -24,6 +24,7 @@ for o in list(bpy.context.scene.objects):
     if o.name.startswith('Icosphere'): bpy.data.objects.remove(o, do_unlink=True)
 arm = [o for o in bpy.context.scene.objects if o.type == 'ARMATURE'][0]
 body = bpy.data.objects['SuperHero_Male']
+_bw = bmesh.new(); _bw.from_mesh(body.data); bmesh.ops.remove_doubles(_bw, verts=_bw.verts, dist=1e-5); _bw.to_mesh(body.data); _bw.free()  # weld glTF seams so shells never crack
 before = set(bpy.context.scene.objects)
 if USE_QHAIR: bpy.ops.import_scene.gltf(filepath=HAIR)
 for o in set(bpy.context.scene.objects) - before:
@@ -103,6 +104,13 @@ def bone_ws(n):
     b = arm.data.bones[n]; return b.head_local.copy(), b.tail_local.copy()
 z_neck = bone_ws('neck_01')[0].z; z_pelvis = bone_ws('pelvis')[0].z; z_sp2 = bone_ws('spine_02')[0].z; hh, ht = bone_ws('Head')
 
+# --- shoulders: the app figure has sloped shoulders and slimmer traps than the superhero base ---
+toAs = arm.matrix_world.inverted() @ body.matrix_world; invs = toAs.inverted()
+def _sm(a, b, x): t = max(0.0, min(1.0, (x - a) / (b - a))); return t * t * (3 - 2 * t)
+for v in body.data.vertices:
+    p = toAs @ v.co; ax_ = abs(p.x)
+    if p.z < z_neck - 0.2 or p.z > z_neck + 0.03: continue
+    dz = -0.026 * _sm(0.045, 0.19, ax_) * _sm(z_neck - 0.17, z_neck - 0.05, p.z); p.z += dz; v.co = invs @ p
 # --- face: rounder, softer, younger (app crew render): shorter lower face, fuller cheeks and jaw, smaller nose, smoothed features ---
 toA = arm.matrix_world.inverted() @ body.matrix_world
 Wf = wmap(body); Pf = [toA @ v.co for v in body.data.vertices]
@@ -119,7 +127,7 @@ for i in fv:
     p = Pf[i].copy(); n = Vector(((p.x - hc0.x) / ex0.x, (p.y - hc0.y) / ex0.y, (p.z - hc0.z) / ex0.z)); w = Wf[i].get('Head', 0)
     if n.z < 0.15:  # lower face: lift the chin, fill the cheeks and jaw out
         lift = sm(0.15, -1.0, n.z); p.z += (hc0.z + 0.15 * ex0.z - p.z) * 0.2 * lift
-        p.x = hc0.x + (p.x - hc0.x) * (1 + 0.17 * sm(0.15, -0.45, n.z) * sm(-1.05, -0.6, n.z))
+        p.x = hc0.x + (p.x - hc0.x) * (1 + 0.26 * sm(0.15, -0.45, n.z) * sm(-1.05, -0.6, n.z))
         if n.y < 0: p.y = hc0.y + (p.y - hc0.y) * (1 - 0.06 * lift)
     if n.y < -0.7 and abs(n.x) < 0.3 and -0.45 < n.z < 0.15: p.y += (hc0.y - ex0.y * 0.7 - p.y) * 0.6 * sm(0.3, 0.0, abs(n.x))  # smaller nose
     newP[i] = hc0 + (p - hc0) if w > 0 else Pf[i]
@@ -153,7 +161,7 @@ for v in bm.verts:
     if v.index not in HSEL: continue
     n = hn(Ph[v.index]); top = smooth(0.30, 0.80, n.z)      # crop: volume on top, faded short sides
     edge = smooth(0.0, 0.14, n.z - (0.30 - max(0.0, min(1.0, (n.y + 0.45) / 1.1)) * 0.78))  # thin to nothing at the hairline
-    th = (0.0025 + 0.013 * top) * (0.25 + 0.75 * edge) + (0.010 * smooth(-0.2, -0.75, n.y) * smooth(0.25, 0.6, n.z))  # extra fringe volume at the front
+    th = (0.0025 + 0.013 * top * (1 - 0.5 * smooth(0.45, 0.95, abs(n.x)))) * (0.25 + 0.75 * edge) + 0.004 * smooth(0.6, 0.9, abs(n.x)) * smooth(0.05, 0.45, n.z) * edge + (0.010 * smooth(-0.2, -0.75, n.y) * smooth(0.25, 0.6, n.z))  # extra fringe volume at the front
     d = norms[v.index] * th
     if n.y < -0.35 and n.z > 0.25: d += Vector((0, -0.006, -0.004)) * top   # fringe pushed forward over the brow
     v.co = v.co + (toA.inverted().to_3x3() @ d)
@@ -201,8 +209,9 @@ def region(kind):
         side = b[-2:] if b[-2:] in ('_l', '_r') else ''
         up = kind in ('tee', 'long', 'crop', 'hoodie')
         if up:
-            ok = b in TORSO or (b == 'neck_01' and p.z < z_neck + 0.03) or (b == 'pelvis' and p.z > z_pelvis + (0.02 if kind != 'hoodie' else -0.05))
-            if b.startswith('upperarm'): ok = kind != 'tee' and kind != 'crop' or tparam(p, b) < 0.55
+            ok = b in TORSO or (b == 'neck_01' and p.z < z_neck + 0.03) or (b == 'pelvis' and p.z > z_pelvis + (-0.07 if kind in ('tee', 'long') else 0.02 if kind != 'hoodie' else -0.05))
+            if b.startswith('thigh') and kind in ('tee', 'long'): ok = p.z > z_pelvis - 0.07
+            if b.startswith('upperarm'): ok = kind != 'tee' and kind != 'crop' or tparam(p, b) < 0.85
             if b.startswith('lowerarm'): ok = kind in ('long', 'hoodie') and tparam(p, b) < 0.93
             if kind == 'crop' and ok and p.z < z_sp2 - 0.01: ok = False
             if kind == 'hoodie' and b == 'Head':
@@ -211,10 +220,10 @@ def region(kind):
             if ok: sel.add(i)
         else:
             ok = False
-            if b == 'pelvis': ok = p.z < z_pelvis + (0.06 if kind != 'briefs' else 0.05)
+            if b == 'pelvis': ok = p.z < z_pelvis + (0.05 if kind == 'briefs' else 0.07 if kind in ('jeans', 'pants', 'cuffed') else 0.06)
             if b.startswith('thigh'): ok = kind != 'briefs' or tparam(p, b) < 0.3
             if kind == 'shorts' and b.startswith('thigh'): ok = tparam(p, b) < 0.62
-            if b.startswith('calf'): ok = kind in ('jeans', 'pants', 'cuffed') and tparam(p, b) < (0.96 if kind == 'jeans' else 0.9)
+            if b.startswith('calf'): ok = kind in ('jeans', 'pants', 'cuffed') and tparam(p, b) < (1.0 if kind == 'jeans' else 0.9)
             if kind == 'shoes': ok = b.startswith('foot') or b.startswith('ball') or (b.startswith('calf') and tparam(p, b) > 0.9)
             if ok: sel.add(i)
     return sel
@@ -229,7 +238,7 @@ def make(kind):
         if v.index not in sel: continue
         p = toA @ v.co; d = PUSH[kind]; b = dom(W[v.index]) or ''
         k = 1.0
-        if kind in ('tee', 'crop'): k = 1.55 if b.startswith('upperarm') else 1.27
+        if kind in ('tee', 'crop'): k = (1.3 + 0.55 * tparam(p, b)) if b.startswith('upperarm') else 1.27  # sleeve flares toward the hem
         elif kind == 'long': k = 1.35 if b.startswith(('upperarm', 'lowerarm')) else 1.1
         elif kind == 'hoodie': k = 1.45 if b.startswith(('upperarm', 'lowerarm')) else (1.0 if b == 'Head' else 1.2)
         elif kind == 'jeans': k = (1.35 if b.startswith('thigh') else 1.95 if b.startswith('calf') else 1.12)
@@ -238,17 +247,59 @@ def make(kind):
         elif kind == 'shorts': k = 1.4 if b.startswith('thigh') else 1.12
         elif kind == 'briefs': k = 1.04
         elif kind == 'shoes': k = 1.45
+        if kind in ('jeans', 'pants', 'cuffed', 'shorts') and p.z > z_pelvis - 0.03:  # waistband tucks under any top
+            f = max(0.0, min(1.0, (p.z - (z_pelvis - 0.03)) / 0.04)); k = k + (1.02 - k) * f; d = d + (0.005 - d) * f
         if k != 1.0 and b and b != 'Head':
             c = axis_pt(p, b) if not b.startswith(('spine', 'pelvis', 'clavicle', 'neck')) else Vector((0, axis_pt(p, b).y * 0 + (axis_pt(p, 'spine_02').y), p.z))
             if b.startswith(('spine', 'pelvis', 'clavicle', 'neck')): c = Vector((0.0, axis_pt(p, 'spine_02').y + 0.01, p.z))
             if kind == 'jeans' and b.startswith(('thigh', 'calf')):  # straight-leg baggy: near-constant radius from mid-thigh to the hem
                 r = (p - c).length; R = max(r * 1.12, 0.082 if b.startswith('thigh') else 0.079); q = c + (p - c) * (R / max(r, 1e-4))
+            elif b.startswith(('spine', 'pelvis', 'clavicle', 'neck')):  # torso: loose in depth, barely wider (no shoulder pads)
+                kx = 1 + (k - 1) * (0.3 if kind in ('tee', 'crop', 'long', 'hoodie') else 0.4); dq = p - c; q = c + Vector((dq.x * kx, dq.y * k, 0))
             else: q = c + (p - c) * k
             v.co = toA.inverted() @ q + norms[v.index] * d
         else:
             if kind == 'hoodie' and b == 'Head': d = 0.04
             v.co = v.co + norms[v.index] * d
     bmesh.ops.delete(bm, geom=kill, context='VERTS')
+    if kind in ('tee', 'crop', 'long', 'hoodie'):  # drape: relax the shell so the base's muscle relief doesn't print through
+        dl0 = bm.verts.layers.deform.active; gn0 = {g.index: g.name for g in o.vertex_groups}
+        tv = [v for v in bm.verts if not v.is_boundary and dl0 and len(v[dl0]) and gn0.get(max(v[dl0].items(), key=lambda kv: kv[1])[0], '').startswith(('spine', 'pelvis', 'clavicle'))]
+        orig = {v: v.co.copy() for v in tv}; cy_ = axis_pt(Vector((0, 0, 1.0)), 'spine_02').y
+        for _ in range(8): bmesh.ops.smooth_laplacian_vert(bm, verts=tv, lambda_factor=0.5, lambda_border=0.0, use_x=True, use_y=True, use_z=True, preserve_volume=False)
+        for v in tv:  # cloth bridges the valleys (abs/pecs) but never sinks below the pushed shell
+            a_ = toA @ orig[v]; b_ = toA @ v.co
+            ra = math.hypot(a_.x, a_.y - cy_); rb = math.hypot(b_.x, b_.y - cy_)
+            if rb < ra: v.co = orig[v]
+    # clean straight hems: bisect the pushed shell with planes (collar, hem, sleeve ends, waistband, leg hems)
+    inv = toA.inverted(); dl = bm.verts.layers.deform.active; gn = {g.index: g.name for g in o.vertex_groups}
+    def vdom(v):
+        d = v[dl] if dl else {}; return gn.get(max(d.items(), key=lambda kv: kv[1])[0], '') if len(d) else ''
+    def cutp(pt, nrm, only=None):
+        co = inv @ pt; no = (inv.to_3x3() @ nrm).normalized()
+        vs = [v for v in bm.verts if only is None or vdom(v).startswith(only)]; vset = set(vs)
+        es = [e for e in bm.edges if all(x in vset for x in e.verts)]; fs = [f for f in bm.faces if all(x in vset for x in f.verts)]
+        bmesh.ops.bisect_plane(bm, geom=vs + es + fs, plane_co=co, plane_no=no, clear_outer=True)
+    def along(bn, t):
+        h, tl = bone_ws(bn); return h + (tl - h) * t, (tl - h).normalized()
+    if kind in ('tee', 'long', 'crop'):  # round crew neck: drop faces inside a neck cylinder, snap the rim onto it
+        ny_ = bone_ws('neck_01')[0].y; R = 0.064
+        def hd(v): q = toA @ v.co; return math.hypot(q.x, (q.y - ny_) * 0.92), q
+        dead = [f for f in bm.faces if all((lambda r: r[0] < R and r[1].z > z_neck - 0.06)(hd(v)) for v in f.verts) or (lambda c: math.hypot(c.x, (c.y - ny_) * 0.92) < R and c.z > z_neck - 0.06)(toA @ f.calc_center_median())]
+        bmesh.ops.delete(bm, geom=dead, context='FACES_ONLY')
+        bmesh.ops.delete(bm, geom=[v for v in bm.verts if not v.link_faces], context='VERTS')
+        for v in bm.verts:
+            if v.is_boundary:
+                r, q = hd(v)
+                if q.z > z_neck - 0.08 and r < R * 1.6 and r > 1e-4:
+                    k_ = R / r; q2 = Vector((q.x * k_, ny_ + (q.y - ny_) * k_, q.z)); v.co = inv @ q2
+    if kind in ('tee', 'long'): cutp(Vector((0, 0, z_pelvis - 0.03)), Vector((0, 0, -1)))
+    if kind == 'tee':
+        for sd in ('_l', '_r'): pt, dr = along('upperarm' + sd, 0.66); cutp(pt, dr, only='upperarm' + sd)
+    if kind in ('jeans', 'pants', 'cuffed'):
+        cutp(Vector((0, 0, z_pelvis + 0.035)), Vector((0, 0, 1)))
+    if kind == 'jeans':
+        for sd in ('_l', '_r'): pt, dr = along('calf' + sd, 0.965); cutp(pt, dr, only=('calf' + sd, 'foot' + sd))
     bm.to_mesh(o.data); bm.free()
     o.data.materials.clear(); mat = bpy.data.materials.get('M_' + kind) or bpy.data.materials.new('M_' + kind); o.data.materials.append(mat)
     for poly in o.data.polygons: poly.use_smooth = True
@@ -315,6 +366,36 @@ arm.animation_data.action = None
 s = TARGET_H / hcur; arm.scale = (arm.scale[0] * s, arm.scale[1] * s, arm.scale[2] * s)
 for o in list(bpy.context.scene.objects):  # drop helper spheres (42-vert Icosphere shipped with the base kit)
     if o.type == 'MESH' and (o.name.startswith('Icosphere') or len(o.data.vertices) < 60): bpy.data.objects.remove(o, do_unlink=True)
+# --- bake UVs + projection dump: every visible part gets a fresh non-overlapping UV layout (smart project) and its posed
+# (idle frame 1 = the app's stance) loop positions/normals are dumped so tools/bake_avatar_tex.py can project the app's
+# front renders onto it (face, hair, skin, every wardrobe garment). See research/techniques-sources.md (texture projection).
+import numpy as np, os
+BAKE = os.environ.get('AV_DUMP', '/tmp/av_dump.npz')
+TEXM = [o for o in bpy.context.scene.objects if o.type == 'MESH' and (o.name in ('Body', 'Hair', 'Eyes') or o.name.startswith('G_'))]
+for o in TEXM:
+    while len(o.data.color_attributes): o.data.color_attributes.remove(o.data.color_attributes[0])
+    while len(o.data.uv_layers): o.data.uv_layers.remove(o.data.uv_layers[0])
+    o.data.uv_layers.new(name='UVMap')
+    bpy.ops.object.select_all(action='DESELECT'); bpy.context.view_layer.objects.active = o; o.select_set(True)
+    bpy.ops.object.mode_set(mode='EDIT'); bpy.ops.mesh.select_all(action='SELECT')
+    bpy.ops.mesh.remove_doubles(threshold=1e-5)  # glTF import splits every UV/normal seam: weld so islands are whole
+    bpy.ops.uv.smart_project(angle_limit=math.radians(60), island_margin=0.012, area_weight=0.0, scale_to_bounds=True)
+    bpy.ops.object.mode_set(mode='OBJECT')
+arm.animation_data.action = ia; bpy.context.scene.frame_set(1); bpy.context.view_layer.update()
+dg = bpy.context.evaluated_depsgraph_get(); D = {}
+for o in TEXM:
+    oe = o.evaluated_get(dg); me = oe.to_mesh(); me.calc_loop_triangles()
+    Mw = oe.matrix_world; R3 = Mw.to_3x3()
+    co = np.array([tuple(Mw @ v.co) for v in me.vertices], np.float32)
+    lv = np.array([l.vertex_index for l in me.loops], np.int32)
+    try: ln = np.array([tuple((R3 @ l.normal).normalized()) for l in me.loops], np.float32)
+    except Exception: ln = np.array([tuple((R3 @ me.vertices[l.vertex_index].normal).normalized()) for l in me.loops], np.float32)
+    uv = np.array([tuple(d.uv) for d in me.uv_layers.active.data], np.float32)
+    tri = np.array([tuple(t.loops) for t in me.loop_triangles], np.int32)
+    D[o.name + '|co'] = co[lv]; D[o.name + '|n'] = ln; D[o.name + '|uv'] = uv; D[o.name + '|tri'] = tri
+    oe.to_mesh_clear()
+np.savez_compressed(BAKE, **D); print('dumped', BAKE, len(TEXM))
+arm.animation_data.action = None; bpy.context.scene.frame_set(0)
 for o in bpy.context.scene.objects:  # lean export: one UV set, no vertex colours
     if o.type != 'MESH': continue
     while o.name != 'Hair' and len(o.data.color_attributes): o.data.color_attributes.remove(o.data.color_attributes[0])
