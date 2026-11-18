@@ -1,6 +1,6 @@
 // Geometry helpers: vertex-data builders, colouring, merging. All procedural, no external assets.
 import { VertexData } from '@babylonjs/core/Meshes/mesh.vertexData';
-import { Matrix, Vector3, Quaternion } from '@babylonjs/core/Maths/math.vector';
+import { Matrix, Vector3, Quaternion, Vector4 } from '@babylonjs/core/Maths/math.vector';
 import { Mesh } from '@babylonjs/core/Meshes/mesh';
 import { Color3 } from '@babylonjs/core/Maths/math.color';
 import { CreateSphereVertexData } from '@babylonjs/core/Meshes/Builders/sphereBuilder';
@@ -17,6 +17,9 @@ export function sphere(seg = 12) { return CreateSphereVertexData({ segments: seg
 export function box(w = 1, h = 1, d = 1) { return CreateBoxVertexData({ width: w, height: h, depth: d }); }
 export function cyl(h, top, bottom, tess = 12, cap = true) { return CreateCylinderVertexData({ height: h, diameterTop: top * 2, diameterBottom: bottom * 2, tessellation: tess, cap: cap ? 3 : 0 }); }
 export function torus(d, t, tess = 16) { return CreateTorusVertexData({ diameter: d, thickness: t, tessellation: tess }); }
+// double-sided plane that reads correctly from BOTH sides: stock front UVs, mirrored back UVs. The material MUST keep
+// backFaceCulling = true: with culling off, the appended back triangles z-win from both sides and show the mirrored image.
+export function planeR(w, h) { return CreatePlaneVertexData({ width: w, height: h, sideOrientation: Mesh.DOUBLESIDE, frontUVs: new Vector4(0, 0, 1, 1), backUVs: new Vector4(1, 0, 0, 1) }); }
 export function plane(w, h) { return CreatePlaneVertexData({ width: w, height: h, sideOrientation: Mesh.DOUBLESIDE }); }
 
 // Superellipsoid "rounded box": toy-like soft-cornered blocks.

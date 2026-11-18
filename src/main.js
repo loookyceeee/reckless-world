@@ -49,7 +49,7 @@ import { createMissions } from './missions.js';
 import { SegGrid } from './collide.js';
 import { createRapid } from './glider.js';
 import * as EV from './events.js';
-import { torus, xf, plane, toMesh, hex } from './geo.js';
+import { planeR, torus, xf, plane, toMesh, hex } from './geo.js';
 
 const Q = new URLSearchParams(location.search);
 const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
@@ -177,8 +177,18 @@ async function start() {
   // posters: snap each spot to the nearest wall
   const posterM = new StandardMaterial('poster', scene); posterM.emissiveTexture = signTex('RECKLESS', 512, 720); posterM.disableLighting = true;
   { const c = posterM.emissiveTexture.getContext(); c.fillStyle = '#000'; c.fillRect(0, 0, 512, 720); const img = new Image(); img.src = import.meta.env.BASE_URL + 'img/logo.png'; await img.decode().catch(() => {}); c.drawImage(img, 56, 140, 400, 347); c.fillStyle = '#fff'; c.font = '800 54px Unbounded'; c.textAlign = 'center'; c.fillText('RECKLESS', 256, 580); c.font = '600 30px "DM Sans"'; c.fillText('BELFAST · THE TEMPLE', 256, 640); posterM.emissiveTexture.update(); }
-  const posters = POSTER_SPOTS.map(sp => { let best = null, bd = 1e9; for (const s of city.grid.near(sp.x, sp.z, 40)) { const dx = s.x1 - s.x0, dz = s.z1 - s.z0, L2 = dx * dx + dz * dz; if (L2 < 4 || s.h === 30.5 || s.h < 3) continue; let t = ((sp.x - s.x0) * dx + (sp.z - s.z0) * dz) / L2; t = Math.max(0.2, Math.min(0.8, t)); const px = s.x0 + dx * t, pz = s.z0 + dz * t; const d = Math.hypot(px - sp.x, pz - sp.z); if (d < bd) { bd = d; const L = Math.sqrt(L2); best = { x: px, z: pz, nx: dz / L, nz: -dx / L }; } }
-    if (!best) return null; const m = toMesh('poster-' + sp.id, plane(1.2, 1.7), scene, posterM); m.position.set(best.x + best.nx * 0.05, 2.1, best.z + best.nz * 0.05); m.rotation.y = Math.atan2(-best.nx, -best.nz); m.parent = city.root; m.setEnabled(!!localStorage.getItem('rw.poster.' + sp.id));
+  // real Reckless event posters (public/data/posters.json): upcoming first, rotated daily across the walls; past nights fill the rest
+  const PL = await fetch(import.meta.env.BASE_URL + 'data/posters.json').then(r => r.json()).then(d => d.posters || []).catch(() => []);
+  const nowMs = Date.now(), dayN = Math.floor(nowMs / 864e5);
+  const upP = PL.filter(p => Date.parse(p.endDate) > nowMs).sort((a, b) => Date.parse(a.endDate) - Date.parse(b.endDate)), pastP = PL.filter(p => Date.parse(p.endDate) <= nowMs).sort((a, b) => Date.parse(b.endDate) - Date.parse(a.endDate));
+  const pMats = {}; let posterSeq = 0;
+  const posterFor = (i) => { const p = i < upP.length ? upP[(i + dayN) % upP.length] : pastP.length ? pastP[(i - upP.length + dayN) % pastP.length] : upP.length ? upP[(i + dayN) % upP.length] : null;
+    if (!p) return posterM; if (pMats[p.id]) return pMats[p.id];
+    const mm = new StandardMaterial('poster-' + p.id, scene); const tx = new Texture(import.meta.env.BASE_URL + p.file, scene, false, true); tx.anisotropicFilteringLevel = 4;
+    mm.emissiveTexture = tx; mm.emissiveColor = new Color3(0.34, 0.34, 0.34); mm.disableLighting = true; mm.backFaceCulling = true; mm.__poster = p; return (pMats[p.id] = mm); };
+  window.__rw.posterList = () => posters.map(p => ({ id: p.id, poster: p.mesh.material.__poster && p.mesh.material.__poster.id }));
+  const posters = POSTER_SPOTS.map(sp => { let best = null, bd = 1e9; for (const s of city.grid.near(sp.x, sp.z, 40)) { const dx = s.x1 - s.x0, dz = s.z1 - s.z0, L2 = dx * dx + dz * dz; if (L2 < 4 || s.h === 30.5 || s.h < 3) continue; let t = ((sp.x - s.x0) * dx + (sp.z - s.z0) * dz) / L2; t = Math.max(0.2, Math.min(0.8, t)); const px = s.x0 + dx * t, pz = s.z0 + dz * t; const d = Math.hypot(px - sp.x, pz - sp.z); if (d < bd) { bd = d; const L = Math.sqrt(L2); let nx = dz / L, nz = -dx / L; if ((sp.x - px) * nx + (sp.z - pz) * nz < 0) { nx = -nx; nz = -nz; } best = { x: px, z: pz, nx, nz }; } } // face the street side the spot is on
+    if (!best) return null; const m = toMesh('poster-' + sp.id, planeR(1.2, 1.6), scene, posterFor(posterSeq++)); m.position.set(best.x + best.nx * 0.05, 2.1, best.z + best.nz * 0.05); m.rotation.y = Math.atan2(-best.nx, -best.nz); m.parent = city.root; m.setEnabled(!!localStorage.getItem('rw.poster.' + sp.id));
     return { ...sp, name: sp.id.replace(/-/g, ' ').toUpperCase(), mesh: m, ix: best.x + best.nx * 1.4, iz: best.z + best.nz * 1.4 }; }).filter(Boolean);
   const PDAY = () => { try { const o = JSON.parse(localStorage.getItem('rw.pday') || '{}'); return o.day === EV.londonDay() ? o.ids || [] : []; } catch (e) { return []; } };
   const markPasted = (id) => { const ids = PDAY(); if (!ids.includes(id)) ids.push(id); localStorage.setItem('rw.pday', JSON.stringify({ day: EV.londonDay(), ids })); };
@@ -188,6 +198,7 @@ async function start() {
   if (glow) { const GX = ['walls', 'roads', 'roofs', 'ground', 'pool', 'poolLED', 'canopy', 'trunk', 'lampPole', 'hlBeam', 'pavement', 'markings', 'puddles', 'bollards', 'railings', 'signalPoles', 'beaconPoles', 'kerbs']; for (const me of scene.meshes) { const base = ((me.metadata && me.metadata.chunkOf) || me.name).split(','); if (base.some(b => GX.includes(b))) glow.addExcludedMesh(me); }
     for (const me of scene.meshes) if (/-(body|head|skate|stan|barrel|stanb)$/.test(me.name) || me.name.startsWith('car-') || me.name === 'ci') glow.addExcludedMesh(me); }
   if (glow) for (const me of T.glowSkip()) glow.addExcludedMesh(me);
+  if (glow) for (const ps of posters) glow.addExcludedMesh(ps.mesh); // photo posters: no bloom wash
   let mapBase = buildMinimapBase(city);
   try { const meta = await (await fetch(import.meta.env.BASE_URL + 'data/minimap_meta.json')).json(); const im = await loadMinimapImage(import.meta.env.BASE_URL + 'data/' + meta.file, meta); if (im) mapBase = Object.assign(im, { bounds: mapBase.bounds, proc: mapBase }); } catch (e) { console.warn('minimap', e); }
   app.mapBase = mapBase;

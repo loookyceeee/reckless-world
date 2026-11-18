@@ -1,0 +1,35 @@
+{
+ "source": "Reckless Raves event posters (recklessraves.co.uk events feed + RR app content), Reckless-owned artwork",
+ "posters": [
+  {
+   "id": "temple-008",
+   "title": "GEARBOX X RECKLESS \u00b7 THE TEMPLE 008",
+   "endDate": "2026-11-28T23:00:00+00:00",
+   "file": "img/posters/temple-008.jpg"
+  },
+  {
+   "id": "temple-008-afterparty",
+   "title": "RECKLESS X GEARBOX \u00b7 TEMPLE 008 AFTERPARTY",
+   "endDate": "2026-11-29T03:00:00+00:00",
+   "file": "img/posters/temple-008-afterparty.jpg"
+  },
+  {
+   "id": "temple-009",
+   "title": "THE TEMPLE 009 \u00b7 BOXING DAY SPECIAL",
+   "endDate": "2026-12-26T23:00:00+00:00",
+   "file": "img/posters/temple-009.jpg"
+  },
+  {
+   "id": "location-x-nye",
+   "title": "LOCATION X \u00b7 NYE SPECIAL",
+   "endDate": "2027-01-01T02:00:00+00:00",
+   "file": "img/posters/location-x-nye.jpg"
+  },
+  {
+   "id": "warehouse-xl-halloween",
+   "title": "THE WARE-HOUSE XL \u00b7 HALLOWEEN SPECIAL",
+   "endDate": "2026-10-31T03:00:00+00:00",
+   "file": "img/posters/warehouse-xl-halloween.jpg"
+  }
+ ]
+}
