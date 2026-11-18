@@ -24,21 +24,31 @@ export function buildGraph(roads, drive) {
 }
 // Battenburg (blue/yellow blocks) — generic UK-style, no wordmarks, no emblems, no badges.
 function battenburgTex(scene) {
-  const t = new DynamicTexture('battenburg', { width: 256, height: 64 }, scene, true); const c = t.getContext();
-  for (let i = 0; i < 8; i++) for (let j = 0; j < 2; j++) { c.fillStyle = (i + j) % 2 ? '#1f3f9a' : '#d9e21c'; c.fillRect(i * 32, j * 32, 32, 32); }
-  t.update(); return t;
+  const t = new DynamicTexture('battenburg', { width: 512, height: 128 }, scene, true); const c = t.getContext();
+  for (let i = 0; i < 8; i++) for (let j = 0; j < 2; j++) { c.fillStyle = (i + j) % 2 ? '#123a9e' : '#d4ec1a'; c.fillRect(i * 64, j * 64, 64, 64); }
+  t.anisotropicFilteringLevel = 8; t.update(); return t;
+}
+// Plain "POLICE" lettering only (allowed): no crest, no force name, no badge.
+function policeTex(scene) {
+  const t = new DynamicTexture('policeTxt', { width: 512, height: 128 }, scene, true); const c = t.getContext(); c.clearRect(0, 0, 512, 128);
+  c.fillStyle = '#123a9e'; c.font = '900 96px Arial, Helvetica, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('POLICE', 256, 68);
+  t.hasAlpha = true; t.anisotropicFilteringLevel = 8; t.update(); return t;
 }
 function carVD(kind, body) {
   const P = [];
   const glass = hex('#2a3550'), tyre = hex('#151517'), rim = hex('#b8bcc4');
-  if (kind === 'wagon') { // armoured patrol wagon: tall boxy, grilles, roof bar
-    P.push(color(xf(rbox(2.25, 1.55, 5.2, 0.2, 10), { t: [0, 1.25, 0] }), body));
-    P.push(color(xf(rbox(2.1, 0.95, 3.2, 0.25, 10), { t: [0, 2.35, -0.55] }), body));
-    P.push(color(xf(box(1.9, 0.5, 0.05), { t: [0, 2.35, 1.07] }), glass));
-    for (const sd of [-1, 1]) { P.push(color(xf(box(0.05, 0.42, 1.0), { t: [sd * 1.06, 2.4, 0.3] }), glass));
-      for (let k = 0; k < 5; k++) P.push(color(xf(box(0.06, 0.04, 0.95), { t: [sd * 1.09, 2.22 + k * 0.08, 0.3] }), hex('#30333a'))); }
-    P.push(color(xf(box(2.3, 0.35, 0.25), { t: [0, 0.55, 2.65] }), hex('#202227'))); // bull bar
-    for (let k = 0; k < 6; k++) P.push(color(xf(box(0.06, 0.5, 0.06), { t: [-0.75 + k * 0.3, 1.1, 2.62] }), hex('#202227')));
+  if (kind === 'wagon') { // fictional armoured patrol wagon: slab-sided box body, small grilled glass, flat roof (no maker grille/badge)
+    P.push(color(xf(rbox(2.3, 1.5, 5.3, 0.08, 6), { t: [0, 1.2, 0] }), body));
+    P.push(color(xf(rbox(2.2, 1.05, 3.9, 0.08, 6), { t: [0, 2.45, -0.45] }), body)); // tall rear box
+    P.push(color(xf(rbox(2.2, 0.8, 1.0, 0.06, 6), { r: [-0.32, 0, 0], t: [0, 2.32, 1.62] }), body)); // raked armoured windscreen frame
+    P.push(color(xf(box(1.7, 0.42, 0.04), { r: [-0.32, 0, 0], t: [0, 2.36, 2.14] }), glass));
+    for (let k = 0; k < 6; k++) P.push(color(xf(box(0.04, 0.46, 0.05), { r: [-0.32, 0, 0], t: [-0.72 + k * 0.29, 2.36, 2.17] }), hex('#2a2c31'))); // screen guard bars
+    for (const sd of [-1, 1]) { P.push(color(xf(box(0.04, 0.36, 0.7), { t: [sd * 1.11, 2.5, 1.0] }), glass)); P.push(color(xf(box(0.04, 0.3, 0.5), { t: [sd * 1.11, 2.6, -1.6] }), glass));
+      for (let k = 0; k < 4; k++) P.push(color(xf(box(0.05, 0.03, 0.72), { t: [sd * 1.13, 2.36 + k * 0.09, 1.0] }), hex('#2a2c31')));
+      P.push(color(xf(box(0.08, 0.18, 4.6), { t: [sd * 1.16, 0.55, 0] }), hex('#25272c'))); } // armoured sill skirt
+    P.push(color(xf(box(2.32, 0.32, 0.2), { t: [0, 0.58, 2.7] }), hex('#25272c'))); // plain steel front bumper
+    P.push(color(xf(box(1.6, 0.38, 0.05), { t: [0, 1.25, 2.66] }), hex('#3a3d44'))); // plain flat front panel (no logo)
+    P.push(color(xf(box(2.0, 0.9, 0.05), { t: [0, 2.3, -2.66] }), hex('#3a3d44'))); // rear doors
   } else if (kind === 'bus') { // generic purple rapid-transit bus (Glider-style colour, no operator marks)
     P.push(color(xf(rbox(2.5, 2.6, 11.8, 0.12, 10), { t: [0, 1.65, 0] }), body));
     P.push(color(xf(box(2.54, 1.0, 10.6), { t: [0, 2.1, -0.3] }), glass));
@@ -59,6 +69,10 @@ function carVD(kind, body) {
     P.push(color(xf(rbox(1.7, 0.85, 2.4, 0.3, 10), { t: [0, 1.45, -0.2] }), body));
     P.push(color(xf(box(1.5, 0.5, 2.3), { t: [0, 1.5, -0.2] }), glass));
     P.push(color(xf(rbox(0.5, 0.15, 0.25, 0.3, 6), { t: [0, 1.93, 0.2] }), hex('#f4c21a')));
+  } else if (kind === 'estate') { // patrol estate: long roof to the tail
+    P.push(color(xf(rbox(1.84, 0.74, 4.7, 0.25, 10), { t: [0, 0.72, 0] }), body));
+    P.push(color(xf(rbox(1.62, 0.66, 3.1, 0.22, 10), { t: [0, 1.3, -0.55] }), body));
+    P.push(color(xf(box(1.66, 0.4, 2.9), { t: [0, 1.33, -0.5] }), glass));
   } else {
     const L = kind === 'hatch' ? 3.8 : 4.4;
     P.push(color(xf(rbox(1.8, 0.72, L, 0.25, 10), { t: [0, 0.7, 0] }), body));
@@ -70,7 +84,7 @@ function carVD(kind, body) {
   return merge(P);
 }
 function lightsVD(kind) { // headlights front (+z), tail lights back
-  const L = kind === 'bus' ? 5.92 : kind === 'wagon' ? 2.62 : kind === 'hatch' ? 1.92 : kind === 'cab' ? 2.3 : 2.22, y = kind === 'bus' ? 0.75 : kind === 'wagon' ? 1.0 : 0.78, x = kind === 'bus' ? 0.95 : kind === 'wagon' ? 0.85 : 0.62;
+  const L = kind === 'bus' ? 5.92 : kind === 'wagon' ? 2.68 : kind === 'estate' ? 2.36 : kind === 'hatch' ? 1.92 : kind === 'cab' ? 2.3 : 2.22, y = kind === 'bus' ? 0.75 : kind === 'wagon' ? 1.0 : 0.78, x = kind === 'bus' ? 0.95 : kind === 'wagon' ? 0.85 : 0.62;
   const P = []; for (const sd of [-1, 1]) { P.push(color(xf(box(0.36, 0.14, 0.06), { t: [sd * x, y, L] }), hex('#fff6dc'))); P.push(color(xf(box(0.34, 0.14, 0.06), { t: [sd * x, y, -L] }), hex('#ff2020'))); }
   return merge(P);
 }
@@ -91,12 +105,23 @@ export function buildTraffic(scene, city, { low = false, stops = [] } = {}) {
   const bbM = new StandardMaterial('bbM', scene); bbM.diffuseTexture = battenburgTex(scene); bbM.diffuseTexture.uScale = 1; bbM.diffuseTexture.wAng = 0; bbM.specularColor = new Color3(0.3, 0.3, 0.3); bbM.emissiveColor = new Color3(0.12, 0.12, 0.12);
   const barM = new StandardMaterial('barM', scene); barM.disableLighting = true; barM.emissiveColor = hex('#2a6bff');
   const barM2 = new StandardMaterial('barM2', scene); barM2.disableLighting = true; barM2.emissiveColor = hex('#2a6bff');
+  const polM = new StandardMaterial('polM', scene); polM.diffuseTexture = policeTex(scene); polM.useAlphaFromDiffuseTexture = true; polM.emissiveColor = new Color3(0.25, 0.25, 0.3); polM.specularColor = Color3.Black();
+  bbM.emissiveColor = new Color3(0.22, 0.22, 0.22); // retro-reflective
+  const darkM = new StandardMaterial('lbBase', scene); darkM.diffuseColor = hex('#1b1d22'); darkM.specularColor = new Color3(0.2, 0.2, 0.2);
   const patrolDeco = (node, kind) => {
-    const len = kind === 'wagon' ? 4.6 : 3.8, y = kind === 'wagon' ? 1.2 : 0.72, h = kind === 'wagon' ? 0.7 : 0.36, x = kind === 'wagon' ? 1.135 : 0.915;
-    for (const sd of [-1, 1]) { const vd = xf(box(0.02, h, len), { t: [sd * x, y, 0] }); const p = toMesh('bb', vd, scene, bbM); p.parent = node; }
-    const by = kind === 'wagon' ? 2.88 : 1.6;
-    const b1 = toMesh('bar1', xf(box(0.55, 0.14, 0.3), { t: [-0.32, by, kind === 'wagon' ? 0.2 : -0.1] }), scene, barM); b1.parent = node;
-    const b2 = toMesh('bar2', xf(box(0.55, 0.14, 0.3), { t: [0.32, by, kind === 'wagon' ? 0.2 : -0.1] }), scene, barM2); b2.parent = node;
+    const W = kind === 'wagon';
+    const len = W ? 4.9 : 4.3, y = W ? 1.22 : 0.7, h = W ? 0.78 : 0.42, x = W ? 1.162 : 0.93;
+    for (const sd of [-1, 1]) { const p = toMesh('bb', xf(box(0.02, h, len), { t: [sd * x, y, 0] }), scene, bbM); p.parent = node;
+      const pl = toMesh('polS', xf(plane(W ? 1.9 : 1.3, W ? 0.48 : 0.32), {}), scene, polM); pl.parent = node; pl.rotation.y = sd > 0 ? -Math.PI / 2 : Math.PI / 2;
+      pl.position.set(sd * (x + 0.02), W ? 2.15 : 1.12, W ? -0.7 : -0.15); }
+    const pf = toMesh('polF', xf(plane(W ? 1.4 : 1.0, W ? 0.34 : 0.24), {}), scene, polM); pf.parent = node; pf.rotation.y = Math.PI;
+    if (W) pf.position.set(0, 1.62, 2.69); else { pf.rotation.x = Math.PI / 2 - 0.12; pf.position.set(0, 1.08, 1.55); }
+    // full-width blue lightbar on a dark base, two halves flashing alternately
+    const by = W ? 3.02 : 1.69, bz = W ? 1.0 : 0.2, bw = W ? 1.9 : 1.3;
+    const base = toMesh('lbB', xf(box(bw + 0.08, 0.06, 0.32), { t: [0, by - 0.07, bz] }), scene, darkM); base.parent = node;
+    const b1 = toMesh('bar1', xf(box(bw / 2 - 0.02, 0.13, 0.28), { t: [-bw / 4, by, bz] }), scene, barM); b1.parent = node;
+    const b2 = toMesh('bar2', xf(box(bw / 2 - 0.02, 0.13, 0.28), { t: [bw / 4, by, bz] }), scene, barM2); b2.parent = node;
+    if (W) for (const sd of [-1, 1]) { const g = toMesh('grillB', xf(box(0.16, 0.08, 0.04), { t: [sd * 0.55, 0.9, 2.7] }), scene, sd < 0 ? barM : barM2); g.parent = node; } // front grille blues
   };
   const cars = [];
   // headlight pools on the tarmac (additive) + rear red wash
@@ -109,8 +134,8 @@ export function buildTraffic(scene, city, { low = false, stops = [] } = {}) {
   const spawnSpec = [];
   for (let i = 0; i < N; i++) { const kind = ['saloon', 'hatch', 'saloon', 'cab', 'hatch', 'saloon', 'cab'][i % 7]; const col = kind === 'cab' ? hex('#121214') : COLS[Math.floor(R() * COLS.length)]; spawnSpec.push({ kind, col, key: kind + (kind === 'cab' ? '' : COLS.indexOf(col)) }); }
   for (let i = 0; i < (low ? 1 : 3); i++) spawnSpec.push({ kind: 'bus', col: hex('#7e2a91'), key: 'bus' });
-  spawnSpec.push({ kind: 'saloon', col: hex('#eef0f2'), key: 'patrolcar', patrol: true }, { kind: 'saloon', col: hex('#eef0f2'), key: 'patrolcar', patrol: true });
-  spawnSpec.push({ kind: 'wagon', col: hex('#e8eaec'), key: 'patrolwagon', patrol: true }, { kind: 'wagon', col: hex('#5d646c'), key: 'patrolwagon2', patrol: true });
+  spawnSpec.push({ kind: 'estate', col: hex('#dcdfe3'), key: 'patrolcar', patrol: true }, { kind: 'estate', col: hex('#dcdfe3'), key: 'patrolcar', patrol: true });
+  spawnSpec.push({ kind: 'wagon', col: hex('#d6d9dd'), key: 'patrolwagon', patrol: true }, { kind: 'wagon', col: hex('#b9bec4'), key: 'patrolwagon2', patrol: true });
   for (const s of spawnSpec) {
     const t = tpl(s.key, s.kind, s.col);
     const node = new TransformNode('car', scene); node.position.y = -0.085;
