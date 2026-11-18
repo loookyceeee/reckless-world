@@ -117,7 +117,7 @@ export function buildTraffic(scene, city, { low = false, stops = [], signals = [
     for (const [x, z] of signals) { let best = null, bd = 6; const gx = Math.floor(x / 12), gz = Math.floor(z / 12);
       for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) for (const id of cell.get((gx + i) + ',' + (gz + j)) || []) { const p = G.pos.get(id); const d = Math.hypot(p[0] - x, p[1] - z); if (d < bd) { bd = d; best = id; } }
       if (best != null) SIG.set(best, ((x * 0.137 + z * 0.291) % 1 + 1) % 1 * 24); } }
-  const bodyM = new StandardMaterial('carBody', scene); bodyM.specularColor = new Color3(0.45, 0.45, 0.5); bodyM.specularPower = 48; if (scene.__env) { bodyM.reflectionTexture = scene.__env; const f = new FresnelParameters(); f.bias = 0.08; f.power = 2; f.leftColor = new Color3(0.7, 0.7, 0.75); f.rightColor = new Color3(0.1, 0.1, 0.12); bodyM.reflectionFresnelParameters = f; }
+  const bodyM = new StandardMaterial('carBody', scene); bodyM.specularColor = new Color3(0.55, 0.55, 0.6); bodyM.specularPower = 64; bodyM.emissiveColor = new Color3(0.07, 0.07, 0.08); if (scene.__env) { bodyM.reflectionTexture = scene.__env; const f = new FresnelParameters(); f.bias = 0.08; f.power = 2; f.leftColor = new Color3(0.7, 0.7, 0.75); f.rightColor = new Color3(0.1, 0.1, 0.12); bodyM.reflectionFresnelParameters = f; }
   const lightM = new StandardMaterial('carLights', scene); lightM.disableLighting = true; lightM.emissiveColor = Color3.White();
   const COLS = ['#d64545', '#f2f2f2', '#2b2b30', '#3f6fd8', '#e7c33a', '#7d8a96', '#4e9a6b', '#b8b0a0', '#c2185b'].map(hex);
   const templates = {};

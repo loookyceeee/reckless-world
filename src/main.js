@@ -100,6 +100,7 @@ async function start() {
     // SSAO (desktop high tier by default; ?nossao off, ?ssao forces it): soft contact shadows in doorways, kerbs and crowds
     if ((!isTouch && !Q.has('nossao')) || Q.has('ssao')) { try { SSAO = new SSAO2RenderingPipeline('ssao', scene, { ssaoRatio: 0.5, blurRatio: 0.5 }, [cam0]); SSAO.radius = 1.4; SSAO.totalStrength = 1.0; SSAO.base = 0.12; SSAO.samples = 12; SSAO.maxZ = 220; SSAO.expensiveBlur = true; SSAO._rwOn = true; } catch (e) { SSAO = null; console.warn('ssao', e); } }
   } catch (e) { console.warn('pipeline', e); }
+  window.__rw.pipe = () => pipe; window.__rw.ssao = () => SSAO;
   if (!pipe) { const ip = scene.imageProcessingConfiguration; ip.toneMappingEnabled = true; ip.toneMappingType = ImageProcessingConfiguration.TONEMAPPING_ACES; ip.exposure = 1.4; ip.contrast = 1.1; }
   DG.info.stage = 'loading world';
   await document.fonts.ready;
@@ -304,6 +305,7 @@ async function start() {
     const autoDance = app.inside && T.mode === 'rave' && T.danceFloor(P) && P.speed < 0.2 && !window.__rw.noAutoDance;
     player.root.position.set(P.x, 0, P.z); player.root.rotation.y = P.heading; dust.emitter.set(P.x, 0.05, P.z); dust.emitRate = P.speed > 4.5 && !app.inside ? 45 : 0;
     if (player.lightRig) player.lightRig(cam);
+    SKY.update(cam);
     if (player.animate) player.animate(dt, { speed: P.speed, dancing: P.dancing || autoDance }); else animateAvatar(player, dt, { speed: P.speed * 0.8, dancing: P.dancing || autoDance });
     // camera with collision
     tgt.set(P.x, 1.5, P.z);
@@ -347,11 +349,11 @@ async function start() {
   window.__rw.manual = (on) => { if (on) engine.stopRenderLoop(); else engine.runRenderLoop(() => scene.render()); }; window.__rw.renderFrame = (n = 1) => { for (let i = 0; i < n; i++) scene.render(); return true; };
   window.__rw.inst = new SceneInstrumentation(scene); window.__rw.inst.captureFrameTime = true;
   // render guard: if a frame throws (shader/post-process unsupported on this GPU), drop post-processing and keep going
-  let rErr = 0; const stripPost = (why) => { console.warn('post-processing off:', why); try { if (SSAO) { scene.postProcessRenderPipelineManager.detachCamerasFromRenderPipeline('ssao', cam0); SSAO.dispose(); SSAO = null; } } catch (e) { } try { if (pipe) { pipe.dispose(); pipe = null; } } catch (e) { } try { if (glow) { glow.dispose(); glow = null; } } catch (e) { } };
+  let rErr = 0; const stripPost = (why) => { console.warn('post-processing off:', why); try { if (SSAO) { scene.postProcessRenderPipelineManager.detachCamerasFromRenderPipeline('ssao', cam0); SSAO.dispose(); SSAO = null; } } catch (e) { } try { if (pipe) { pipe.dispose(); pipe = null; } } catch (e) { } try { if (glow) { glow.dispose(); glow = null; } } catch (e) { } try { scene.disableGeometryBufferRenderer && scene.disableGeometryBufferRenderer(); scene.disablePrePassRenderer && scene.disablePrePassRenderer(); } catch (e) { } { const ip = scene.imageProcessingConfiguration; ip.isEnabled = true; ip.toneMappingEnabled = true; ip.toneMappingType = ImageProcessingConfiguration.TONEMAPPING_ACES; ip.exposure = 1.4; ip.contrast = 1.1; } };
   const frame = () => { try { scene.render(); rErr = 0; } catch (e) { rErr++; console.error('render', e); if (rErr === 1) stripPost(e.message); if (rErr > 5) { engine.stopRenderLoop(); DG.fatal('rendering failed', e); } } };
   engine.runRenderLoop(frame); DG.info.stage = 'running'; DG.info.ready = true;
   // black-canvas check: the night sky clear colour is never pure black, so an all-black canvas means the GPU output failed
-  const blackCheck = async (pass) => { try { const w = engine.getRenderWidth(), h = engine.getRenderHeight(); const px = await engine.readPixels(Math.floor(w / 2) - 8, Math.floor(h * 0.25), 16, 16); let sum = 0; for (let i = 0; i < px.length; i += 4) sum += px[i] + px[i + 1] + px[i + 2];
+  const blackCheck = async (pass) => { try { const w = engine.getRenderWidth(), h = engine.getRenderHeight(); const px = await new Promise((res, rej) => scene.onAfterRenderObservable.addOnce(() => { try { res(engine.readPixels(Math.floor(w / 2) - 8, Math.floor(h * 0.25), 16, 16)); } catch (e) { rej(e); } })); // read inside the frame: after present the drawing buffer is cleared, which read as a false 'black canvas' let sum = 0; for (let i = 0; i < px.length; i += 4) sum += px[i] + px[i + 1] + px[i + 2];
       DG.log('pixel check', pass, sum); if (sum === 0) { if (pass === 1) { stripPost('black canvas'); setTimeout(() => blackCheck(2), 1500); } else DG.show('black screen detected (post-processing already off)'); } } catch (e) { DG.log('pixel check skipped', e.message); } };
   setTimeout(() => blackCheck(1), 2500);
   addEventListener('resize', () => engine.resize());

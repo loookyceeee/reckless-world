@@ -3,6 +3,9 @@
 import { CreateSphere } from '@babylonjs/core/Meshes/Builders/sphereBuilder';
 import { FresnelParameters } from '@babylonjs/core/Materials/fresnelParameters';
 import { Mesh } from '@babylonjs/core/Meshes/mesh';
+import { Layer } from '@babylonjs/core/Layers/layer';
+import '@babylonjs/core/Layers/layerSceneComponent';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector';
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
 import { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTexture';
 import { Texture } from '@babylonjs/core/Materials/Textures/texture';
@@ -32,12 +35,17 @@ export function buildSky(scene, { low = false } = {}) {
   g.save(); g.beginPath(); g.arc(mx, my, mr, 0, 7); g.clip(); g.fillStyle = 'rgba(40,44,70,0.78)'; g.beginPath(); g.arc(mx - mr * 1.25, my - mr * 0.1, mr * 0.95, 0, 7); g.fill(); g.restore(); // waxing gibbous terminator, kept inside the disc
   tex.update(); tex.wrapU = Texture.WRAP_ADDRESSMODE; tex.level = 1.25; tex.anisotropicFilteringLevel = 1;
   const m = new StandardMaterial('skyM', scene); m.emissiveTexture = tex; m.disableLighting = true; m.backFaceCulling = false; m.fogEnabled = false; m.diffuseColor = Color3.Black(); m.specularColor = Color3.Black();
-  const sky = CreateSphere('sky', { diameter: 1000, segments: 32, sideOrientation: Mesh.BACKSIDE }, scene); { const P = sky.getVerticesData('position'), uv = Float32Array.from(sky.getVerticesData('uv')); for (let i = 0; i < P.length / 3; i++) { const x = P[i * 3], y = P[i * 3 + 1], z = P[i * 3 + 2], r = Math.hypot(x, y, z) || 1; uv[i * 2 + 1] = 0.5 + Math.asin(y / r) / Math.PI; } sky.setVerticesData('uv', uv); }
-  sky.material = m; sky.infiniteDistance = true; sky.isPickable = false; sky.applyFog = false; sky.renderingGroupId = 0;
-  m.freeze();
+  // screen-space background layer (no dome geometry): the 1000 m sphere's triangles leaked through the SSAO / glow passes as dark
+  // wedges and bands near the camera. The equirect texture is windowed to the camera's yaw / pitch / FOV every frame.
+  const layer = new Layer('skyLayer', null, scene, true); layer.texture = tex; tex.wrapV = Texture.CLAMP_ADDRESSMODE;
+  const fwd = new Vector3();
+  const sky = { name: 'sky', setEnabled: (v) => { layer.isEnabled = v; }, isEnabled: () => layer.isEnabled, layer,
+    update: (cam) => { cam.getDirectionToRef(Vector3.Forward(), fwd); const yaw = Math.atan2(fwd.x, fwd.z), pitch = Math.asin(Math.max(-1, Math.min(1, fwd.y)));
+      const asp = scene.getEngine().getAspectRatio(cam), vf = cam.fov, hf = 2 * Math.atan(Math.tan(vf / 2) * asp);
+      tex.uScale = hf / (2 * Math.PI); tex.uOffset = yaw / (2 * Math.PI) - tex.uScale / 2; tex.vScale = vf / Math.PI; tex.vOffset = 0.5 + pitch / Math.PI - tex.vScale / 2; } };
   let env = null;
   try { env = new HDRCubeTexture(import.meta.env.BASE_URL + 'data/env_night_512.hdr', scene, low ? 64 : 128, false, false, false, false); env.level = 0.4; } catch (e) { console.warn('env', e); }
-  return { sky, env, mat: m };
+  return { sky, env, mat: m, update: sky.update };
 }
 
 // wet-look reflections: grazing-angle (fresnel) env reflections on the named StandardMaterials

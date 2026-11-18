@@ -10,6 +10,7 @@ SRC = '/workspace/reckless-world/research/assets/kenney/car-kit/Models/GLB forma
 CARS = {'sedan': (4.5, 1.8, 1.45, 0.66), 'hatchback-sports': (4.1, 1.78, 1.42, 0.63), 'taxi': (4.6, 1.8, 1.52, 0.66),
         'van': (5.0, 2.0, 2.0, 0.7), 'suv': (4.7, 1.9, 1.72, 0.74), 'delivery': (5.6, 2.05, 2.45, 0.72)}
 out = {}
+def srgb(c): return 12.92 * c if c <= 0.0031308 else 1.055 * c ** (1 / 2.4) - 0.055
 for name, (length, width, height, wheelD) in CARS.items():
     bpy.ops.wm.read_factory_settings(use_empty=True)
     bpy.ops.import_scene.gltf(filepath=SRC + name + '.glb')
@@ -31,7 +32,7 @@ for name, (length, width, height, wheelD) in CARS.items():
             if uv and px:
                 u = sum(uv[l].uv[0] for l in t.loops) / 3; v = sum(uv[l].uv[1] for l in t.loops) / 3
                 x = min(W - 1, max(0, int((u % 1) * W))); y = min(H - 1, max(0, int((v % 1) * H))); k = (y * W + x) * 4
-                col = (px[k], px[k + 1], px[k + 2])
+                col = tuple(srgb(c) for c in (px[k], px[k + 1], px[k + 2]))  # Blender pixels are linear; the game's vertex colours are sRGB
             elif o.active_material:
                 bc = o.active_material.diffuse_color; col = (bc[0], bc[1], bc[2])
             ps = [M @ me.vertices[vi].co for vi in t.vertices]; nr = (R @ t.normal).normalized()
@@ -40,7 +41,8 @@ for name, (length, width, height, wheelD) in CARS.items():
         o.evaluated_get(dg).to_mesh_clear()
     # paint colour = largest-area saturated/bright colour
     def sat(c): return max(c) - min(c)
-    paint = max(pal, key=lambda c: pal[c] * (0.3 + sat(c) * 2 + (0.5 if max(c) > 0.6 else 0)))
+    satc = [c for c in pal if sat(c) > 0.2]
+    paint = max(satc, key=lambda c: pal[c]) if satc else max(pal, key=lambda c: pal[c])
     body = [t for t in tris if not t[3]]
     xs = [p.x for t in body for p in t[0]]; ys = [p.y for t in body for p in t[0]]; zs = [p.z for t in tris for p in t[0]]
     WB = {}

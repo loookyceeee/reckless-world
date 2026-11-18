@@ -65,8 +65,8 @@ export async function loadAvatar3D(scene, { name = 'player', base = import.meta.
   };
   // studio look at night: warm key from camera-left and a rim from behind, lighting only the avatar
   const lit = res.meshes.filter(m => m !== gltfRoot);
-  const key = new PointLight(name + '-key', new Vector3(0, 2, 0), scene); key.diffuse = Color3.FromHexString('#ffd9b8'); key.specular = new Color3(0.25, 0.22, 0.2); key.intensity = 1.6; key.range = 9;
-  const rim = new PointLight(name + '-rim', new Vector3(0, 2, 0), scene); rim.diffuse = Color3.FromHexString('#ffe6cc'); rim.specular = new Color3(0.5, 0.45, 0.4); rim.intensity = 1.3; rim.range = 9;
+  const key = new PointLight(name + '-key', new Vector3(0, 2, 0), scene); key.diffuse = Color3.FromHexString('#ffd9b8'); key.specular = new Color3(0.1, 0.09, 0.08); key.intensity = 0.85; key.range = 9;
+  const rim = new PointLight(name + '-rim', new Vector3(0, 2, 0), scene); rim.diffuse = Color3.FromHexString('#ffe6cc'); rim.specular = new Color3(0.18, 0.16, 0.14); rim.intensity = 0.9; rim.range = 9;
   key.includedOnlyMeshes = lit; rim.includedOnlyMeshes = lit;
   for (const m of new Set(lit.map(x => x.material).filter(Boolean))) m.maxSimultaneousLights = 8;
   av.lights = [key, rim];
