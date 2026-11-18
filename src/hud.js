@@ -134,12 +134,21 @@ export function createHUD(app) {
       }
       const px = X(st.x), py = Y(st.z); g.save(); g.translate(px, py); g.rotate(st.heading); g.fillStyle = '#fff'; g.strokeStyle = '#000'; g.lineWidth = 2; g.beginPath(); g.moveTo(0, -12); g.lineTo(9, 9); g.lineTo(0, 4); g.lineTo(-9, 9); g.closePath(); g.fill(); g.stroke(); g.restore();
     },
-    openWardrobe(outfits, current, pick, email, setEmail) {
-      open(`<h2>WARDROBE</h2><p class="sub">CLOTHING DROP 018 · TRY-ON ONLY</p><div class="outfits">${outfits.map(o => `<button class="of ${o.id === current ? 'sel' : ''}" data-id="${o.id}">${o.name}</button>`).join('')}</div>
-      <h3>CREW EMAIL <small>(OPTIONAL · TEST EVENTS ONLY)</small></h3><div class="row"><input id="email" type="email" placeholder="you@example.com" value="${email || ''}"/><button id="saveEmail">SAVE</button></div>
-      <p class="fine">NO XP OR CODES ARE AWARDED IN THE GAME. WITH AN EMAIL SET, VISITS AND POSTERS ARE QUEUED AS TEST EVENTS ON THIS DEVICE ONLY.</p>`);
-      overlay.querySelectorAll('.of').forEach(b => b.onclick = () => { pick(b.dataset.id); overlay.querySelectorAll('.of').forEach(x => x.classList.toggle('sel', x === b)); });
-      overlay.querySelector('#saveEmail').onclick = () => { setEmail(overlay.querySelector('#email').value); api.toast('EMAIL SAVED ON THIS DEVICE'); };
+    openWardrobe(C, st) { // C = crew module, st = { fit, xp|null, account, apply(fit), signIn(email), signOut(), email, setEmail }
+      const lvl = st.xp == null ? 15 : C.levelFor(st.xp);
+      const rows = C.WARDROBE.map(p => { const locked = p.level > lvl, on = !locked && st.fit[p.slot] === p.id;
+        return `<button class="cw ${on ? 'sel' : ''} ${locked ? 'lock' : ''}" data-id="${p.id}" ${locked ? 'disabled' : ''}><img src="${C.img(p.icon)}" alt="" loading="lazy"/><span><b>${p.name}</b><small>${p.slot.toUpperCase()} · LVL ${p.level}${locked ? ' · LOCKED' : ''}</small></span></button>`; }).join('');
+      const acct = st.account ? `<p class="fine">SIGNED IN AS ${st.account.email.toUpperCase()} · ${st.xp == null ? 'CREW NOT LOADED' : 'LVL ' + lvl + ' · FIT FROM THE APP'} <button id="crewOut">SIGN OUT</button></p>`
+        : `<h3>SIGN IN <small>(SAME CREW ACCOUNT AS THE APP · LOADS YOUR EQUIPPED FIT)</small></h3><div class="row"><input id="email" type="email" placeholder="you@example.com" value="${st.email || ''}"/><button id="crewIn">SIGN IN</button></div>`;
+      open(`<h2>WARDROBE</h2><p class="sub">CLOTHING DROP 018 · ${st.account ? 'YOUR CREW FIT' : 'TRY-ON ONLY'}</p>
+      <div class="crewfig"><img id="crewLook" src="${C.lookFor(st.fit.top, st.fit.outer, st.fit.legs)}" alt="CREW AVATAR"/></div>
+      <div class="cwlist">${rows}</div>${acct}
+      <p class="fine">NO XP OR CODES ARE AWARDED IN THE GAME. CHANGES HERE STAY ON THIS DEVICE AND NEVER WRITE TO YOUR CREW. VISITS ARE QUEUED AS TEST EVENTS ONLY.</p>`, 'wardov');
+      overlay.querySelectorAll('.cw').forEach(b => b.onclick = () => { const p = C.gearById(b.dataset.id); st.fit = C.toggle(st.fit, p); st.apply(st.fit);
+        overlay.querySelectorAll('.cw').forEach(x => x.classList.toggle('sel', st.fit[C.gearById(x.dataset.id).slot] === x.dataset.id));
+        overlay.querySelector('#crewLook').src = C.lookFor(st.fit.top, st.fit.outer, st.fit.legs); });
+      const bi = overlay.querySelector('#crewIn'); if (bi) bi.onclick = async () => { const e = overlay.querySelector('#email').value.trim().toLowerCase(); st.setEmail(e); bi.textContent = '…'; try { await st.signIn(e); } catch (err) { api.toast('THAT EMAIL DOES NOT LOOK RIGHT'); bi.textContent = 'SIGN IN'; } };
+      const bo = overlay.querySelector('#crewOut'); if (bo) bo.onclick = () => st.signOut();
     },
     openCredits(extra) {
       open(`<h2>CREDITS</h2>

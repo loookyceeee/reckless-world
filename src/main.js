@@ -40,6 +40,7 @@ import { buildGraph, buildTraffic, updateTraffic } from './traffic.js';
 import { buildLandmarks, updateLandmarks } from './landmarks.js';
 import { createHUD, buildMinimapBase, loadMinimapImage, makeRouter } from './hud.js';
 import { VENUES, DISTRICTS, POSTER_SPOTS } from './venues.js';
+import * as CR from './crew.js';
 import { SegGrid } from './collide.js';
 import * as EV from './events.js';
 import { torus, xf, plane, toMesh, hex } from './geo.js';
@@ -105,7 +106,10 @@ async function start() {
   city.templeDoor = ext.doorPos; const traffic = buildTraffic(scene, city, { low: LOW, stops: (city.sf && city.sf.stops) || [] }); bar(85);
   const route = makeRouter(buildGraph(city.roads, false)); let routeT = 0;
   // player
-  const player = createAvatar(scene, { name: 'player', outfit: localStorage.getItem('rw.outfit') || 'skate' });
+  const player = createAvatar(scene, { name: 'player', outfit: 'skate', fit: true });
+  const CREW = { fit: CR.loadFit(), xp: null, account: CR.getAccount() };
+  const applyFit = (f) => { CREW.fit = f; CR.saveFit(f); player.setFit(f, CR.visibleFor); }; applyFit(CREW.fit);
+  const loadCrew = async () => { if (!CREW.account) return; try { const r = await CR.readCrew(CREW.account); if (r) { CREW.xp = r.xp; if (r.fit.top || r.fit.outer || r.fit.legs) applyFit(r.fit); } } catch (e) { } }; loadCrew();
   const P = { x: ext.spawn.x, z: ext.spawn.z, heading: 0, speed: 0, dancing: false };
   { const dx = ext.doorPos.x - P.x, dz = ext.doorPos.z - P.z; P.heading = Math.atan2(dx, dz); }
   // footstep dust puffs when sprinting
@@ -191,7 +195,9 @@ async function start() {
     if (k === 'c') { if (hud.isOpen()) return hud.close(); hud.openCredits(`<button id="exp">EXPORT TEST EVENTS (${EV.queue().length})</button><button id="livebtn">RAVE MODE: ${app.live ? 'ON' : 'OFF'}</button>`);
       document.getElementById('exp').onclick = () => EV.exportQueue(); document.getElementById('livebtn').onclick = (e) => { app.live = !app.live; hud.setLive(app.live); e.target.textContent = 'RAVE MODE: ' + (app.live ? 'ON' : 'OFF'); }; return; }
     if (k === 'm') { if (hud.isOpen()) return hud.close(); return hud.openMap(P); }
-    if (k === 'o') { if (hud.isOpen()) return hud.close(); return hud.openWardrobe(OUTFITS, player.outfit, (id) => { player.setOutfit(id); localStorage.setItem('rw.outfit', id); }, EV.getEmail(), EV.setEmail); }
+    if (k === 'o') { if (hud.isOpen()) return hud.close(); const reopen = () => { hud.close(); app.key('o'); };
+      return hud.openWardrobe(CR, { fit: { ...CREW.fit }, xp: CREW.xp, account: CREW.account, email: EV.getEmail(), setEmail: EV.setEmail, apply: applyFit,
+        signIn: async (e) => { CREW.account = await CR.signIn(e); await loadCrew(); reopen(); }, signOut: () => { CR.signOut(); CREW.account = null; CREW.xp = null; reopen(); } }); }
     if (k === 'f') { P.dancing = !P.dancing; return; }
     if (k === 'l' && app.inside) { setTempleMode(T, scene, T.mode === 'day' ? 'rave' : 'day'); hud.interior(true, T.mode); return; }
     if (k === 'p') return photo();

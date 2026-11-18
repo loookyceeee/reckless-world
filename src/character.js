@@ -202,8 +202,11 @@ function shirt({ col, long = false, hood = false, length = 0.6 }) {
   }
   return merge(P);
 }
-function trousers({ col, wide = 1, cuff = false, seam = null }) {
+function trousers({ col, wide = 1, cuff = false, seam = null, short = false }) {
   const P = [];
+  if (short) { P.push(skin(color(xf(rbox(0.31, 0.16, 0.2, 0.5, 12), { t: [0, 0.615, 0] }), col), 'hips'));
+    for (const s of ['L', 'R']) { const sx = s === 'L' ? -1 : 1; P.push(limb([sx * 0.085, 0.6, 0], [sx * 0.092, 0.36, 0.004], 0.095 * wide, 0.088 * wide, col, 'thigh' + s, 'hips', 0.22)); }
+    return merge(P); }
   P.push(skin(color(xf(rbox(0.30, 0.16, 0.2, 0.5, 12), { t: [0, 0.615, 0] }), col), 'hips'));
   P.push(skin(color(xf(cyl(0.035, 0.153, 0.153, 18), { s: [1, 1, 0.68], t: [0, 0.69, 0] }), Color3.Lerp(col, BLACK, 0.25)), 'hips'));
   for (const s of ['L', 'R']) {
@@ -241,7 +244,7 @@ export function faceMaterial(scene) {
   m.specularColor = base.specularColor.clone(); m.specularPower = base.specularPower; m.emissiveColor = base.emissiveColor.scale(0.6); m.emissiveFresnelParameters = base.emissiveFresnelParameters.clone(); m.emissiveFresnelParameters.leftColor = m.emissiveFresnelParameters.leftColor.scale(0.55);
   return (faceMat = m);
 }
-export function createAvatar(scene, { name = 'avatar', palette = null, outfit = 'stan', decals = true, lod = 1 } = {}) {
+export function createAvatar(scene, { name = 'avatar', palette = null, outfit = 'stan', decals = true, lod = 1, fit = false } = {}) {
   LODK = lod;
   const sk = new Skeleton(name + '-skel', name + '-skel', scene);
   const bones = {};
@@ -279,6 +282,19 @@ export function createAvatar(scene, { name = 'avatar', palette = null, outfit = 
     for (const k of ['skate', 'stan', 'barrel', 'stanb']) parts[k].setEnabled(o.top === k || o.bottom === k);
     if (parts.skateDecal) { parts.skateDecal.setEnabled(o.top === 'skate'); parts.stanDecal.setEnabled(o.top === 'stan'); }
   };
+  if (fit) { // player: Drop 018 fit from the app crew wardrobe (src/crew.js), garment shapes tinted per piece
+    const Wt = hex('#ffffff'); const tint = (m, k) => { const cm = mat.clone(name + '-' + k + 'M'); m.material = cm; return m; };
+    const kinds = { tee: shirt({ col: Wt }), long: shirt({ col: Wt, long: true }), hoodie: shirt({ col: Wt, long: true, hood: true, length: 0.56 }),
+      jeans: trousers({ col: Wt, wide: 1.32, seam: hex('#9fb4cc') }), pants: trousers({ col: Wt, wide: 1.2 }), cuffed: trousers({ col: Wt, wide: 1.15, cuff: true }), shorts: trousers({ col: Wt, wide: 1.25, short: true }) };
+    for (const k in kinds) { parts['fit_' + k] = tint(mk('fit_' + k, kinds[k]), k); parts['fit_' + k].setEnabled(false); }
+    av.setFit = (f, vis) => { av.fit = f; const V = vis(f.top, f.outer, f.legs), out = V.upper && V.upper.slot === 'outer' ? V.upper : null, top = V.upper && !out ? V.upper : null, leg = V.lower;
+      for (const k of ['skate', 'stan', 'barrel', 'stanb']) parts[k].setEnabled(false);
+      for (const k in kinds) parts['fit_' + k].setEnabled(false);
+      const show = (g) => { if (!g) return; const m = parts['fit_' + g.kind]; m.setEnabled(true); m.material.diffuseColor = Color3.FromHexString(g.col); };
+      show(out || top); show(leg);
+      if (parts.skateDecal) { parts.skateDecal.setEnabled(!out && top?.id === 'skate-tee'); parts.stanDecal.setEnabled(!!out && (out.id === 'stan-hoodie' || out.id === 'seasoned-hoodie')); }
+    };
+  }
   av.setOutfit(outfit); LODK = 1;
   av.meshes = () => Object.values(parts).filter(m => m.isEnabled());
   av.allMeshes = () => Object.values(parts);

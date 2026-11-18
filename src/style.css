@@ -63,3 +63,11 @@
 #loading{display:flex;flex-direction:column;align-items:center;gap:10px}#loading i{display:block;width:180px;height:2px;background:#333}#loading b{display:block;height:100%;width:5%;background:#fff;transition:width .4s}
 #title small{z-index:2;bottom:3vh}
 .hud.titlehide{opacity:0;pointer-events:none}.hud{transition:opacity .8s}
+
+.wardov .crewfig{display:flex;justify-content:center;background:#000;margin:6px 0 10px}.wardov .crewfig img{height:min(42vh,360px);width:auto;display:block}
+.cwlist{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;max-height:34vh;overflow:auto}
+.cw{display:flex;gap:8px;align-items:center;background:#000;color:#fff;border:2px solid #fff;padding:6px;text-align:left;font-size:10px}
+.cw img{width:44px;height:44px;object-fit:contain;background:#111}.cw span{display:flex;flex-direction:column;gap:2px}.cw small{opacity:.7;font-size:9px}
+.cw.sel{background:#fff;color:#000}.cw.lock{opacity:.35}
+.panel .cwlist button.cw{background:#000;color:#fff;border:2px solid #fff;padding:6px;font-size:10px;letter-spacing:.04em}
+.panel .cwlist button.cw.sel{background:#fff;color:#000}
