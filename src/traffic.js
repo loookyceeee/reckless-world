@@ -189,16 +189,29 @@ export function buildTraffic(scene, city, { low = false, stops = [], signals = [
     for (let i = 0; i < r.pts.length - 1; i++) { const a = r.pts[i], b = r.pts[i + 1]; const L = Math.hypot(b[0] - a[0], b[1] - a[1]); if (L < 14) continue; const ux = (b[0] - a[0]) / L, uz = (b[1] - a[1]) / L;
       for (let s = 6; s < L - 6; s += 5.6) kerbSpots.push([a[0] + ux * s - uz * (r.w / 2 - 1.05), a[1] + uz * s + ux * (r.w / 2 - 1.05), Math.atan2(ux, uz)]); } }
   for (let i = 0; i < (low ? 30 : 90) && kerbSpots.length; i++) { const k = Math.floor(R() * kerbSpots.length); const [x, z, h] = kerbSpots.splice(k, 1)[0]; const kind = R() < 0.5 ? 'hatch' : 'saloon'; const ci = Math.floor(R() * COLS.length); park(kind + ci, kind, COLS[ci], x, z, h); }
-  { const near = (x, z) => { let best = null, bd = 1e9; for (const r of city.roads) { if (!r.d || r.t === 'service') continue; for (let i = 0; i < r.pts.length - 1; i++) { const a = r.pts[i], b = r.pts[i + 1]; const dx = b[0] - a[0], dz = b[1] - a[1], L = Math.hypot(dx, dz); if (L < 16) continue; const t = Math.max(0.2, Math.min(0.8, ((x - a[0]) * dx + (z - a[1]) * dz) / (L * L))); const px = a[0] + dx * t, pz = a[1] + dz * t; const d = Math.hypot(px - x, pz - z); if (d < bd) { bd = d; best = { px, pz, ux: dx / L, uz: dz / L, w: r.w, L }; } } } return best; };
+  let near; { near = (x, z) => { let best = null, bd = 1e9; for (const r of city.roads) { if (!r.d || r.t === 'service') continue; for (let i = 0; i < r.pts.length - 1; i++) { const a = r.pts[i], b = r.pts[i + 1]; const dx = b[0] - a[0], dz = b[1] - a[1], L = Math.hypot(dx, dz); if (L < 16) continue; const t = Math.max(0.2, Math.min(0.8, ((x - a[0]) * dx + (z - a[1]) * dz) / (L * L))); const px = a[0] + dx * t, pz = a[1] + dz * t; const d = Math.hypot(px - x, pz - z); if (d < bd) { bd = d; best = { px, pz, ux: dx / L, uz: dz / L, w: r.w, L }; } } } return best; };
     const tp = city.templeDoor; if (tp) { const s = near(tp.x + 30, tp.z - 10); if (s) for (let k = 0; k < 3; k++) park('cab', 'cab', hex('#121214'), s.px - s.ux * k * 5.4 - s.uz * (s.w / 2 - 1.1), s.pz - s.uz * k * 5.4 + s.ux * (s.w / 2 - 1.1), Math.atan2(s.ux, s.uz), { lights: true }); }
     const ref = tp || { x: 0, z: 0 }; let stop = null, sd = 1e9; for (const st of stops) { const d = Math.hypot(st[0] - ref.x, st[1] - ref.z); if (d < sd) { sd = d; stop = st; } }
     if (stop) { const s = near(stop[0], stop[1]); if (s) { const bx = s.px - s.uz * (s.w / 2 - 1.65), bz = s.pz + s.ux * (s.w / 2 - 1.65); park('bus', 'bus', hex('#7e2a91'), bx, bz, Math.atan2(s.ux, s.uz), { lights: true }); busStop = { x: bx - s.uz * 3.2, z: bz + s.ux * 3.2, h: Math.atan2(s.ux, s.uz) }; } } }
-  if (busStop) { // bus shelter with a lit Reckless ad panel
-    const shM = new StandardMaterial('shelter', scene); shM.diffuseColor = new Color3(1, 1, 1); shM.specularColor = new Color3(0.4, 0.4, 0.4);
-    const sh = toMesh('busShelter', merge([color(xf(box(3.6, 0.08, 1.5), { t: [0, 2.5, 0] }), hex('#30343c')), ...[-1.75, 1.75].map(x => color(xf(box(0.08, 2.5, 0.08), { t: [x, 1.25, -0.65] }), hex('#30343c'))), color(xf(box(3.5, 2.1, 0.03), { t: [0, 1.25, -0.7] }), hex('#8fa4b8')), color(xf(box(2.2, 0.08, 0.4), { t: [0, 0.5, -0.45] }), hex('#30343c'))]), scene, shM);
-    sh.position.set(busStop.x, 0, busStop.z); sh.rotation.y = busStop.h + Math.PI / 2;
-    const adM = new StandardMaterial('shelterAd', scene); adM.disableLighting = true; const adT = new DynamicTexture('adT', { width: 256, height: 384 }, scene, true); { const g = adT.getContext(); g.fillStyle = '#000'; g.fillRect(0, 0, 256, 384); g.fillStyle = '#fff'; g.font = '800 34px Unbounded, Arial'; g.textAlign = 'center'; g.fillText('RECKLESS', 128, 170); g.font = '600 18px "DM Sans", Arial'; g.fillText('THE TEMPLE · BELFAST', 128, 210); g.strokeStyle = '#fff'; g.lineWidth = 6; g.strokeRect(14, 14, 228, 356); adT.update(); }
-    adM.emissiveTexture = adT; const ad = toMesh('shelterAdPanel', xf(plane(1.1, 1.65), { t: [1.15, 1.25, -0.74] }), scene, adM); ad.parent = sh; }
+  // bus shelters (lit Reckless ad panel) at the Temple's real stop and a rapid-bus fast-travel stop by every venue
+  const shM = new StandardMaterial('shelter', scene); shM.diffuseColor = new Color3(1, 1, 1); shM.specularColor = new Color3(0.4, 0.4, 0.4);
+  const mkShelter = (st) => {
+    const sh = toMesh('busShelter-' + st.id, merge([color(xf(box(3.6, 0.08, 1.5), { t: [0, 2.5, 0] }), hex('#30343c')), ...[-1.75, 1.75].map(x => color(xf(box(0.08, 2.5, 0.08), { t: [x, 1.25, -0.65] }), hex('#30343c'))), color(xf(box(3.5, 2.1, 0.03), { t: [0, 1.25, -0.7] }), hex('#8fa4b8')), color(xf(box(2.2, 0.08, 0.4), { t: [0, 0.5, -0.45] }), hex('#30343c'))]), scene, shM);
+    sh.position.set(st.x, 0, st.z); sh.rotation.y = st.h + Math.PI / 2;
+    const adM = new StandardMaterial('shelterAd', scene); adM.disableLighting = true; const adT = new DynamicTexture('adT', { width: 256, height: 384 }, scene, true); { const g = adT.getContext(); g.fillStyle = '#000'; g.fillRect(0, 0, 256, 384); g.fillStyle = '#fff'; g.font = '800 34px Unbounded, Arial'; g.textAlign = 'center'; g.fillText('RECKLESS', 128, 170); g.font = '600 18px "DM Sans", Arial'; g.fillText(st.ad || 'THE TEMPLE · BELFAST', 128, 210); g.strokeStyle = '#fff'; g.lineWidth = 6; g.strokeRect(14, 14, 228, 356); adT.update(); }
+    adM.emissiveTexture = adT; const ad = toMesh('shelterAdPanel', xf(plane(1.1, 1.65), { t: [1.15, 1.25, -0.74] }), scene, adM); ad.parent = sh; 
+    return sh; };
+  const rapid = [];
+  if (busStop) { mkShelter({ ...busStop, id: 'temple' }); }
+  const addStops = (venueStops) => { for (const v of venueStops) {
+    if (v.id === 'temple' && busStop) { const bx = busStop.x + Math.cos(busStop.h) * 3.2, bz = busStop.z - Math.sin(busStop.h) * 3.2; rapid.push({ ...v, sx: busStop.x, sz: busStop.z, bx, bz, h: busStop.h, ux: Math.sin(busStop.h), uz: Math.cos(busStop.h) }); continue; }
+    const sN = near(v.x, v.z); if (!sN) continue;
+    let side = 1; { const nx = -sN.uz, nz = sN.ux; if ((v.x - sN.px) * nx + (v.z - sN.pz) * nz < 0) side = -1; } // kerb on the venue's side of the road
+    const nx = -sN.uz * side, nz = sN.ux * side; const ux = sN.ux * side, uz = sN.uz * side; // drive on the left: travel so the kerb is on the left
+    const bx = sN.px + nx * (sN.w / 2 - 1.65), bz = sN.pz + nz * (sN.w / 2 - 1.65), sx = sN.px + nx * (sN.w / 2 + 1.6), sz = sN.pz + nz * (sN.w / 2 + 1.6);
+    const st = { ...v, sx, sz, bx, bz, h: Math.atan2(ux, uz), ux, uz };
+    mkShelter({ id: v.id, x: sx + nx * 0.9, z: sz + nz * 0.9, h: st.h, ad: v.name }); rapid.push(st);
+  } return rapid; };
   // pedestrians: crowd of clay avatars, some in Drop 018 merch
   const peds = [];
   const pedN = low ? 10 : 30;
@@ -213,7 +226,7 @@ export function buildTraffic(scene, city, { low = false, stops = [], signals = [
     for (let tries = 0; tries < 60; tries++) { const a = PG.nodes[Math.floor(R() * PG.nodes.length)]; const q = PG.pos.get(a); const d = Math.hypot(q[0] - near.x, q[1] - near.z);
       if (d < 120 && d > 8) { const nb = PG.adj.get(a); setPedEdge(p, a, nb[Math.floor(R() * nb.length)]); p.s = R() * p.len; return; } }
   };
-  return { cars, parked, busStop, peds, G, PG, SIG, placeCar, setEdge, placePed, setPedEdge, barM, barM2, inited: false, R };
+  return { cars, parked, busStop, rapid, addStops, tpl, peds, G, PG, SIG, placeCar, setEdge, placePed, setPedEdge, barM, barM2, inited: false, R };
 }
 
 const tmp = new Vector3();

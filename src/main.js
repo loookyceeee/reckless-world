@@ -45,6 +45,7 @@ import * as CR from './crew.js';
 import { loadAvatar3D } from './avatar3d.js';
 import { createMusic } from './music.js';
 import { SegGrid } from './collide.js';
+import { createRapid } from './glider.js';
 import * as EV from './events.js';
 import { torus, xf, plane, toMesh, hex } from './geo.js';
 
@@ -164,6 +165,9 @@ async function start() {
       const n2 = toMesh('vSignN', plane(4.2, 0.5), scene, nm); n2.position.copyFrom(sgn.position); n2.position.y -= 1.05; n2.rotation.y = sgn.rotation.y; n2.parent = city.root; n2.visibility = 0.75; }
   }
   window.__rw.venueDoors = venueDoors;
+  // rapid-bus fast-travel stops: one by every venue (src/glider.js)
+  traffic.addStops([{ id: 'temple', name: 'THE TEMPLE', x: ext.doorPos.x, z: ext.doorPos.z }, { id: 'warehousexl', name: 'THE WARE-HOUSE XL', x: whDoor.x, z: whDoor.z },
+    ...['terminus', 'thompsons', 'warehouse', 'locationx'].map(id => venueDoors.find(d => d.v.id === id)).filter(Boolean).map(d => ({ id: d.v.id, name: d.v.name, x: d.x, z: d.z }))]);
   const FL = buildFlavour(scene, city, { low: LOW }); const WET = buildWetStreaks(scene, city.sf && city.sf.lamps, { low: LOW });
   // posters: snap each spot to the nearest wall
   const posterM = new StandardMaterial('poster', scene); posterM.emissiveTexture = signTex('RECKLESS', 512, 720); posterM.disableLighting = true;
@@ -179,6 +183,7 @@ async function start() {
   try { const meta = await (await fetch(import.meta.env.BASE_URL + 'data/minimap_meta.json')).json(); const im = await loadMinimapImage(import.meta.env.BASE_URL + 'data/' + meta.file, meta); if (im) mapBase = Object.assign(im, { bounds: mapBase.bounds, proc: mapBase }); } catch (e) { console.warn('minimap', e); }
   app.mapBase = mapBase;
   const hud = createHUD(app);
+  const RB = createRapid({ scene, traffic, hud, app }); window.__rw.RB = RB;
   hud.setLive(app.live);
   // ---------- input ----------
   const K = app.keys;
@@ -311,6 +316,7 @@ async function start() {
     const wantFov = 0.95 + (P.speed > 4.5 && !app.inside ? 0.09 : 0); cam.fov += (wantFov - cam.fov) * Math.min(1, dt * 3);
     if (app.title) { const f = flyover(window.__rwFly.at != null ? window.__rwFly.at : t - titleT0); cam.position.copyFrom(f.p); cam.setTarget(f.t); cam.fov = 0.9; camSnap = true; }
     if (window.__rw.camRel) { const o = window.__rw.camRel, h = P.heading + o[0], d = o[1]; cam.position.set(P.x + Math.sin(h) * d, o[2], P.z + Math.cos(h) * d); cam.setTarget(new Vector3(P.x, o[3], P.z)); }
+    if (RB.update(dt, P, cam, () => { C.yaw = P.heading; })) camSnap = true;
     else if (window.__rw.camOverride) { const o = window.__rw.camOverride; cam.position.set(o[0], o[1], o[2]); cam.setTarget(new Vector3(o[3], o[4], o[5])); }
     // world updates
     if (!app.inside) { updateCity(city, t); updateLandmarks(LM, t); updateTempleExterior(ext, t, app.live); updateTraffic(traffic, dt, P, t); templeRing.rotation.y += dt; templeRing.scaling.setAll(1 + 0.06 * Math.sin(t * 4)); }
@@ -321,6 +327,7 @@ async function start() {
       if (Math.hypot(P.x - ext.doorPos.x, P.z - ext.doorPos.z) < 3.2) interact = { label: `<b>E</b> ENTER THE TEMPLE`, act: enterTemple };
       else if (venueDoors.some(d => Math.hypot(P.x - d.x, P.z - d.z) < 3.2)) { const d = venueDoors.find(d => Math.hypot(P.x - d.x, P.z - d.z) < 3.2); interact = d.v.nostalgia ? { label: 'THE WARE-HOUSE · EST. · THE OLD PALM HOUSE / THREE SHEETS SITE', act: () => hud.toast('THE WARE-HOUSE · FOR THE ONES WHO WERE THERE') } : { label: `${d.v.name} · ${d.v.sub} · INSIDE COMING SOON`, act: () => hud.toast(`${d.v.name} OPENS IN A LATER BUILD`) }; }
       else if (Math.hypot(P.x - whDoor.x, P.z - whDoor.z) < 3.2) interact = { label: `THE WARE-HOUSE XL · INTERIOR COMING SOON`, act: () => hud.toast('THE WARE-HOUSE XL OPENS IN A LATER BUILD') };
+      else if (RB.nearStop(P)) { const st = RB.nearStop(P); interact = { label: `<b>E</b> RAPID BUS · FAST TRAVEL`, act: () => RB.menu(st, P) }; }
       else for (const ps of posters) if (Math.hypot(P.x - ps.ix, P.z - ps.iz) < 2.4) { const done = ps.mesh.isEnabled(); interact = { label: done ? 'POSTER UP ✓' : `<b>E</b> PASTE A RECKLESS POSTER`, act: async () => { if (done) return; ps.mesh.setEnabled(true); localStorage.setItem('rw.poster.' + ps.id, '1'); const ev = await EV.posterPlaced(ps.id); hud.toast(ev ? 'POSTER UP · TEST EVENT QUEUED' : 'POSTER UP'); } }; break; }
     } else if (P.z - INTERIOR_ORIGIN.z < 2.4 && Math.abs(P.x - INTERIOR_ORIGIN.x) < 2) interact = { label: `<b>E</b> EXIT TO CARLISLE CIRCUS`, act: exitTemple };
     hud.prompt(interact ? interact.label : '');
