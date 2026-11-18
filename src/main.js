@@ -233,8 +233,9 @@ async function start() {
     await EV.raveExit();
   });
   const AU = createAudio();
-  const MU = createMusic({ onState: (m) => { AU.beatOff = m.playing; const np = document.getElementById('np'); if (np) { np.innerHTML = m.playing && m.title ? `♪ ${m.title.toUpperCase()} · RECKLESS RAVES ON SOUNDCLOUD` : (m.failed ? '♪ RECKLESS BEAT (SOUNDCLOUD UNAVAILABLE)' : ''); np.href = m.link; } } });
-  window.__rw.MU = MU;
+  let npLast = '';
+  const MU = createMusic({ onState: (m) => { if (m.playing && m.title && m.title !== npLast) { npLast = m.title; if (!app.title) hud.note({ kicker: 'NOW PLAYING · RECKLESS FM', title: m.title.toUpperCase(), body: 'Reckless Raves on SoundCloud', type: 'radio' }); } AU.beatOff = m.playing; const np = document.getElementById('np'); if (np) { np.innerHTML = m.playing && m.title ? `♪ ${m.title.toUpperCase()} · RECKLESS RAVES ON SOUNDCLOUD` : (m.failed ? '♪ RECKLESS BEAT (SOUNDCLOUD UNAVAILABLE)' : ''); np.href = m.link; } } });
+  window.__rw.MU = MU; window.__rw.hud = hud;
   const sndLbl = () => { const b = document.getElementById('sndBtn'); if (b) b.textContent = 'SOUND: ' + (AU.on ? 'ON' : 'OFF'); if (AU.on && !Q.has('nosc')) MU.start(); else MU.pause(); };
   addEventListener('pointerdown', () => { if (!app.title && !AU.on && !app._snd) { app._snd = 1; AU.unlock(); sndLbl(); } }, { once: false });
   app.key = (k) => {
@@ -342,7 +343,7 @@ async function start() {
     } else if (P.z - INTERIOR_ORIGIN.z < 2.4 && Math.abs(P.x - INTERIOR_ORIGIN.x) < 2) interact = { label: `<b>E</b> EXIT TO CARLISLE CIRCUS`, act: exitTemple };
     hud.prompt(interact ? interact.label : '');
     // HUD
-    slowT -= dt; if (slowT <= 0) { slowT = 0.5; if (app.inside) EV.raveTick().then(ev => ev && hud.toast(ev.blocked ? '10 MINUTES IN · ' + ev.blocked : '10 MINUTES IN · TEST VISIT QUEUED')); state.street = app.inside ? 'THE TEMPLE' : nearestStreet(); state.district = app.inside ? (T.mode === 'day' ? 'NAVE · DAYLIGHT' : 'NAVE · RAVE') : nearestDistrict();
+    slowT -= dt; if (slowT <= 0) { slowT = 0.5; if (app.inside) EV.raveTick().then(ev => { if (!ev) return; if (ev.blocked) hud.note({ kicker: 'CREW', title: '10 MINUTES IN', body: ev.blocked }); else hud.stamp({ title: 'VISIT LOGGED', sub: 'THE TEMPLE · 10 MINUTES IN', lines: ['RAVE VISIT · TEST EVENT QUEUED', 'CREW ADDS XP AFTER LAUNCH'] }); }); state.street = app.inside ? 'THE TEMPLE' : nearestStreet(); state.district = app.inside ? (T.mode === 'day' ? 'NAVE · DAYLIGHT' : 'NAVE · RAVE') : nearestDistrict();
       { const dd = Math.hypot(P.x - ext.doorPos.x, P.z - ext.doorPos.z); AU.update({ inside: app.inside, dist: dd }); MU.setVolume(app.inside ? 90 : 22 + Math.max(0, 1 - dd / 90) * 30); }
       routeT -= 0.5; if (routeT <= 0 && !app.inside) { routeT = 1.5; if (DEST && DEST.kind === 'waypoint' && Math.hypot(DEST.x - P.x, DEST.z - P.z) < 14) { DEST = null; hud.toast('WAYPOINT REACHED'); } state.route = DEST ? route(P.x, P.z, DEST.x, DEST.z) : null; } if (app.inside) state.route = null; state.dest = DEST;
       const tv = VENUES[0]; state.objective = app.inside ? '' : `▲ THE TEMPLE <b>${Math.round(Math.hypot(P.x - ext.doorPos.x, P.z - ext.doorPos.z))}M</b>`; }
@@ -367,7 +368,7 @@ async function start() {
   document.getElementById('loading').classList.add('done'); bar(100);
   if (!Q.has('debug') && !Q.has('fps')) { const f = document.getElementById('fps'); if (f) f.style.display = 'none'; }
   hud.hud.classList.add('titlehide'); titleT0 = t; document.getElementById('title').classList.add('ready');
-  const startGame = () => { if (!app.title) return; const ti = document.getElementById('title'); ti.classList.add('gone'); app.title = false; camSnap = true; hud.hud.classList.remove('titlehide'); removeEventListener('keydown', anyKey); if (!Q.has('mute')) { AU.unlock(); sndLbl(); } };
+  const startGame = () => { if (!app.title) return; const ti = document.getElementById('title'); ti.classList.add('gone'); app.title = false; camSnap = true; hud.hud.classList.remove('titlehide'); removeEventListener('keydown', anyKey); setTimeout(() => hud.note({ kicker: 'RECKLESS', title: 'TONIGHT AT THE TEMPLE', body: 'Doors open at 8 Carlisle Circus. Follow the red line, or press M to pick a venue.', hold: 7 }), 1200); if (!Q.has('mute')) { AU.unlock(); sndLbl(); } };
   const anyKey = (e) => { if (app.title) startGame(); }; addEventListener('keydown', anyKey);
   document.getElementById('play').onclick = startGame; document.getElementById('title').addEventListener('pointerdown', (e) => { if (document.getElementById('title').classList.contains('ready')) startGame(); });
   if (isTouch) document.getElementById('play').textContent = 'TAP TO ENTER';

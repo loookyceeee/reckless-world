@@ -50,6 +50,8 @@ export function createHUD(app) {
   <div class="mapwrap"><canvas id="minimap" width="220" height="220"></canvas><canvas id="stam" width="240" height="240"></canvas><div class="street" id="street"></div><div class="district" id="district"></div><div class="gps" id="gps"></div></div>
   <div class="prompt" id="prompt"></div>
   <div class="toast" id="toast"></div>
+  <div class="notes" id="notes"></div>
+  <div class="stamp" id="stamp"><div class="lb t"></div><div class="lb b"></div><div class="sbody"><div class="stitle"></div><div class="ssub"></div><div class="slines"></div></div></div>
   <div class="btns"><button data-k="m">MAP</button><button data-k="o">WARDROBE</button><button data-k="f">DANCE</button><button data-k="p">PHOTO</button><button data-k="c">CREDITS</button><button data-k="n" id="sndBtn">SOUND: OFF</button><button data-k="l" id="lightsBtn" class="hide">LIGHTS: RAVE</button></div>
   <div class="touch" id="touch"><div class="stick" id="stick"><div class="nub" id="nub"></div></div><button class="tbtn run" id="tRun">RUN</button><button class="tbtn act" id="tAct">E</button></div>
   <div class="fade" id="fade"></div>`;
@@ -66,6 +68,25 @@ export function createHUD(app) {
   const api = {
     hud, $, close, isOpen,
     filters: () => FIL, setFilter(k, v) { FIL[k] = v; localStorage.setItem(FK, JSON.stringify(FIL)); },
+    // world/crew/radio notifications (top-right stack, max 3) — research/game-design.md 1.8
+    note({ kicker = 'RECKLESS', title = '', body = '', type = '', hold } = {}) {
+      const box = $('notes'); const n = el('div', 'note' + (type ? ' ' + type : ''));
+      const tm = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/London' });
+      n.innerHTML = `<div class="nk"><span></span><i>${tm}</i></div><div class="nt"></div>${body ? '<div class="nb"></div>' : ''}`;
+      n.querySelector('.nk span').textContent = kicker; n.querySelector('.nt').textContent = title; if (body) n.querySelector('.nb').textContent = body;
+      box.prepend(n); while (box.children.length > 3) box.lastChild.remove();
+      requestAnimationFrame(() => n.classList.add('on'));
+      const h = hold ?? (type === 'radio' ? 4 : 5); setTimeout(() => { n.classList.remove('on'); n.classList.add('off'); setTimeout(() => n.remove(), 320); }, h * 1000);
+      return n;
+    },
+    // record-stamp moment for a finished activity (1.9): letterbox, big title, breakdown lines, ~5 s. Never prints XP.
+    stamp({ title = 'MISSION PASSED', sub = '', lines = [], fail = false } = {}) {
+      const S = $('stamp'); S.className = 'stamp' + (fail ? ' fail' : ''); S.querySelector('.stitle').textContent = title; S.querySelector('.ssub').textContent = sub;
+      const L = S.querySelector('.slines'); L.innerHTML = ''; clearTimeout(api._st1); clearTimeout(api._st2);
+      void S.offsetWidth; S.classList.add('on'); hud.classList.add('stamping');
+      lines.forEach((t, i) => setTimeout(() => { const d = el('div', 'sl'); d.textContent = t; L.appendChild(d); requestAnimationFrame(() => d.classList.add('on')); }, 1400 + i * 160));
+      api._st1 = setTimeout(() => S.classList.add('out'), 4200); api._st2 = setTimeout(() => { S.className = 'stamp'; hud.classList.remove('stamping'); }, 5000);
+    },
     toast(msg, s = 2.6) { $('toast').textContent = msg; $('toast').classList.add('on'); clearTimeout(api._tt); api._tt = setTimeout(() => $('toast').classList.remove('on'), s * 1000); },
     prompt(msg) { const p = $('prompt'); if (msg) { p.innerHTML = msg; p.classList.add('on'); } else p.classList.remove('on'); },
     fade(on) { $('fade').classList.toggle('on', on); },
