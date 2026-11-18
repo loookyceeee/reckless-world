@@ -4,11 +4,11 @@ export const KX = Math.cos(LAT0 * Math.PI / 180) * 111320, KZ = 110540;
 export const ll2xz = (lat, lon) => ({ x: (lon - LON0) * KX, z: (lat - LAT0) * KZ });
 export const VENUES = [
   { id: 'temple', name: 'THE TEMPLE', sub: '8 CARLISLE CIRCUS', lat: 54.60708, lon: -5.93657, pin: 'T', inSlice: true, enter: true },
-  { id: 'warehouse', name: 'WARE-HOUSE XL', sub: 'COMMON MARKET · DUNBAR ST', lat: 54.602432, lon: -5.926183, pin: 'W', inSlice: true },
-  { id: 'thompsons', name: "THOMPSON'S GARAGE", sub: '3 PATTERSONS PLACE, BT1 4HW', lat: 54.59725, lon: -5.92905, pin: 'G', inSlice: false },
-  { id: 'halt', name: 'HALT', sub: 'WEAVERS CROSS', lat: 54.59536, lon: -5.93811, pin: 'H', inSlice: false },
-  { id: 'marcusward', name: 'THE MARCUS WARD', sub: 'ORMEAU', lat: 54.592212, lon: -5.931085, pin: 'M', inSlice: false },
-  { id: 'locationx', name: 'LOCATION X', sub: 'SECRET', lat: 54.583353, lon: -5.945171, pin: 'X', inSlice: false },
+  { id: 'warehousexl', name: 'THE WARE-HOUSE XL', sub: 'COMMON MARKET · DUNBAR ST', lat: 54.602432, lon: -5.926183, pin: 'W', inSlice: true },
+  { id: 'thompsons', name: 'THOMPSONS', sub: "THOMPSON'S GARAGE · PATTERSONS PLACE", lat: 54.59725, lon: -5.92905, pin: 'G', inSlice: false },
+  { id: 'terminus', name: 'TERMINUS', sub: 'HALT · WEAVERS CROSS', lat: 54.59536, lon: -5.93811, pin: 'U', inSlice: false },
+  { id: 'warehouse', name: 'THE WARE-HOUSE', sub: 'EST. · NOSTALGIA · 1 BANKMORE SQ (PALM HOUSE / THREE SHEETS SITE)', lat: 54.592256, lon: -5.930879, pin: 'H', inSlice: false, nostalgia: true },
+  { id: 'locationx', name: 'LOCATION X', sub: '149 LISBURN RD', lat: 54.583353, lon: -5.945171, pin: 'X', inSlice: false },
 ].map(v => ({ ...v, ...ll2xz(v.lat, v.lon) }));
 // Districts for the GTA-style area label
 export const DISTRICTS = [

@@ -102,7 +102,7 @@ export function createHUD(app) {
         mg.fillStyle = v.inSlice ? '#fff' : '#000'; mg.strokeStyle = '#fff'; mg.lineWidth = 2;
         mg.beginPath(); mg.arc(R + x, R + y, 9, 0, Math.PI * 2); mg.fill(); mg.stroke();
         mg.fillStyle = v.inSlice ? '#000' : '#fff'; mg.fillText(v.pin, R + x, R + y + 0.5);
-        if (!edge || !v.inSlice) { mg.fillStyle = '#fff'; mg.font = '600 7px "DM Sans", sans-serif'; const lbl = v.inSlice ? v.name : v.name + ' · COMING SOON'; if (!edge) mg.fillText(lbl, R + x, R + y + 15); mg.font = '700 9px Unbounded, sans-serif'; }
+        if (!edge || !v.inSlice) { mg.fillStyle = '#fff'; mg.font = '600 7px "DM Sans", sans-serif'; const lbl = v.inSlice ? v.name : v.nostalgia ? v.name + ' · EST.' : v.name + ' · COMING SOON'; if (!edge) mg.fillText(lbl, R + x, R + y + 15); mg.font = '700 9px Unbounded, sans-serif'; }
       }
       // north marker
       const nx = sn * (R - 9), ny = -cs * (R - 9);
@@ -130,7 +130,7 @@ export function createHUD(app) {
         const x = X(v.x), y = Y(v.z); g.fillStyle = v.inSlice ? '#fff' : '#000'; g.strokeStyle = '#fff'; g.lineWidth = 3; g.beginPath(); g.arc(x, y, 15, 0, 7); g.fill(); g.stroke();
         g.fillStyle = v.inSlice ? '#000' : '#fff'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = '800 14px Unbounded, sans-serif'; g.fillText(v.pin, x, y + 1);
         g.textAlign = 'left'; g.fillStyle = '#fff'; g.font = '700 13px Unbounded, sans-serif'; g.fillText(v.name, x + 22, y - 6);
-        g.font = '600 11px "DM Sans", sans-serif'; g.fillText(v.inSlice ? v.sub : v.sub + ' · COMING SOON', x + 22, y + 10);
+        g.font = '600 11px "DM Sans", sans-serif'; g.fillText(v.inSlice || v.nostalgia ? v.sub : v.sub + ' · COMING SOON', x + 22, y + 10);
       }
       const px = X(st.x), py = Y(st.z); g.save(); g.translate(px, py); g.rotate(st.heading); g.fillStyle = '#fff'; g.strokeStyle = '#000'; g.lineWidth = 2; g.beginPath(); g.moveTo(0, -12); g.lineTo(9, 9); g.lineTo(0, 4); g.lineTo(-9, 9); g.closePath(); g.fill(); g.stroke(); g.restore();
     },
