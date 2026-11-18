@@ -12,6 +12,7 @@ for o in bpy.context.scene.objects:
         em = nt.nodes.new('ShaderNodeEmission'); nt.links.new(tx.outputs[0], em.inputs[0]); nt.links.new(em.outputs[0], nt.nodes['Material Output'].inputs[0])
     else:
         nt.links.new(tx.outputs[0], bs.inputs['Base Color']); bs.inputs['Roughness'].default_value = 0.6
+        if b == 'Hair': nt.links.new(tx.outputs[1], bs.inputs['Alpha'])
     o.data.materials.clear(); o.data.materials.append(m)
 for ar in bpy.context.scene.objects:
     if ar.type == 'ARMATURE':

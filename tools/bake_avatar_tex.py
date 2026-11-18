@@ -153,7 +153,7 @@ if __name__ == '__main__':
     zneck = ez - 0.2
     hw = smooth(zneck - 0.03, zneck + 0.03, Z)[..., None]
     vis_body = depth_buffer(['Body'])
-    face_lo = np.stack([ndi.median_filter(head_front[..., c], size=25) for c in range(3)], -1); face_lo = ndi.gaussian_filter(face_lo, (10, 10, 0))
+    skin_only = fill(rgb, sk & (rgb.mean(-1) > 0.45), 2); face_lo = np.stack([ndi.median_filter(skin_only[..., c], size=25) for c in range(3)], -1); face_lo = ndi.gaussian_filter(face_lo, (10, 10, 0))
     cH = bake('Body', 1024, head_front, face_lo, hm, vis_body, (0.12, 0.5)); cB = bake('Body', 1024, body_front, plate, gm, vis_body, (-0.15, 0.3))
     save(cH * hw + cB * (1 - hw), 'body')
     hairm = alpha & ~skin_mask(rgb) & (rgb.mean(-1) < 0.42)
@@ -162,7 +162,13 @@ if __name__ == '__main__':
     hr = np.where(hairm.any(1))[0]; top, hl = hr.min(), int(np.percentile(np.where(hairm)[0], 70))
     hair_back = hair_front.copy(); band = hair_front[top + 4:hl]
     for y in range(hl, hair_back.shape[0]): hair_back[y] = band[(y - hl) % max(1, len(band))]
-    save(bake('Hair', 256, raw_head, hair_back, hm, None, (0.55, 0.85)), 'hair')
+    # hair with alpha: where the app shows skin (hairline / fade), the shell is cut out so the projected forehead shows
+    hm_soft = ndi.gaussian_filter(ndi.binary_dilation(hairm, iterations=1).astype(np.float32), 1.0)
+    hcol = bake('Hair', 256, raw_head, hair_back, hm, None, (0.55, 0.85))
+    A_, m_ = texels('Hair', 256); px_, py_ = hm(A_[..., 0], A_[..., 2]); ff = smooth(0.35, 0.7, -A_[..., 4])
+    a_ = sample(hm_soft[..., None], px_, py_)[..., 0]; al = np.clip(1 - ff * (1 - a_), 0, 1)
+    _, (iy, ix) = ndi.distance_transform_edt(~m_, return_indices=True); al = al[iy, ix]
+    Image.fromarray((np.dstack([np.clip(hcol, 0, 1), al]) * 255).astype(np.uint8), 'RGBA').save(os.path.join(OUT, 'hair.webp'), quality=90, method=6)
     save(bake('Eyes', 128, rgb, rgb, hm, None, (-1, -0.5)), 'eyes')
     # shoes: below the jeans hem, not denim/skin
     blue = (rgb[..., 2] > rgb[..., 0] + 0.04) & alpha

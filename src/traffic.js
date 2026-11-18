@@ -94,7 +94,7 @@ function lightsVD(kind) { // headlights front (+z), tail lights back
 }
 
 // CC0 Kenney Car Kit bodies (tools/blender/export_cars.py -> data/cars.json): palette colours, paint colour re-tinted per car
-const MODEL_OF = { saloon: 'sedan', hatch: 'hatchback-sports', taxi: 'taxi', suv: 'suv', van: 'van', bus: 'glider', wagon: 'wagon', estate: 'suv' }; // glider + wagon: tools/gen_vehicles.py
+const MODEL_OF = { saloon: 'sedan', hatch: 'hatchback-sports', taxi: 'taxi', suv: 'suv', van: 'van', bus: 'glider', wagon: 'wagon', estate: 'suv', pestate: 'pestate' }; // glider + wagon: tools/gen_vehicles.py
 function modelVD(M, kind, col, part = 'body') {
   const m = M && M[MODEL_OF[kind]]; if (!m) return null; const EM = new Set(m.emit || []);
   const b64 = (str) => Uint8Array.from(atob(str), ch => ch.charCodeAt(0)).buffer;
@@ -125,6 +125,7 @@ export function buildTraffic(scene, city, { low = false, stops = [], signals = [
   const templates = {};
   const tpl = (key, kind, col) => {
     if (templates[key]) return templates[key];
+    if (key === 'patrolcar' && models && models.pestate) kind = 'pestate'; // modelled patrol estate (tools/gen_vehicles.py)
     const b = toMesh('car-' + key, (MODEL_OF[kind] && modelVD(models, kind, col)) || carVD(kind, col), scene, bodyM); const l = toMesh('carL-' + key, (models && models[MODEL_OF[kind]] && models[MODEL_OF[kind]].emit && modelVD(models, kind, col, 'lights')) || lightsVD(kind), scene, lightM);
     b.position.y = -500; l.position.y = -500; b.alwaysSelectAsActiveMesh = true; l.alwaysSelectAsActiveMesh = true; return (templates[key] = { b, l, kind });
   };
@@ -139,14 +140,15 @@ export function buildTraffic(scene, city, { low = false, stops = [], signals = [
     const W = kind === 'wagon';
     if (models && models[MODEL_OF[kind]]) { // modelled patrol vehicles: Battenburg baked into the wagon body; plain POLICE lettering + blue bar here
       const mw = W ? 1.135 : 0.965;
-      if (!W) { if (!bbM.__vc) { bbM.__vc = new StandardMaterial('bbVC', scene); bbM.__vc.diffuseColor = Color3.White(); bbM.__vc.emissiveColor = new Color3(0.07, 0.07, 0.07); bbM.__vc.specularColor = new Color3(0.3, 0.3, 0.3); }
+      const PE = !W && models.pestate; // patrol estate model has the Battenburg baked in
+      if (!W && !PE) { if (!bbM.__vc) { bbM.__vc = new StandardMaterial('bbVC', scene); bbM.__vc.diffuseColor = Color3.White(); bbM.__vc.emissiveColor = new Color3(0.07, 0.07, 0.07); bbM.__vc.specularColor = new Color3(0.3, 0.3, 0.3); }
         const Q = [], Y = hex('#d4ec1a'), B = hex('#123a9e'), n = 20, sq = 3.8 / n; // retro-reflective Battenburg: two rows of square checks
         for (const sd of [-1, 1]) for (let i = 0; i < n; i++) for (let j = 0; j < 2; j++) Q.push(color(xf(box(0.02, sq, sq), { t: [sd * mw, 0.72 + (j - 0.5) * sq, -1.85 + (i + 0.5) * sq] }), (i + j) % 2 ? B : Y));
         const p = toMesh('bb', merge(Q), scene, bodyM); p.parent = node; } // same material as the wagon's baked checks -> identical crisp yellow/blue
       if (W) for (const sd of [-1, 1]) { const pl = toMesh('polS', xf(plane(1.5, 0.38), {}), scene, polM); pl.parent = node; pl.rotation.y = sd > 0 ? -Math.PI / 2 : Math.PI / 2; pl.position.set(sd * (mw + 0.01), 2.2, -1.75); }
       const pf = toMesh('polF', xf(plane(W ? 0.95 : 0.8, W ? 0.23 : 0.19), {}), scene, polM); pf.parent = node; pf.rotation.y = Math.PI;
-      if (W) pf.position.set(0, 1.3, 2.565); else { pf.rotation.x = Math.PI / 2 - 0.2; pf.position.set(0, 1.07, 1.75); }
-      const by = W ? 3.12 : 1.8, bz = W ? 0.9 : -0.1, bw = W ? 1.9 : 1.3;
+      if (W) pf.position.set(0, 1.3, 2.565); else if (PE) { pf.rotation.x = Math.PI / 2 - 0.12; pf.position.set(0, 0.875, 1.85); } else { pf.rotation.x = Math.PI / 2 - 0.2; pf.position.set(0, 1.07, 1.75); }
+      const by = W ? 3.12 : PE ? 1.6 : 1.8, bz = W ? 0.9 : PE ? -0.6 : -0.1, bw = W ? 1.9 : 1.3;
       const base = toMesh('lbB', xf(box(bw + 0.08, 0.06, 0.32), { t: [0, by - 0.07, bz] }), scene, darkM); base.parent = node;
       const b1 = toMesh('bar1', xf(box(bw / 2 - 0.02, 0.13, 0.28), { t: [-bw / 4, by, bz] }), scene, barM); b1.parent = node;
       const b2 = toMesh('bar2', xf(box(bw / 2 - 0.02, 0.13, 0.28), { t: [bw / 4, by, bz] }), scene, barM2); b2.parent = node;

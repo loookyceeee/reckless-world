@@ -33,7 +33,7 @@ export async function loadAvatar3D(scene, { name = 'player', base = import.meta.
   const mat = (id, col, { rough = 0.75, t = null, fill = 0.42 } = {}) => { const m = new StandardMaterial('av3d-' + id, scene); m.diffuseColor = col.clone(); const sp = (1 - rough) * 0.3; m.specularColor = new Color3(sp, sp, sp); m.specularPower = 28; m.ambientColor = new Color3(0.3, 0.3, 0.32);
     if (t) { m.diffuseTexture = t; m.emissiveTexture = t; m.emissiveColor = new Color3(fill, fill, fill); m.diffuseColor = new Color3(0.78, 0.78, 0.78); } return m; };
   const skinM = mat('skin', SKIN, { rough: 0.6, t: tex('body'), fill: 0.42 }); skinM.diffuseColor.set(0.7, 0.68, 0.68);
-  const hairM = mat('hair', HAIR, { rough: 0.9, t: tex('hair'), fill: 0.5 }); hairM.diffuseColor.set(0.45, 0.45, 0.45);
+  const hairM = mat('hair', HAIR, { rough: 0.9, t: tex('hair'), fill: 0.5 }); hairM.diffuseColor.set(0.45, 0.45, 0.45); hairM.diffuseTexture.hasAlpha = true; hairM.transparencyMode = 1; hairM.alphaCutOff = 0.5; hairM.backFaceCulling = false; // alpha-tested fringe edge: no forehead band
   const browM = mat('brow', HAIR, { rough: 0.8 });
   const eyeM = mat('eye', Color3.White(), { rough: 0.2, t: tex('eyes'), fill: 0.5 });
   // keep the loader's winding (glTF is right-handed): new materials must copy sideOrientation or every shell renders inside-out

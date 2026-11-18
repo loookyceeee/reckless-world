@@ -78,7 +78,7 @@ PAL = {'purple': (0.52, 0.17, 0.66), 'purpleD': (0.25, 0.07, 0.32), 'roof': (0.5
        'skirt': (0.16, 0.12, 0.2), 'bellows': (0.13, 0.13, 0.15), 'tyre': (0.06, 0.06, 0.07), 'hub': (0.2, 0.2, 0.23), 'pod': (0.7, 0.72, 0.76),
        'led': (0.85, 0.9, 1.0), 'head': (1.0, 0.97, 0.88), 'tail': (1.0, 0.08, 0.06), 'dest': (1.0, 0.62, 0.1), 'door': (0.09, 0.1, 0.13), 'frame': (0.3, 0.3, 0.34),
        'white': (0.93, 0.94, 0.95), 'bbY': (0.83, 0.92, 0.1), 'bbB': (0.07, 0.2, 0.62), 'black': (0.08, 0.08, 0.09), 'blue': (0.16, 0.42, 1.0), 'steel': (0.32, 0.33, 0.36),
-       'amber': (1.0, 0.6, 0.08), 'glassLit': (0.17, 0.18, 0.21), 'cabin': (0.42, 0.4, 0.34)}
+       'amber': (1.0, 0.6, 0.08), 'glassLit': (0.17, 0.18, 0.21), 'cabin': (0.42, 0.4, 0.34), 'paint': (0.86, 0.87, 0.89), 'trim': (0.12, 0.12, 0.13), 'grille': (0.05, 0.05, 0.06)}
 EMIT = {'led', 'head', 'tail', 'dest', 'amber', 'glassLit', 'cabin'}
 
 def glider():
@@ -179,6 +179,64 @@ def wagon():
         for x in (-0.98, 0.98): wheel(m, x, 0.42, z, 0.42, 0.3, 'tyre', 'steel')
     return m
 
+def pestate():
+    """Fictional patrol estate: rounded bonnet, raked screen, glasshouse with tumblehome, wheel arches, Battenburg baked
+    in two rows of 0.19 m squares (crisp, same palette as the wagon). No maker badge, crest or text."""
+    m = M(); W, L = 1.84, 4.7; ZF, ZR = 2.35, -2.35; ZW = (1.42, -1.38); RW = 0.34; SQ = 0.19; BB0 = 0.53
+    def sm(a, b, x): t = max(0.0, min(1.0, (x - a) / (b - a))); return t * t * (3 - 2 * t)
+    def bcol(c, n):
+        x, y, z = c; nx, ny, nz = n
+        if abs(nx) > 0.55 and BB0 < y < BB0 + 2 * SQ and -2.05 < z < 2.0:
+            u = int(math.floor((z + 2.05) / SQ)); v = 0 if y < BB0 + SQ else 1
+            return 'bbY' if (u + v) % 2 == 0 else 'bbB'
+        if nz > 0.35 and z > 2.0:
+            if 0.55 < y < 0.69 and abs(x) > 0.4: return 'head'
+            if 0.44 < y < 0.56 and abs(x) < 0.5: return 'grille'
+            if y < 0.42: return 'trim'
+            return 'paint'
+        if nz < -0.35 and z < -2.0:
+            if 0.72 < y < 0.92 and abs(x) > 0.58: return 'tail'
+            if y < 0.48: return 'trim'
+            return 'paint'
+        if ny < -0.5 or y < 0.36: return 'trim'
+        return 'paint'
+    rings = []; zs = [ZR + k * 0.0475 for k in range(int(L / 0.0475) + 1)]
+    for z in zs:
+        f = sm(1.85, ZF, z); r_ = sm(-1.95, ZR, z)  # nose / tail rounding
+        top = 0.97 - 0.15 * sm(0.9, 2.25, z) - 0.12 * f ** 2 - 0.04 * r_  # bonnet falls toward the nose
+        y0 = 0.3 + 0.12 * f + 0.1 * r_
+        for zw in ZW:
+            d = abs(z - zw)
+            if d < RW + 0.08: y0 = max(y0, 0.3 + math.sqrt(max(0.0, (RW + 0.08) ** 2 - d * d)) * 1.05)
+        w = W * (1 - 0.1 * f ** 1.6 - 0.05 * r_ ** 1.6)
+        h = max(0.12, top - y0)
+        rings.append((z, rr_ring(w, h, min(0.16, h * 0.45), y0, 5, (BB0, BB0 + SQ, BB0 + 2 * SQ), 0.3)))
+    loft(m, rings, bcol)
+    # glasshouse: belt 0.93, roof 1.5, raked screen (base z 0.95 -> roof z 0.05), slight estate tailgate rake
+    def ccol(c, n):
+        x, y, z = c; nx, ny, nz = n
+        if ny > 0.7: return 'paint'
+        if nz > 0.3: return 'glass' if y > 1.0 else 'paint'
+        if nz < -0.3: return 'glass' if 1.0 < y < 1.42 else 'paint'
+        if 1.0 < y < 1.43:
+            if abs(z + 0.45) < 0.07 or abs(z + 1.55) < 0.06: return 'trim'  # B / C pillars
+            return 'glass'
+        return 'paint'
+    crings = []
+    for z in [-2.22 + k * 0.08 for k in range(41)]:
+        if z > 1.0: break
+        rf = 1.5 - 0.06 * sm(-1.6, -2.22, z)
+        if z > 0.05: rf = 1.5 - (1.5 - 0.95) * ((z - 0.05) / 0.95) ** 1.15
+        h = max(0.05, rf - 0.9); w = 1.58 - 0.05 * sm(0.3, 1.0, z)
+        crings.append((z, rr_ring(w, h, min(0.2, h * 0.45), 0.9, 5, (1.0, 1.43), 0.3)))
+    loft(m, crings, ccol)
+    for sd in (-1, 1):
+        box(m, (sd * 0.93, 1.02, 0.78), (0.1, 0.07, 0.16), 'trim')                     # mirrors
+        box(m, (sd * (W / 2 + 0.005), 0.34, 0.02), (0.03, 0.08, 2.0), 'trim')          # sills
+        for zw in ZW: wheel(m, sd * 0.79, 0.33, zw, 0.33, 0.24, 'tyre', 'steel')
+    box(m, (0, 1.53, -1.0), (1.2, 0.03, 0.05), 'trim'); box(m, (0, 1.53, -0.2), (1.2, 0.03, 0.05), 'trim')  # roof bars
+    return m
+
 def pack(m):
     pal = sorted({f[3] for f in m.F}); pidx = {k: i for i, k in enumerate(pal)}
     V, VI, I = {}, [], []
@@ -194,6 +252,6 @@ def pack(m):
     return {'pos': base64.b64encode(pos.tobytes()).decode(), 'col': base64.b64encode(col).decode(), 'ind': base64.b64encode(ind.tobytes()).decode(),
             'pal': [list(PAL[k]) for k in pal], 'names': pal, 'emit': [pidx[k] for k in pal if k in EMIT], 'paint': -1, 'scale': 1 / 500}
 
-out = {'glider': pack(glider()), 'wagon': pack(wagon())}
+out = {'glider': pack(glider()), 'wagon': pack(wagon()), 'pestate': pack(pestate())}
 for k, v in out.items(): print(k, len(base64.b64decode(v['ind'])) // 6, 'tris')
 json.dump(out, open(OUT, 'w'), separators=(',', ':')); print('wrote', OUT, os.path.getsize(OUT))

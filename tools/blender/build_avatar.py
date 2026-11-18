@@ -130,6 +130,9 @@ for i in fv:
         p.x = hc0.x + (p.x - hc0.x) * (1 + 0.26 * sm(0.15, -0.45, n.z) * sm(-1.05, -0.6, n.z))
         if n.y < 0: p.y = hc0.y + (p.y - hc0.y) * (1 - 0.06 * lift)
     if n.y < -0.7 and abs(n.x) < 0.3 and -0.45 < n.z < 0.15: p.y += (hc0.y - ex0.y * 0.7 - p.y) * 0.6 * sm(0.3, 0.0, abs(n.x))  # smaller nose
+    if abs(n.x) > 0.8 and -0.55 < n.z < 0.25 and -0.45 < n.y < 0.5:  # ears: smaller and tucked in like the app render
+        ew = sm(0.8, 0.95, abs(n.x)); ec_ = Vector((math.copysign(hc0.x + ex0.x * 0.82, n.x) if hc0.x == 0 else hc0.x + math.copysign(ex0.x * 0.82, n.x), hc0.y + 0.05 * ex0.y, hc0.z - 0.12 * ex0.z))
+        p = p + ((ec_ + (p - ec_) * 0.72) - p) * ew
     newP[i] = hc0 + (p - hc0) if w > 0 else Pf[i]
 bmf = bmesh.new(); bmf.from_mesh(body.data); bmf.verts.ensure_lookup_table()
 for i, p in newP.items(): bmf.verts[i].co = toA.inverted() @ p
@@ -161,7 +164,7 @@ for v in bm.verts:
     if v.index not in HSEL: continue
     n = hn(Ph[v.index]); top = smooth(0.30, 0.80, n.z)      # crop: volume on top, faded short sides
     edge = smooth(0.0, 0.14, n.z - (0.30 - max(0.0, min(1.0, (n.y + 0.45) / 1.1)) * 0.78))  # thin to nothing at the hairline
-    th = (0.0025 + 0.013 * top * (1 - 0.5 * smooth(0.45, 0.95, abs(n.x)))) * (0.25 + 0.75 * edge) + 0.004 * smooth(0.6, 0.9, abs(n.x)) * smooth(0.05, 0.45, n.z) * edge + (0.010 * smooth(-0.2, -0.75, n.y) * smooth(0.25, 0.6, n.z))  # extra fringe volume at the front
+    th = (0.0025 + 0.022 * top * (1 - 0.45 * smooth(0.45, 0.95, abs(n.x)))) * (0.25 + 0.75 * edge) + 0.004 * smooth(0.6, 0.9, abs(n.x)) * smooth(0.05, 0.45, n.z) * edge + (0.010 * smooth(-0.2, -0.75, n.y) * smooth(0.25, 0.6, n.z))  # extra fringe volume at the front
     d = norms[v.index] * th
     if n.y < -0.35 and n.z > 0.25: d += Vector((0, -0.006, -0.004)) * top   # fringe pushed forward over the brow
     v.co = v.co + (toA.inverted().to_3x3() @ d)
@@ -228,6 +231,13 @@ def region(kind):
             if ok: sel.add(i)
     return sel
 PUSH = {'tee': 0.012, 'crop': 0.011, 'long': 0.012, 'hoodie': 0.026, 'jeans': 0.016, 'pants': 0.014, 'cuffed': 0.014, 'shorts': 0.016, 'briefs': 0.004, 'shoes': 0.02}
+# torso half-width / half-depth per 1 cm slice (body only, torso bones) for the boxy tee fit
+TW, TD = {}, {}
+_cy = axis_pt(Vector((0, 0, 1.0)), 'spine_02').y + 0.01
+for i_, (p_, d_) in enumerate(zip(P, W)):
+    b_ = dom(d_) or ''
+    if b_.startswith(('spine', 'pelvis', 'clavicle')):
+        zk = round(p_.z, 2); TW[zk] = max(TW.get(zk, 0.0), abs(p_.x)); TD[zk] = max(TD.get(zk, 0.0), abs(p_.y - _cy))
 def make(kind):
     sel = region(kind)
     o = body.copy(); o.data = body.data.copy(); o.name = 'G_' + kind; bpy.context.collection.objects.link(o)
@@ -255,7 +265,11 @@ def make(kind):
             if kind == 'jeans' and b.startswith(('thigh', 'calf')):  # straight-leg baggy: near-constant radius from mid-thigh to the hem
                 r = (p - c).length; R = max(r * 1.12, 0.082 if b.startswith('thigh') else 0.079); q = c + (p - c) * (R / max(r, 1e-4))
             elif b.startswith(('spine', 'pelvis', 'clavicle', 'neck')):  # torso: loose in depth, barely wider (no shoulder pads)
-                kx = 1 + (k - 1) * (0.3 if kind in ('tee', 'crop', 'long', 'hoodie') else 0.4); dq = p - c; q = c + Vector((dq.x * kx, dq.y * k, 0))
+                kx = 1 + (k - 1) * (0.3 if kind in ('tee', 'crop', 'long', 'hoodie') else 0.4); dq = p - c
+                if kind in ('tee', 'long', 'crop') and p.z < z_neck - 0.1:  # boxy oversized fit: sides hang straight to the hem
+                    xm = TW.get(round(p.z, 2), 0.15); tgt = 0.205 * (abs(dq.x) / max(xm, 1e-3)); kx = max(kx, min(1.6, tgt / max(abs(dq.x), 1e-3)))
+                    k = max(k, min(1.5, 0.135 / max(TD.get(round(p.z, 2), 0.1), 1e-3)))
+                q = c + Vector((dq.x * kx, dq.y * k, 0))
             else: q = c + (p - c) * k
             v.co = toA.inverted() @ q + norms[v.index] * d
         else:
