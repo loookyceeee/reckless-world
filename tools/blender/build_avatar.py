@@ -14,7 +14,7 @@ UAL = Q + "universal-animation-library/Universal Animation Library[Standard]/Unr
 CLIPS = {'Walk_Loop': 'walk', 'Jog_Fwd_Loop': 'jog', 'Sprint_Loop': 'sprint', 'Jump_Start': 'jumpStart', 'Jump_Loop': 'jumpLoop', 'Jump_Land': 'jumpLand', 'Dance_Loop': 'dance'}
 USE_QHAIR = False  # the app's short textured crop with a fade is built as a scalp shell below
 SMOOTH_IT = int(__import__('os').environ.get('SMIT', '0'))
-HEAD_S = 1.75
+HEAD_S = 1.88
 LEG_F = 0.86     # app figure has shorter legs than the superhero base     # app renders: ~5.6 heads tall
 TARGET_H = 1.74   # metres, matches cars (~4.3 m) and lanes
 
@@ -181,7 +181,7 @@ if eb:
         if not idx: continue
         c = sum((ps[i] for i in idx), Vector()) / len(idx)
         for i in idx:
-            q = ps[i] - c; ps[i] = c + Vector((q.x * 1.05, q.y, q.z * 0.8)) + Vector((0, -0.0015, -0.001))
+            q = ps[i] - c; ps[i] = c + Vector((q.x * 1.0, q.y, q.z * 0.72)) + Vector((0, -0.0015, 0.0035))
     for v, p in zip(eb.data.vertices, ps): v.co = toE.inverted() @ p
 
 # --- garments: shells cut from the body by bone region ---
