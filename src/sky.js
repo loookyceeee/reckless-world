@@ -25,11 +25,11 @@ export function buildSky(scene, { low = false } = {}) {
     const cg = g.createRadialGradient(x, y, 0, x, y, rx); const lit = (y / H - 0.3) / 0.18; cg.addColorStop(0, `rgba(${70 + lit * 50 | 0},${60 + lit * 30 | 0},${90 + lit * 10 | 0},${(0.1 + R() * 0.12).toFixed(3)})`); cg.addColorStop(1, 'rgba(40,35,60,0)');
     g.fillStyle = cg; g.setTransform(1, 0, 0, ry / rx, 0, y - y * ry / rx); g.beginPath(); g.arc(x, y, rx, 0, 7); g.fill(); g.setTransform(1, 0, 0, 1, 0, 0); } g.restore();
   // moon: waxing gibbous with halo, high in the south-east
-  const mx = W * 0.62, my = H * 0.2, mr = W * 0.0085;
+  const mx = W * 0.62, my = H * 0.355, mr = W * 0.0048;
   const halo = g.createRadialGradient(mx, my, mr, mx, my, mr * 9); halo.addColorStop(0, 'rgba(200,210,255,0.35)'); halo.addColorStop(1, 'rgba(200,210,255,0)'); g.fillStyle = halo; g.beginPath(); g.arc(mx, my, mr * 9, 0, 7); g.fill();
   g.fillStyle = '#eef0ff'; g.beginPath(); g.arc(mx, my, mr, 0, 7); g.fill();
   g.fillStyle = 'rgba(160,165,190,0.35)'; for (let i = 0; i < 6; i++) { g.beginPath(); g.arc(mx + (R() - 0.5) * mr * 1.1, my + (R() - 0.5) * mr * 1.1, mr * (0.12 + R() * 0.2), 0, 7); g.fill(); }
-  g.fillStyle = 'rgba(10,12,28,0.55)'; g.beginPath(); g.arc(mx - mr * 1.35, my, mr * 1.05, 0, 7); g.fill();
+  g.save(); g.beginPath(); g.arc(mx, my, mr, 0, 7); g.clip(); g.fillStyle = 'rgba(40,44,70,0.78)'; g.beginPath(); g.arc(mx - mr * 1.25, my - mr * 0.1, mr * 0.95, 0, 7); g.fill(); g.restore(); // waxing gibbous terminator, kept inside the disc
   tex.update(); tex.wrapU = Texture.WRAP_ADDRESSMODE; tex.level = 1.25; tex.anisotropicFilteringLevel = 1;
   const m = new StandardMaterial('skyM', scene); m.emissiveTexture = tex; m.disableLighting = true; m.backFaceCulling = false; m.fogEnabled = false; m.diffuseColor = Color3.Black(); m.specularColor = Color3.Black();
   const sky = CreateSphere('sky', { diameter: 1000, segments: 32, sideOrientation: Mesh.BACKSIDE }, scene); { const P = sky.getVerticesData('position'), uv = Float32Array.from(sky.getVerticesData('uv')); for (let i = 0; i < P.length / 3; i++) { const x = P[i * 3], y = P[i * 3 + 1], z = P[i * 3 + 2], r = Math.hypot(x, y, z) || 1; uv[i * 2 + 1] = 0.5 + Math.asin(y / r) / Math.PI; } sky.setVerticesData('uv', uv); }
