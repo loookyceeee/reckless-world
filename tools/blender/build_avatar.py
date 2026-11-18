@@ -219,7 +219,7 @@ def region(kind):
             if kind == 'crop' and ok and p.z < z_sp2 - 0.01: ok = False
             if kind == 'hoodie' and b == 'Head':
                 hc = (hh + ht) / 2; q = p - hc
-                ok = (q.y > 0.01 and q.z > -0.06) or q.z > 0.12   # back and top of the head (char faces -Y)
+                ok = q.y > 0.05 and q.z < -0.04   # hood down: only a bunched hood behind the nape, never over the skull
             if ok: sel.add(i)
         else:
             ok = False
@@ -354,8 +354,8 @@ def stance(br):
     for pb in arm.pose.bones: pb.rotation_mode = 'QUATERNION'; pb.matrix_basis.identity()
     for sd in ('_l', '_r'):
         sx = 1 if arm.data.bones['upperarm' + sd].head_local.x > 0 else -1
-        aim('upperarm' + sd, Vector((sx * (0.11 + br * 0.015), 0.03, -1)))
-        aim('lowerarm' + sd, Vector((sx * 0.08, -0.16, -1)))
+        aim('upperarm' + sd, Vector((sx * (0.2 + br * 0.015), 0.03, -1)))  # ~11 deg out: clear gap to the torso like the app render
+        aim('lowerarm' + sd, Vector((sx * 0.1, -0.16, -1)))
         aim('hand' + sd, Vector((sx * 0.02, -0.12, -1)))
         aim('thigh' + sd, Vector((sx * 0.045, 0.0, -1))); aim('calf' + sd, Vector((sx * 0.03, 0.012, -1)))
         for f in ('index', 'middle', 'ring', 'pinky'):

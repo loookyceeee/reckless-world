@@ -148,3 +148,40 @@
 @keyframes stampIn{from{opacity:0;transform:scale(1.08)}to{opacity:1;transform:scale(1)}}@keyframes fadeIn{to{opacity:1}}
 .hud.stamping .topright,.hud.stamping .prompt,.hud.stamping .btns,.hud.stamping .notes,.hud.stamping .toast{opacity:0;transition:opacity .3s}
 .is-touch .notes{top:118px;right:10px;width:min(300px,70vw)}
+/* ---- stage 6: crew phone + action wheel (mockups 03/04) ---- */
+.phveil{position:fixed;inset:0;z-index:60;background:transparent}
+.phone{position:fixed;right:24px;bottom:24px;width:280px;height:560px;max-height:calc(100vh - 48px);z-index:61;background:rgba(0,0,0,.92);border:2px solid #fff;display:flex;flex-direction:column;padding:12px;text-transform:uppercase;font-family:var(--f2);transform:translateY(24px);opacity:0;transition:transform .2s cubic-bezier(.2,.8,.2,1),opacity .16s;box-shadow:0 18px 60px rgba(0,0,0,.6)}
+.phone.on{transform:none;opacity:1}.phone.out{transition-duration:.12s}
+.phs{display:flex;justify-content:space-between;align-items:center;font:700 9px var(--f1);letter-spacing:.16em;padding:2px 2px 12px}.phs span{letter-spacing:.08em}.phs i{font-style:normal;font-size:7px;letter-spacing:1px}
+.phh{display:flex;align-items:center;gap:8px;border-bottom:1px solid rgba(255,255,255,.25);padding:0 0 10px;margin-bottom:10px}.phh b{font:800 13px var(--f1);letter-spacing:.06em}
+.phback{background:none;border:2px solid #fff;color:#fff;width:28px;height:28px;font:700 16px var(--f1);cursor:pointer;line-height:1}.phback:hover{background:#fff;color:#000}
+.phb{flex:1;overflow:auto;display:flex;flex-direction:column;gap:10px;scrollbar-width:none}
+.phgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.pht{position:relative;aspect-ratio:1;background:#000;border:2px solid #fff;color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;cursor:pointer;font:700 8px var(--f1);letter-spacing:.04em;padding:0 2px;transition:background .1s,color .1s}
+.pht i{font-style:normal;font-size:15px;line-height:1}.pht:hover,.pht:focus-visible{background:#fff;color:#000;outline:none}
+.pht em{position:absolute;top:4px;right:4px;background:var(--red,#FF2A3C);color:#fff;font:700 8px var(--f1);font-style:normal;min-width:15px;height:15px;line-height:15px;border-radius:8px;padding:0 3px}
+.phpeek,.phmsg,.phcard{display:flex;flex-direction:column;gap:4px;text-align:left;background:#000;border:2px solid #fff;color:#fff;padding:10px;font-family:var(--f2)}
+.phpeek,.phmsg{cursor:pointer}.phpeek:hover,.phmsg:hover{background:#111}
+.phpeek small,.phmsg small,.phcard small{font:700 8px var(--f1);letter-spacing:.14em;color:rgba(255,255,255,.55)}
+.phpeek b,.phmsg b,.phcard b{font:800 12px var(--f1);letter-spacing:.02em}
+.phpeek span,.phmsg span,.phcard span{font:500 11px var(--f2);text-transform:none;color:rgba(255,255,255,.75);line-height:1.35}
+.phmsg i{font:700 8px var(--f1);font-style:normal;letter-spacing:.12em;color:var(--red,#FF2A3C)}
+.phlist{display:flex;flex-direction:column;gap:6px}
+.phrow{display:flex;justify-content:space-between;align-items:center;background:#000;border:2px solid #fff;color:#fff;padding:9px 10px;font:700 9px var(--f1);letter-spacing:.06em;cursor:pointer;text-align:left}
+.phrow i{font-style:normal;color:rgba(255,255,255,.6)}.phrow:hover{background:#fff;color:#000}.phrow:hover i{color:#000}
+.phrowb{display:flex;gap:6px}.phrowb .phbtn{flex:1}
+.phbtn{background:#000;border:2px solid #fff;color:#fff;padding:10px 8px;font:700 9px var(--f1);letter-spacing:.1em;cursor:pointer}.phbtn:hover,.phbtn.on{background:#fff;color:#000}
+.phbar{height:6px;background:rgba(255,255,255,.18);margin:4px 0}.phbar i{display:block;height:100%;background:#fff;transition:width .4s}
+.phfine{font:500 10px var(--f2);text-transform:none;color:rgba(255,255,255,.5);margin:0;line-height:1.4}
+.phlink{color:#fff;font:700 9px var(--f1);letter-spacing:.1em;text-decoration:none;border-bottom:1px solid rgba(255,255,255,.4);align-self:flex-start;padding-bottom:2px}
+.phpeekf{position:fixed;right:24px;bottom:24px;width:280px;z-index:59;display:flex;flex-direction:column;gap:4px;text-align:left;background:rgba(0,0,0,.92);border:2px solid #fff;color:#fff;padding:10px 12px;cursor:pointer;transform:translateY(140%);transition:transform .25s cubic-bezier(.2,.8,.2,1)}
+.phpeekf.on{transform:none}.phpeekf small{font:700 8px var(--f1);letter-spacing:.14em;color:rgba(255,255,255,.55)}.phpeekf b{font:800 12px var(--f1)}.phpeekf span{font:500 11px var(--f2);color:rgba(255,255,255,.75)}
+@media (max-width:640px),(pointer:coarse) and (max-height:520px){.phone{inset:0;width:auto;height:auto;max-height:none;border:0;padding:16px 16px calc(16px + env(safe-area-inset-bottom))}.phgrid{gap:10px}.pht{font-size:9px}.phpeekf{left:16px;right:16px;width:auto;bottom:16px}}
+.wheel{position:fixed;inset:0;z-index:62;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.45);backdrop-filter:blur(3px) saturate(.6);-webkit-backdrop-filter:blur(3px) saturate(.6);opacity:0;transition:opacity .09s;pointer-events:none}
+.wheel.on{opacity:1;pointer-events:auto}
+.wheel svg{width:min(420px,86vmin);height:min(420px,86vmin);transform:scale(.94);transition:transform .12s cubic-bezier(.2,.8,.2,1);filter:drop-shadow(0 10px 40px rgba(0,0,0,.7))}.wheel.on svg{transform:none}
+.ws path{fill:rgba(0,0,0,.9);stroke:#fff;stroke-width:2}.ws text{fill:#fff;font:700 11px var(--f1);letter-spacing:.06em;text-anchor:middle;pointer-events:none}
+.ws.on path{fill:#fff}.ws.on text{fill:#000}
+.wc{fill:#000;stroke:#fff;stroke-width:2}
+.wmid{position:absolute;display:flex;flex-direction:column;align-items:center;gap:4px;pointer-events:none;text-align:center;width:120px}
+.wmid b{font:800 16px var(--f1);letter-spacing:.02em}.wmid span{font:600 7px var(--f1);letter-spacing:.1em;color:rgba(255,255,255,.7)}

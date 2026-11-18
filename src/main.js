@@ -43,7 +43,8 @@ import { createHUD, buildMinimapBase, loadMinimapImage, makeRouter } from './hud
 import { VENUES, DISTRICTS, POSTER_SPOTS } from './venues.js';
 import * as CR from './crew.js';
 import { loadAvatar3D } from './avatar3d.js';
-import { createMusic } from './music.js';
+import { createMusic, SC_PROFILE } from './music.js';
+import { createPhone, createWheel } from './phone.js';
 import { SegGrid } from './collide.js';
 import { createRapid } from './glider.js';
 import * as EV from './events.js';
@@ -128,7 +129,7 @@ async function start() {
   let player = createAvatar(scene, { name: 'player', outfit: 'skate', fit: true });
   await crewCfgP; window.__rw.crewRules = CR.CREW_RULES;
   const CREW = { fit: CR.loadFit(), xp: null, account: CR.getAccount() };
-  const applyFit = (f) => { f = CR.allowedFit(f, CR.playerLevel(CREW.xp)); CREW.fit = f; CR.saveFit(f); player.setFit(f, CR.visibleFor); }; applyFit(CREW.fit); window.__rw.applyFit = (f) => applyFit(f);
+  const applyFit = (f) => { f = CR.allowedFit(f, CR.playerLevel(CREW.xp)); CREW.fit = f; CR.saveFit(f); player.setFit(f, CR.visibleFor); }; applyFit(CREW.fit); window.__rw.applyFit = (f) => applyFit(f); window.__rw.fitRaw = (f) => player.setFit(f, CR.visibleFor); window.__rw.CR = CR;
   // smooth rigged crew avatar (models/avatar.glb); the procedural figure stands in until it loads (?procav keeps it)
   if (!Q.has('procav')) loadAvatar3D(scene, { name: 'player3d' }).then(av => { if (glow) av.root.getChildMeshes().forEach(m => glow.addExcludedMesh(m)); const old = player; av.root.position.copyFrom(old.root.position); av.root.rotation.y = old.root.rotation.y; old.root.setEnabled(false); old.allMeshes().forEach(m => m.setEnabled(false)); player = av; window.__rw.player = av; player.setFit(CREW.fit, CR.visibleFor); if (glow) for (const m of av.allMeshes()) glow.addExcludedMesh(m); DG.log('avatar3d loaded'); }).catch(e => console.warn('avatar3d', e));
   const loadCrew = async () => { if (!CREW.account) return; try { const r = await CR.readCrew(CREW.account); if (r) { CREW.xp = r.xp; if (r.fit.top || r.fit.outer || r.fit.legs) applyFit(r.fit); } } catch (e) { } }; loadCrew();
@@ -195,8 +196,8 @@ async function start() {
   hud.setLive(app.live);
   // ---------- input ----------
   const K = app.keys;
-  addEventListener('keydown', (e) => { if (e.target.tagName === 'INPUT') return; K.add(e.code); const k = e.key.toLowerCase(); if ('emfopclnk'.includes(k) && k.length === 1) app.key(k); if (e.code === 'Escape') hud.close(); });
-  addEventListener('keyup', (e) => K.delete(e.code));
+  addEventListener('keydown', (e) => { if (e.target.tagName === 'INPUT') return; K.add(e.code); const k = e.key.toLowerCase(); if (e.code === 'Tab') { e.preventDefault(); if (!app.title) app.key('phone'); return; } if (e.code === 'KeyQ' && !e.repeat && !app.title && !hud.isOpen() && app.wheel) { app.wheel.open(); return; } if ('emfopclnk'.includes(k) && k.length === 1) { if (app.phone && app.phone.isOpen && 'mop'.includes(k)) app.phone.close(); app.key(k); } if (e.code === 'Escape') { hud.close(); app.phone && app.phone.close(); app.wheel && app.wheel.release(false); } });
+  addEventListener('keyup', (e) => { K.delete(e.code); if (e.code === 'KeyQ' && app.wheel) app.wheel.release(true); });
   let drag = null; const stick = { id: null, x: 0, y: 0, ox: 0, oy: 0 }; const look = { id: null, x: 0, y: 0 };
   canvas.addEventListener('pointerdown', (e) => {
     if (e.pointerType === 'touch') { if (e.clientX < innerWidth * 0.45 && stick.id === null) { stick.id = e.pointerId; stick.ox = e.clientX; stick.oy = e.clientY; stick.x = stick.y = 0; hud.$('stick').style.cssText = `left:${e.clientX - 60}px;top:${e.clientY - 60}px;opacity:1`; } else if (look.id === null) { look.id = e.pointerId; look.x = e.clientX; look.y = e.clientY; } }
@@ -233,8 +234,8 @@ async function start() {
     await EV.raveExit();
   });
   const AU = createAudio();
-  let npLast = '';
-  const MU = createMusic({ onState: (m) => { if (m.playing && m.title && m.title !== npLast) { npLast = m.title; if (!app.title) hud.note({ kicker: 'NOW PLAYING · RECKLESS FM', title: m.title.toUpperCase(), body: 'Reckless Raves on SoundCloud', type: 'radio' }); } AU.beatOff = m.playing; const np = document.getElementById('np'); if (np) { np.innerHTML = m.playing && m.title ? `♪ ${m.title.toUpperCase()} · RECKLESS RAVES ON SOUNDCLOUD` : (m.failed ? '♪ RECKLESS BEAT (SOUNDCLOUD UNAVAILABLE)' : ''); np.href = m.link; } } });
+  let npLast = '', muS = {};
+  const MU = createMusic({ onState: (m) => { muS = m; if (m.playing && m.title && m.title !== npLast) { npLast = m.title; if (!app.title) hud.note({ kicker: 'NOW PLAYING · RECKLESS FM', title: m.title.toUpperCase(), body: 'Reckless Raves on SoundCloud', type: 'radio' }); } AU.beatOff = m.playing; const np = document.getElementById('np'); if (np) { np.innerHTML = m.playing && m.title ? `♪ ${m.title.toUpperCase()} · RECKLESS RAVES ON SOUNDCLOUD` : (m.failed ? '♪ RECKLESS BEAT (SOUNDCLOUD UNAVAILABLE)' : ''); np.href = m.link; } } });
   window.__rw.MU = MU; window.__rw.hud = hud;
   const sndLbl = () => { const b = document.getElementById('sndBtn'); if (b) b.textContent = 'SOUND: ' + (AU.on ? 'ON' : 'OFF'); if (AU.on && !Q.has('nosc')) MU.start(); else MU.pause(); };
   addEventListener('pointerdown', () => { if (!app.title && !AU.on && !app._snd) { app._snd = 1; AU.unlock(); sndLbl(); } }, { once: false });
@@ -287,7 +288,7 @@ async function start() {
     const g = (A, j) => A[Math.max(0, Math.min(n, j))]; return { p: Vector3.CatmullRom(g(KP, i - 1), g(KP, i), g(KP, i + 1), g(KP, i + 2), f), t: Vector3.CatmullRom(g(KT, i - 1), g(KT, i), g(KT, i + 1), g(KT, i + 2), f) }; };
   window.__rwFly = { restart: () => { titleT0 = t; }, FLY };
   scene.onBeforeRenderObservable.add(() => {
-    const dt = window.__rw.fixedDt || Math.min(0.05, engine.getDeltaTime() / 1000); t += dt;
+    const dt = (window.__rw.fixedDt || Math.min(0.05, engine.getDeltaTime() / 1000)) * (app.wheel && app.wheel.isOpen && !isTouch ? 0.3 : 1); t += dt;
     // movement
     let ix = 0, iz = 0;
     if (!app.paused && !app.title) { if (K.has('KeyW') || K.has('ArrowUp')) iz += 1; if (K.has('KeyS') || K.has('ArrowDown')) iz -= 1; if (K.has('KeyA') || K.has('ArrowLeft')) ix -= 1; if (K.has('KeyD') || K.has('ArrowRight')) ix += 1; ix += stick.x; iz -= stick.y; }
@@ -367,8 +368,36 @@ async function start() {
   addEventListener('resize', () => engine.resize());
   document.getElementById('loading').classList.add('done'); bar(100);
   if (!Q.has('debug') && !Q.has('fps')) { const f = document.getElementById('fps'); if (f) f.style.display = 'none'; }
+  // ---- stage 6: crew phone hub + action wheel (research/game-design.md 1.5/1.6) ----
+  const uiRoot = document.body;
+  const templeDest = () => ({ x: ext.doorPos.x, z: ext.doorPos.z, label: 'THE TEMPLE', kind: 'venue', id: 'temple' });
+  const setDestP = (d, id) => { DEST = id === 'temple' ? templeDest() : d; routeT = 0; hud.toast('GPS · ' + DEST.label); };
+  const spotName = (id) => id.replace(/-/g, ' ').toUpperCase();
+  app.phone = createPhone({ root: uiRoot,
+    open: { map: () => app.key('m'), wardrobe: () => app.key('o'), camera: () => app.key('p'), credits: () => app.key('c') },
+    sound: { label: () => (AU.on ? 'SOUND ON' : 'SOUND OFF'), toggle: () => app.key('n') },
+    quality: { get: () => tier, set: (n) => { if (TIERS[n]) setTier(n); } },
+    radio: () => ({ ...muS, link: SC_PROFILE }), skip: () => MU.next(),
+    rave: () => ({ inside: !!app.inside, venue: 'THE TEMPLE', dwell: app.inside ? EV.dwell() : 0, need: EV.MIN_DWELL }),
+    posters: () => posters.map(p => ({ name: spotName(p.id), done: EV.postedToday(p.id) || (!EV.getEmail() && p.mesh.isEnabled()), x: p.ix, z: p.iz })),
+    crew: () => CREW.account ? { rank: 'CREW LEVEL ' + CR.playerLevel(CREW.xp), line: 'Signed in. Your crew rank unlocks wardrobe pieces.' } : { rank: 'SIGNED OUT', line: 'Sign in with your crew email to wear unlocked pieces.' },
+    setDest: setDestP });
+  app.wheel = createWheel({ root: uiRoot, run: (id) => {
+    if (id === 'phone') return app.key('phone');
+    if (id === 'radio') { if (!AU.on) app.key('n'); else MU.next(); return; }
+    if (id === 'camera') return app.key('p');
+    if (id === 'dance') return app.key('f');
+    if (id === 'wardrobe') return app.key('o');
+    if (id === 'map') return app.key('m');
+    if (id === 'poster') { if (interact && /POSTER/i.test(interact.label || '')) return interact.act(); return hud.toast('NO POSTER WALL IN RANGE'); }
+    if (id === 'cab') return hud.toast('BLACK CABS · COMING SOON');
+  } });
+  const _key = app.key; app.key = (k) => { if (k === 'phone') { if (hud.isOpen()) hud.close(); return app.phone.toggle(); } return _key(k); };
+  window.__rw.phone = app.phone; window.__rw.wheel = app.wheel;
   hud.hud.classList.add('titlehide'); titleT0 = t; document.getElementById('title').classList.add('ready');
-  const startGame = () => { if (!app.title) return; const ti = document.getElementById('title'); ti.classList.add('gone'); app.title = false; camSnap = true; hud.hud.classList.remove('titlehide'); removeEventListener('keydown', anyKey); setTimeout(() => hud.note({ kicker: 'RECKLESS', title: 'TONIGHT AT THE TEMPLE', body: 'Doors open at 8 Carlisle Circus. Follow the red line, or press M to pick a venue.', hold: 7 }), 1200); if (!Q.has('mute')) { AU.unlock(); sndLbl(); } };
+  const posterText = () => { const P0 = posters.find(p => !(EV.postedToday(p.id) || (!EV.getEmail() && p.mesh.isEnabled()))); if (!P0) return;
+    app.phone.text({ title: 'POSTER RUN. ' + posters.length + ' WALLS.', body: 'Watch for patrols. Start when you are ready.', dest: { x: P0.ix, z: P0.iz, label: 'POSTER · ' + spotName(P0.id), kind: 'waypoint' } }); };
+  const startGame = () => { if (!app.title) return; setTimeout(posterText, 9000); const ti = document.getElementById('title'); ti.classList.add('gone'); app.title = false; camSnap = true; hud.hud.classList.remove('titlehide'); removeEventListener('keydown', anyKey); setTimeout(() => hud.note({ kicker: 'RECKLESS', title: 'TONIGHT AT THE TEMPLE', body: 'Doors open at 8 Carlisle Circus. Follow the red line, or press M to pick a venue.', hold: 7 }), 1200); if (!Q.has('mute')) { AU.unlock(); sndLbl(); } };
   const anyKey = (e) => { if (app.title) startGame(); }; addEventListener('keydown', anyKey);
   document.getElementById('play').onclick = startGame; document.getElementById('title').addEventListener('pointerdown', (e) => { if (document.getElementById('title').classList.contains('ready')) startGame(); });
   if (isTouch) document.getElementById('play').textContent = 'TAP TO ENTER';
