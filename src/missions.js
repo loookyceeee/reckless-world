@@ -145,6 +145,8 @@ export function createMissions(ctx) {
       if (FD.state === 'running') { const L = dropsLeft().sort((a, b) => near(a, P) - near(b, P)); return `DROP ${FD.done.length} / ${ctx.drops.length} · <span class="${FD.left < 30 ? 'red' : ''}">${fmt(FD.left)}</span>${L[0] ? `<br>${L[0].name} <b>${Math.round(near(L[0], P))}M</b>` : ''}`; }
       return null;
     },
-    blips: () => H.level > 0 ? H.chasers.map(c => ({ x: c.node.position.x, z: c.node.position.z, h: c.heading })) : [],
+    // minimap: during an activity or heat every patrol within 150 m shows its view cone; chasers always show
+    blips: () => { const on = H.level > 0 || PR.state === 'running' || PR.state === 'intro' || FD.state === 'running';
+      if (!on) return []; return patrols().filter(c => c.chase || near(c.node.position, P) < 150).map(c => ({ x: c.node.position.x, z: c.node.position.z, h: c.node.rotation.y, cone: !c.chase, sees: !c.chase && coneSees(c) })); },
   };
 }

@@ -45,7 +45,7 @@ const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls)
 export function createHUD(app) {
   const hud = el('div', 'hud'); document.body.appendChild(hud);
   hud.innerHTML = `
-  <div class="brand"><img src="${import.meta.env.BASE_URL}img/logo.png" alt="Reckless"/><div><b>RECKLESS WORLD</b><span>BELFAST · PROTOTYPE 0.1</span></div></div>
+  <div class="brand"><img src="${import.meta.env.BASE_URL}img/logo.png" alt="Reckless"/><div><b>RECKLESS WORLD</b><span>BELFAST</span></div></div>
   <div class="topright"><div class="fps" id="fps">— FPS</div><div class="live" id="live"><i></i><span>RAVE MODE · DEMO</span> <a href="https://www.recklessraves.co.uk" target="_blank" rel="noopener">TICKETS</a></div><div class="heat" id="heat" title="HEAT"><i></i><i></i><i></i></div><div class="objective" id="objective"></div><a class="np" id="np" target="_blank" rel="noopener"></a></div>
   <div class="mapwrap"><canvas id="minimap" width="220" height="220"></canvas><canvas id="stam" width="240" height="240"></canvas><div class="street" id="street"></div><div class="district" id="district"></div><div class="gps" id="gps"></div></div>
   <div class="prompt" id="prompt"></div>
@@ -54,7 +54,7 @@ export function createHUD(app) {
   <div class="mtitle" id="mtitle"><div class="lb t"></div><div class="lb b"></div><div class="mtb"><small></small><b></b></div></div>
   <div class="hints" id="hints"></div>
   <div class="stamp" id="stamp"><div class="lb t"></div><div class="lb b"></div><div class="sbody"><div class="stitle"></div><div class="ssub"></div><div class="slines"></div></div></div>
-  <div class="btns"><button data-k="phone" class="phfab">PHONE</button><button data-k="m">MAP</button><button data-k="o">WARDROBE</button><button data-k="f">DANCE</button><button data-k="p">PHOTO</button><button data-k="c">CREDITS</button><button data-k="n" id="sndBtn">SOUND: OFF</button><button data-k="l" id="lightsBtn" class="hide">LIGHTS: RAVE</button></div>
+  <div class="keys" id="keys"></div>
   <div class="touch" id="touch"><div class="stick" id="stick"><div class="nub" id="nub"></div></div><button class="tbtn run" id="tRun">RUN</button><button class="tbtn act" id="tAct">E</button><button class="tbtn jmp" id="tJump">JUMP</button><button class="tbtn tph" id="tPhone">☐<em id="tPhoneN"></em></button><button class="tbtn whl" id="tWheel">◎</button></div>
   <div class="fade" id="fade"></div>`;
   const $ = (id) => hud.querySelector('#' + id);
@@ -103,7 +103,11 @@ export function createHUD(app) {
     fade(on) { $('fade').classList.toggle('on', on); },
     setLive(on) { $('live').classList.toggle('off', !on); },
     fps(v) { $('fps').textContent = v + ' FPS'; },
-    interior(on, mode) { $('lightsBtn').classList.toggle('hide', !on); $('lightsBtn').textContent = 'LIGHTS: ' + (mode === 'day' ? 'DAY' : 'RAVE'); hud.classList.toggle('inside', on); },
+    interior(on, mode) { hud.classList.toggle('inside', on); },
+    // GTA-style key hints: a short row of key chips bottom-right that fades in when it has something to say and fades out after ms
+    keys(list, ms = 6000) { const k = $('keys'); clearTimeout(api._kt); if (!list || !list.length) { k.classList.remove('on'); return; }
+      const html = list.map(([key, label]) => `<span><kbd>${key}</kbd>${label}</span>`).join(''); if (k._h !== html) { k._h = html; k.innerHTML = html; }
+      k.classList.add('on'); if (ms) api._kt = setTimeout(() => k.classList.remove('on'), ms); },
     update(dt, st) {
       // ---- stamina half-ring under the minimap: invisible when full, fades 1.2 s after refilling, pulses red when emptied ----
       { const c = $('stam'); if (c) { const g = c.getContext('2d'); const v = st.stamina == null ? 1 : st.stamina; stamVis = v < 0.999 ? 1 : Math.max(0, stamVis - dt / 1.2);
@@ -126,6 +130,9 @@ export function createHUD(app) {
         const F = api.filters(), bl = (x, z, f) => { f(base.tx(x) - px, base.ty(z) - py); };
         if (F.stops) for (const b of (app.blips && app.blips.stops) || []) bl(b.x, b.z, (x, y) => { const r = 6 / k; mg.fillStyle = '#fff'; mg.fillRect(x - r, y - r, 2 * r, 2 * r); mg.fillStyle = '#000'; mg.font = `800 ${8 / k}px Unbounded, sans-serif`; mg.textAlign = 'center'; mg.textBaseline = 'middle'; mg.fillText('B', x, y + 0.5 / k); });
         if (F.posters) for (const b of (app.blips && app.blips.posters) || []) bl(b.x, b.z, (x, y) => { const r = 4 / k; mg.fillStyle = b.done ? '#777' : '#ff2a3c'; mg.fillRect(x - r * 0.7, y - r, r * 1.4, r * 2); });
+        for (const b of st.patrols || []) if (b.cone) { // view cone: 28 m, ±20° (what missions.js tests); red when it has you
+          mg.beginPath(); mg.moveTo(base.tx(b.x) - px, base.ty(b.z) - py); for (let i = 0; i <= 8; i++) { const a = b.h - 0.349 + i * 0.0873; mg.lineTo(base.tx(b.x + Math.sin(a) * 28) - px, base.ty(b.z + Math.cos(a) * 28) - py); }
+          mg.closePath(); mg.fillStyle = b.sees ? 'rgba(255,42,60,.45)' : 'rgba(255,255,255,.16)'; mg.fill(); mg.strokeStyle = b.sees ? '#ff2a3c' : 'rgba(255,255,255,.5)'; mg.lineWidth = 1 / k; mg.stroke(); }
         for (const b of st.patrols || []) bl(b.x, b.z, (x, y) => { const r = 5 / k; mg.fillStyle = '#fff'; mg.strokeStyle = '#ff2a3c'; mg.lineWidth = 2 / k; mg.beginPath(); mg.arc(x, y, r, 0, Math.PI * 2); mg.fill(); mg.stroke(); });
         if (st.dest && st.dest.kind === 'waypoint') bl(st.dest.x, st.dest.z, (x, y) => { const r = 7 / k; mg.fillStyle = '#ff2a3c'; mg.strokeStyle = '#fff'; mg.lineWidth = 2 / k; mg.beginPath(); mg.moveTo(x, y - r); mg.lineTo(x + r, y); mg.lineTo(x, y + r); mg.lineTo(x - r, y); mg.closePath(); mg.fill(); mg.stroke(); });
         mg.scale(1 / k, 1 / k);

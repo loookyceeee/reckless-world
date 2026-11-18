@@ -30,7 +30,7 @@ export function createPhone(ctx) {
     rave: () => { const r = ctx.rave(); const pct = Math.min(100, Math.round((r.dwell || 0) / (r.need || 600) * 100));
       return frame('RAVE', `<div class="phcard"><small>TONIGHT</small><b>${esc(r.venue || 'THE TEMPLE')}</b><span>${r.inside ? 'You are inside.' : 'Doors open. Follow the red line to the door.'}</span></div>
       <div class="phcard"><small>10 MIN TO LOG A VISIT</small><div class="phbar"><i style="width:${r.inside ? pct : 0}%"></i></div><span>${r.inside ? `${Math.floor((r.dwell || 0) / 60)} / 10 MIN` : 'Timer starts when you walk in.'}</span></div>
-      <button class="phbtn" data-act="gpsTemple">SET GPS · THE TEMPLE</button>
+      ${r.inside ? `<div class="phrowb"><button class="phbtn" data-act="lights">LIGHTS: ${r.lights === 'day' ? 'DAY' : 'RAVE'}</button></div>` : '<button class="phbtn" data-act="gpsTemple">SET GPS · THE TEMPLE</button>'}
       ${ctx.missions ? (ctx.missions.active() === 'fd' ? '<button class="phbtn on" data-act="fdCancel">CANCEL FLYER DROP</button>' : '<button class="phbtn" data-act="fdStart">START FLYER DELIVERY</button>') : ''}<p class="phfine">Visits are test events until launch. The game never awards XP.</p>`); },
     posters: () => { const P = ctx.posters(); const d = P.filter(p => p.done).length;
       return frame('POSTERS', `<div class="phcard"><small>WALLS TODAY</small><b>${d} / ${P.length}</b><span>Paste a fresh poster at each spot. Watch for patrols.</span></div>
@@ -77,6 +77,7 @@ export function createPhone(ctx) {
     if (a === 'sound') { ctx.sound.toggle(); return setTimeout(render, 50); }
     if (a === 'skip') { ctx.skip(); return setTimeout(render, 600); }
     if (a === 'credits') { api.close(); return ctx.open.credits(); }
+    if (ctx.onAct && ctx.onAct(a, api)) return render();
     if (a === 'crewOpen') { api.close(); return ctx.open.wardrobe(); }
     if (a === 'gpsTemple') { ctx.setDest(null, 'temple'); api.close(); }
   });

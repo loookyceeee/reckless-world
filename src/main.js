@@ -387,6 +387,9 @@ async function start() {
       { const dd = Math.hypot(P.x - ext.doorPos.x, P.z - ext.doorPos.z); AU.update({ inside: app.inside, dist: dd }); MU.setVolume(app.inside ? 90 : 22 + Math.max(0, 1 - dd / 90) * 30); }
       routeT -= 0.5; if (routeT <= 0 && !app.inside) { routeT = 1.5; if (DEST && DEST.kind === 'waypoint' && Math.hypot(DEST.x - P.x, DEST.z - P.z) < 14) { DEST = null; hud.toast('WAYPOINT REACHED'); } state.route = DEST ? route(P.x, P.z, DEST.x, DEST.z) : null; } if (app.inside) state.route = null; state.dest = DEST;
       const tv = VENUES[0]; state.objective = (M && M.objective()) || (app.inside ? '' : `▲ THE TEMPLE <b>${Math.round(Math.hypot(P.x - ext.doorPos.x, P.z - ext.doorPos.z))}M</b>`); }
+    if (!app.title && !isTouch) { const idle = Math.abs(P.speed) < 0.05 && !hud.isOpen() && !app.phone.isOpen; app.idleT = idle ? (app.idleT || 0) + dt : 0;
+      if (app.idleT > 14 && !app._kIdle) { app._kIdle = true; keyHints(app.inside ? 'temple' : ''); } if (!idle && app._kIdle) { app._kIdle = false; hud.keys(null); }
+      if (!!app.inside !== !!app._kIn) { app._kIn = !!app.inside; if (app.inside) keyHints('temple'); } }
     if (M && !app.title) { M.update(dt); state.patrols = M.blips(); const hk = M.H.level + '|' + (M.H.hidden > 0) + '|' + (M.H.flash > 0); if (hk !== app._hk) { app._hk = hk; hud.heat(M.H.level, M.H.hidden > 0, M.H.flash > 0); } }
     hud.update(dt, { stamina: ST.v, stamFlash: ST.flash, x: P.x, z: P.z, heading: P.heading, camYaw: C.yaw, inside: app.inside, lx: P.x - INTERIOR_ORIGIN.x, lz: P.z - INTERIOR_ORIGIN.z, ...state });
     fpsT += dt; if (fpsT > 0.5) { fpsT = 0; hud.fps(Math.round(engine.getFps())); }
@@ -418,9 +421,10 @@ async function start() {
     sound: { label: () => (AU.on ? 'SOUND ON' : 'SOUND OFF'), toggle: () => app.key('n') },
     quality: { get: () => tier, set: (n) => { if (TIERS[n]) setTier(n); } },
     radio: () => ({ ...muS, link: SC_PROFILE }), skip: () => MU.next(),
-    rave: () => ({ inside: !!app.inside, venue: 'THE TEMPLE', dwell: app.inside ? EV.dwell() : 0, need: EV.MIN_DWELL }),
+    rave: () => ({ inside: !!app.inside, lights: T.mode, venue: 'THE TEMPLE', dwell: app.inside ? EV.dwell() : 0, need: EV.MIN_DWELL }),
     posters: () => posters.map(p => ({ name: spotName(p.id), done: posterDone(p), x: p.ix, z: p.iz })),
     crew: () => CREW.account ? { rank: 'CREW LEVEL ' + CR.playerLevel(CREW.xp), line: 'Signed in. Your crew rank unlocks wardrobe pieces.' } : { rank: 'SIGNED OUT', line: 'Sign in with your crew email to wear unlocked pieces.' },
+    onAct: (a) => { if (a === 'lights') { app.key('l'); return true; } return false; },
     sens: { get: () => SENS, set: (v) => { SENS = v; localStorage.setItem('rw.sens', String(v)); } },
     setDest: setDestP, onUnread: (n) => { const b = document.getElementById('tPhoneN'); if (b) { b.textContent = n || ''; b.classList.toggle('on', n > 0); } } });
   app.wheel = createWheel({ root: uiRoot, run: (id) => {
@@ -451,7 +455,12 @@ async function start() {
       <div class="hk" style="right:10px;bottom:calc(max(28px,env(safe-area-inset-bottom) + 12px) + 70px);display:none"></div>
       <div class="hk" style="right:96px;bottom:calc(max(28px,env(safe-area-inset-bottom) + 12px) + 136px)">◎ WHEEL<i>OR HOLD E</i></div><div class="hk" style="right:150px;bottom:calc(max(28px,env(safe-area-inset-bottom) + 12px) + 20px)">RUN<i>HOLD · LATCH</i></div>`
       : `<div class="card"><b>WASD</b>MOVE<b>SHIFT</b>SPRINT<b>SPACE</b>JUMP · VAULT<b>E</b>ACTION<b>TAB</b>PHONE<b>HOLD Q</b>WHEEL<b>B</b>LOOK BACK<b>M</b>MAP</div>`, 7000); };
-  const startGame = () => { if (!app.title) return; setTimeout(showHints, 1800); setTimeout(posterText, 9000); const ti = document.getElementById('title'); ti.classList.add('gone'); app.title = false; camSnap = true; hud.hud.classList.remove('titlehide'); removeEventListener('keydown', anyKey); setTimeout(() => hud.note({ kicker: 'RECKLESS', title: 'TONIGHT AT THE TEMPLE', body: 'Doors open at 8 Carlisle Circus. Follow the red line, or ' + (isTouch ? 'open MAP on the phone' : 'press M') + ' to pick a venue.', hold: 7 }), 1200); if (!Q.has('mute')) { AU.unlock(); sndLbl(); } };
+  const keyHints = (ctxt) => { if (isTouch) return; const pad = !!app._pad;
+    const base = pad ? [['Y', 'PHONE'], ['LB', 'WHEEL'], ['START', 'MAP'], ['R3', 'LOOK BACK']] : [['TAB', 'PHONE'], ['Q', 'WHEEL'], ['M', 'MAP'], ['B', 'LOOK BACK']];
+    const temple = pad ? [['X', 'DANCE'], ['Y', 'PHONE · LIGHTS']] : [['F', 'DANCE'], ['L', 'LIGHTS'], ['TAB', 'PHONE']];
+    hud.keys(ctxt === 'temple' ? temple : base, 6500); };
+  app.keyHints = keyHints;
+  const startGame = () => { if (!app.title) return; setTimeout(showHints, 1800); setTimeout(() => keyHints(), localStorage.getItem('rw.hints') ? 2500 : 9500); setTimeout(posterText, 9000); const ti = document.getElementById('title'); ti.classList.add('gone'); app.title = false; camSnap = true; hud.hud.classList.remove('titlehide'); removeEventListener('keydown', anyKey); setTimeout(() => hud.note({ kicker: 'RECKLESS', title: 'TONIGHT AT THE TEMPLE', body: 'Doors open at 8 Carlisle Circus. Follow the red line, or ' + (isTouch ? 'open MAP on the phone' : 'press M') + ' to pick a venue.', hold: 7 }), 1200); if (!Q.has('mute')) { AU.unlock(); sndLbl(); } };
   const anyKey = (e) => { if (app.title) startGame(); }; addEventListener('keydown', anyKey);
   document.getElementById('play').onclick = startGame; document.getElementById('title').addEventListener('pointerdown', (e) => { if (document.getElementById('title').classList.contains('ready')) startGame(); });
   if (isTouch) document.getElementById('play').textContent = 'TAP TO ENTER';
