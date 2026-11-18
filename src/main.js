@@ -41,6 +41,7 @@ import { buildLandmarks, updateLandmarks } from './landmarks.js';
 import { createHUD, buildMinimapBase, loadMinimapImage, makeRouter } from './hud.js';
 import { VENUES, DISTRICTS, POSTER_SPOTS } from './venues.js';
 import * as CR from './crew.js';
+import { createMusic } from './music.js';
 import { SegGrid } from './collide.js';
 import * as EV from './events.js';
 import { torus, xf, plane, toMesh, hex } from './geo.js';
@@ -151,7 +152,7 @@ async function start() {
   hud.setLive(app.live);
   // ---------- input ----------
   const K = app.keys;
-  addEventListener('keydown', (e) => { if (e.target.tagName === 'INPUT') return; K.add(e.code); const k = e.key.toLowerCase(); if ('emfopcln'.includes(k) && k.length === 1) app.key(k); if (e.code === 'Escape') hud.close(); });
+  addEventListener('keydown', (e) => { if (e.target.tagName === 'INPUT') return; K.add(e.code); const k = e.key.toLowerCase(); if ('emfopclnk'.includes(k) && k.length === 1) app.key(k); if (e.code === 'Escape') hud.close(); });
   addEventListener('keyup', (e) => K.delete(e.code));
   let drag = null; const stick = { id: null, x: 0, y: 0, ox: 0, oy: 0 }; const look = { id: null, x: 0, y: 0 };
   canvas.addEventListener('pointerdown', (e) => {
@@ -188,10 +189,14 @@ async function start() {
     P.x = ext.doorPos.x - Math.sin(ext.yaw) * 2.5; P.z = ext.doorPos.z - Math.cos(ext.yaw) * 2.5; P.heading = ext.yaw + Math.PI; C.yaw = P.heading; C.pitch = 0.2; C.dist = 6.2;
     await EV.raveExit();
   });
-  const AU = createAudio(); const sndLbl = () => { const b = document.getElementById('sndBtn'); if (b) b.textContent = 'SOUND: ' + (AU.on ? 'ON' : 'OFF'); };
-  addEventListener('pointerdown', () => { if (!app.title) { AU.unlock(); sndLbl(); } }, { once: false });
+  const AU = createAudio();
+  const MU = createMusic({ onState: (m) => { AU.beatOff = m.playing; const np = document.getElementById('np'); if (np) { np.innerHTML = m.playing && m.title ? `♪ ${m.title.toUpperCase()} · RECKLESS RAVES ON SOUNDCLOUD` : (m.failed ? '♪ RECKLESS BEAT (SOUNDCLOUD UNAVAILABLE)' : ''); np.href = m.link; } } });
+  window.__rw.MU = MU;
+  const sndLbl = () => { const b = document.getElementById('sndBtn'); if (b) b.textContent = 'SOUND: ' + (AU.on ? 'ON' : 'OFF'); if (AU.on && !Q.has('nosc')) MU.start(); else MU.pause(); };
+  addEventListener('pointerdown', () => { if (!app.title && !AU.on && !app._snd) { app._snd = 1; AU.unlock(); sndLbl(); } }, { once: false });
   app.key = (k) => {
     if (k === 'n') { AU.toggle(); sndLbl(); return; }
+    if (k === 'k') { MU.next(); return; }
     if (k === 'c') { if (hud.isOpen()) return hud.close(); hud.openCredits(`<button id="exp">EXPORT TEST EVENTS (${EV.queue().length})</button><button id="livebtn">RAVE MODE: ${app.live ? 'ON' : 'OFF'}</button>`);
       document.getElementById('exp').onclick = () => EV.exportQueue(); document.getElementById('livebtn').onclick = (e) => { app.live = !app.live; hud.setLive(app.live); e.target.textContent = 'RAVE MODE: ' + (app.live ? 'ON' : 'OFF'); }; return; }
     if (k === 'm') { if (hud.isOpen()) return hud.close(); return hud.openMap(P); }
@@ -278,7 +283,7 @@ async function start() {
     hud.prompt(interact ? interact.label : '');
     // HUD
     slowT -= dt; if (slowT <= 0) { slowT = 0.5; if (app.inside) EV.raveTick().then(ev => ev && hud.toast('10 MINUTES IN · TEST VISIT QUEUED')); state.street = app.inside ? 'THE TEMPLE' : nearestStreet(); state.district = app.inside ? (T.mode === 'day' ? 'NAVE · DAYLIGHT' : 'NAVE · RAVE') : nearestDistrict();
-      AU.update({ inside: app.inside, dist: Math.hypot(P.x - ext.doorPos.x, P.z - ext.doorPos.z) });
+      { const dd = Math.hypot(P.x - ext.doorPos.x, P.z - ext.doorPos.z); AU.update({ inside: app.inside, dist: dd }); MU.setVolume(app.inside ? 90 : 22 + Math.max(0, 1 - dd / 90) * 30); }
       routeT -= 0.5; if (routeT <= 0 && !app.inside) { routeT = 1.5; state.route = route(P.x, P.z, ext.doorPos.x, ext.doorPos.z); } if (app.inside) state.route = null;
       const tv = VENUES[0]; state.objective = app.inside ? '' : `▲ THE TEMPLE <b>${Math.round(Math.hypot(P.x - ext.doorPos.x, P.z - ext.doorPos.z))}M</b>`; }
     hud.update(dt, { x: P.x, z: P.z, heading: P.heading, camYaw: C.yaw, inside: app.inside, lx: P.x - INTERIOR_ORIGIN.x, lz: P.z - INTERIOR_ORIGIN.z, ...state });

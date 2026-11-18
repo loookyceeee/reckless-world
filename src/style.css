@@ -71,3 +71,5 @@
 .cw.sel{background:#fff;color:#000}.cw.lock{opacity:.35}
 .panel .cwlist button.cw{background:#000;color:#fff;border:2px solid #fff;padding:6px;font-size:10px;letter-spacing:.04em}
 .panel .cwlist button.cw.sel{background:#fff;color:#000}
+
+.np{display:block;margin-top:6px;font-size:9px;letter-spacing:.08em;color:#fff;text-decoration:none;opacity:.85;text-align:right;max-width:320px;margin-left:auto}.np:empty{display:none}

@@ -46,7 +46,7 @@ export function createHUD(app) {
   const hud = el('div', 'hud'); document.body.appendChild(hud);
   hud.innerHTML = `
   <div class="brand"><img src="${import.meta.env.BASE_URL}img/logo.png" alt="Reckless"/><div><b>RECKLESS WORLD</b><span>BELFAST · PROTOTYPE 0.1</span></div></div>
-  <div class="topright"><div class="fps" id="fps">— FPS</div><div class="live" id="live"><i></i><span>RAVE MODE · DEMO</span> <a href="https://www.recklessraves.co.uk" target="_blank" rel="noopener">TICKETS</a></div><div class="objective" id="objective"></div></div>
+  <div class="topright"><div class="fps" id="fps">— FPS</div><div class="live" id="live"><i></i><span>RAVE MODE · DEMO</span> <a href="https://www.recklessraves.co.uk" target="_blank" rel="noopener">TICKETS</a></div><div class="objective" id="objective"></div><a class="np" id="np" target="_blank" rel="noopener"></a></div>
   <div class="mapwrap"><canvas id="minimap" width="220" height="220"></canvas><div class="street" id="street"></div><div class="district" id="district"></div></div>
   <div class="prompt" id="prompt"></div>
   <div class="toast" id="toast"></div>
@@ -156,13 +156,14 @@ export function createHUD(app) {
       <p><b>LIDAR</b> Belfast City LIDAR is provided by the Department for Infrastructure (Rivers) with the permission of the copyright owner, Cyient Europe Limited, and licensed under the Open Government Licence v3.0.</p>
       <p><b>OPEN DATA</b> Contains DfI Roads street lighting and crossing data, Belfast City Council trees data and Translink route data, all under the Open Government Licence v3.0 via OpenDataNI.</p>
       <p><b>ANIMATION</b> Quaternius Universal Animation Library (CC0), retargeted to the Reckless avatar. Other CC0 assets: Kenney, Quaternius, Poly Haven, ambientCG.</p>
-      <p><b>SKY &amp; SOUND</b> Night reflections from the Poly Haven HDRI “Cobblestone Street Night” (CC0). Night sky, city ambience and the 140 BPM Temple beat are generated in the browser (original, no samples). Shop names are invented.</p>
+      <p><b>SKY &amp; SOUND</b> Night reflections from the Poly Haven HDRI “Cobblestone Street Night” (CC0). Night sky, city ambience and the fallback 140 BPM beat are generated in the browser (original, no samples). Shop names are invented.</p>
+      <p><b>MUSIC</b> Tracks by Reckless Raves / DOUBLE R RECORDS, streamed from <a href="https://soundcloud.com/recklessraves" target="_blank" rel="noopener">soundcloud.com/recklessraves</a> via the official SoundCloud Widget API. All rights remain with the artists and SoundCloud; nothing is downloaded or re-hosted. Press K for the next track.</p>
       <p><b>ENGINE</b> Babylon.js (Apache-2.0) · earcut (ISC) · Vite (MIT)</p>
       <p><b>FONTS</b> Unbounded and DM Sans (SIL Open Font License, via Fontsource)</p>
       <p><b>CHARACTER</b> Clay avatar built for Reckless Raves from the canonical Crew avatar art. Outfits approximate RCKLS Clothing Drop 018.</p>
       <p><b>THE TEMPLE</b> Interior modelled from Reckless Raves reference photos.</p>
       <p><b>VEHICLES</b> Patrol vehicles are fictional. No real police force, wordmark, emblem or manufacturer badge is depicted.</p>
-      <p class="fine">CONTROLS: WASD / ARROWS MOVE · SHIFT RUN · DRAG TO LOOK · WHEEL ZOOM · E INTERACT · F DANCE · M MAP · O WARDROBE · P PHOTO · L TEMPLE LIGHTS · N SOUND</p>
+      <p class="fine">CONTROLS: WASD / ARROWS MOVE · SHIFT RUN · DRAG TO LOOK · WHEEL ZOOM · E INTERACT · F DANCE · M MAP · O WARDROBE · P PHOTO · L TEMPLE LIGHTS · N SOUND · K NEXT TRACK</p>
       <div class="row">${extra || ''}</div>`);
     },
     open,

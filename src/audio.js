@@ -1,7 +1,7 @@
 // Self-made procedural audio (no samples, no copyrighted music): WebAudio-synthesised city ambience outside and an
 // original 140 BPM beat inside the Temple (muffled through the walls nearby). Silent until the first tap / START and toggleable.
 export function createAudio() {
-  let ctx = null, master, amb, ambF, beatBus, beatF, beatG, ambG, on = false, started = false, nextT = 0, step = 0, timer = null;
+  let ctx = null, beatOff = false, master, amb, ambF, beatBus, beatF, beatG, ambG, on = false, started = false, nextT = 0, step = 0, timer = null;
   const BPM = 140, S16 = 60 / BPM / 4;
   const noiseBuf = (sec, brown) => { const b = ctx.createBuffer(1, ctx.sampleRate * sec, ctx.sampleRate), d = b.getChannelData(0); let l = 0; for (let i = 0; i < d.length; i++) { const w = Math.random() * 2 - 1; if (brown) { l = (l + 0.02 * w) / 1.02; d[i] = l * 3.5; } else d[i] = w; } return b; };
   let white;
@@ -35,8 +35,9 @@ export function createAudio() {
     set(v) { on = v; if (!ctx) return; master.gain.setTargetAtTime(on ? 0.7 : 0, ctx.currentTime, 0.25); },
     toggle() { if (!ctx) { api.unlock(); return on; } api.set(!on); return on; },
     // inside: full-band beat; outside: muffled by distance to the Temple door
+    set beatOff(v) { beatOff = v; }, // SoundCloud music playing -> synth beat steps aside (it stays as the fallback)
     update({ inside, dist }) { if (!ctx) return; const t = ctx.currentTime;
-      const bg = inside ? 0.9 : Math.max(0, 1 - dist / 90) * 0.5; beatG.gain.setTargetAtTime(bg, t, 0.3); beatF.frequency.setTargetAtTime(inside ? 16000 : 260, t, 0.3); ambG.gain.setTargetAtTime(inside ? 0.08 : 0.55, t, 0.5); },
+      const bg = beatOff ? 0 : inside ? 0.9 : Math.max(0, 1 - dist / 90) * 0.5; beatG.gain.setTargetAtTime(bg, t, 0.3); beatF.frequency.setTargetAtTime(inside ? 16000 : 260, t, 0.3); ambG.gain.setTargetAtTime(inside ? 0.08 : 0.55, t, 0.5); },
   };
   return api;
 }
