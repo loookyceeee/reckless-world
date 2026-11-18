@@ -1,3 +1,4 @@
+import * as DG from './diag.js';
 import { ParticleSystem } from '@babylonjs/core/Particles/particleSystem';
 import { DefaultRenderingPipeline } from '@babylonjs/core/PostProcesses/RenderPipeline/Pipelines/defaultRenderingPipeline';
 import { SSAO2RenderingPipeline } from '@babylonjs/core/PostProcesses/RenderPipeline/Pipelines/ssao2RenderingPipeline';
@@ -48,27 +49,35 @@ import { torus, xf, plane, toMesh, hex } from './geo.js';
 
 const Q = new URLSearchParams(location.search);
 const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
-const LOW = Q.has('low') || (isTouch && Math.min(screen.width, screen.height) < 900);
+// ?safe=1: lowest settings, no post-processing at all (for devices that show a black screen)
+const SAFE = Q.has('safe');
+const LOW = SAFE || Q.has('low') || (isTouch && Math.min(screen.width, screen.height) < 900);
 const app = { title: true, paused: false, inside: false, live: !Q.has('nolive'), keys: new Set(), key: null };
 window.__rw = { ready: false, app };
 
 const withTimeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))]);
 async function makeEngine(canvas) {
-  if (!Q.has('webgl') && navigator.gpu) {
+  // WebGPU only on request (?webgpu): real-device WebGPU (e.g. Safari 26) rendered black. WebGL2 by default, WebGL1 as fallback.
+  if (Q.has('webgpu') && navigator.gpu) {
     try {
       const adapter = await withTimeout(navigator.gpu.requestAdapter({ powerPreference: 'high-performance' }), 2500);
-      if (adapter && !(adapter.info && /swiftshader/i.test(adapter.info.vendor + adapter.info.architecture + adapter.info.description))) {
-        const e = new WebGPUEngine(canvas, { antialias: !LOW, adaptToDeviceRatio: false }); await withTimeout(e.initAsync(), 6000); e.__kind = 'WebGPU'; return e;
-      }
-    } catch (err) { console.warn('WebGPU unavailable, using WebGL2', err); }
+      if (adapter) { const e = new WebGPUEngine(canvas, { antialias: !LOW, adaptToDeviceRatio: false }); await withTimeout(e.initAsync(), 6000); e.__kind = 'WebGPU'; return e; }
+    } catch (err) { console.warn('WebGPU unavailable, using WebGL', err); }
   }
-  const e = new Engine(canvas, !LOW, { preserveDrawingBuffer: true, stencil: true, powerPreference: 'high-performance' }, false); e.__kind = 'WebGL' + e.webGLVersion; return e;
+  const opts = { preserveDrawingBuffer: true, stencil: true, powerPreference: SAFE ? 'default' : 'high-performance', failIfMajorPerformanceCaveat: false };
+  for (const extra of (Q.has('webgl1') ? [{ disableWebGL2Support: true }] : [{}, { disableWebGL2Support: true }])) {
+    try { const e = new Engine(canvas, !LOW && !SAFE, { ...opts, ...extra }, false); if (!e._gl) throw new Error('no GL context'); e.__kind = 'WebGL' + e.webGLVersion; return e; }
+    catch (err) { console.warn('WebGL' + (extra.disableWebGL2Support ? '1' : '2') + ' failed', err); }
+  }
+  throw new Error('This browser could not start WebGL (graphics may be disabled or blocked).');
 }
+function gpuName(engine) { try { const gl = engine._gl; const ext = gl.getExtension('WEBGL_debug_renderer_info'); return ext ? gl.getParameter(ext.UNMASKED_VENDOR_WEBGL) + ' / ' + gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER); } catch (e) { return engine.__kind; } }
 async function start() {
   const canvas = document.getElementById('c');
   const bar = (p) => { const b = document.getElementById('lbar'); if (b) b.style.width = p + '%'; };
-  const engine = await makeEngine(canvas); bar(15);
-  engine.setHardwareScalingLevel(LOW ? 1.5 : 1 / Math.min(1.5, devicePixelRatio || 1));
+  DG.info.stage = 'engine'; const engine = await makeEngine(canvas); bar(15); DG.info.engine = engine.__kind; DG.info.gpu = gpuName(engine); DG.log('engine', engine.__kind, DG.info.gpu);
+  engine.onContextLostObservable && engine.onContextLostObservable.add(() => { console.error('WebGL context lost'); DG.show('graphics context lost'); });
+  engine.setHardwareScalingLevel(SAFE ? 2 : LOW ? 1.5 : 1 / Math.min(1.5, devicePixelRatio || 1));
   const scene = new Scene(engine); scene.skipPointerMovePicking = true;
   const NIGHT = new Color4(0.07, 0.075, 0.14, 1);
   scene.clearColor = NIGHT; scene.ambientColor = new Color3(0.2, 0.2, 0.25);
@@ -76,10 +85,10 @@ async function start() {
   const hemi = new HemisphericLight('hemi', new Vector3(0.1, 1, 0.2), scene); hemi.intensity = 1.0; hemi.diffuse = hex('#9aa6cc'); hemi.groundColor = hex('#2a2426'); hemi.specular = new Color3(0.2, 0.2, 0.3);
   const moon = new DirectionalLight('moon', new Vector3(-0.4, -0.8, 0.5), scene); moon.intensity = 0.45; moon.diffuse = hex('#b8c4ff'); moon.specular = new Color3(0.3, 0.3, 0.4);
   const cam = new FreeCamera('cam', new Vector3(0, 5, -10), scene); cam.minZ = 0.1; cam.maxZ = 900; cam.fov = 0.95; cam.inputs.clear(); const cam0 = cam;
-  const glow = LOW ? null : new GlowLayer('glow', scene, { mainTextureRatio: 0.35, blurKernelSize: 48 }); if (glow) glow.intensity = 0.7;
+  let glow = null; if (!LOW && !Q.has('noglow')) { try { glow = new GlowLayer('glow', scene, { mainTextureRatio: 0.35, blurKernelSize: 48 }); glow.intensity = 0.7; } catch (e) { console.warn('glow off', e); glow = null; } }
   // cinematic pipeline: gentle bloom, ACES filmic tone mapping, contrast grade, vignette, light grain, FXAA (+ SSAO on ?ssao)
   let pipe = null, SSAO = null;
-  try {
+  if (!SAFE && !Q.has('nopost')) try {
     pipe = new DefaultRenderingPipeline('cine', true, scene, [cam0]);
     pipe.fxaaEnabled = true; pipe.bloomEnabled = !LOW; pipe.bloomThreshold = 0.72; pipe.bloomWeight = 0.32; pipe.bloomKernel = 48; pipe.bloomScale = 0.5;
     pipe.imageProcessingEnabled = true; const ip = pipe.imageProcessing; ip.toneMappingEnabled = true; ip.toneMappingType = ImageProcessingConfiguration.TONEMAPPING_ACES; ip.exposure = 1.4; ip.contrast = 1.1;
@@ -89,6 +98,8 @@ async function start() {
     // SSAO (desktop high tier by default; ?nossao off, ?ssao forces it): soft contact shadows in doorways, kerbs and crowds
     if ((!isTouch && !Q.has('nossao')) || Q.has('ssao')) { try { SSAO = new SSAO2RenderingPipeline('ssao', scene, { ssaoRatio: 0.5, blurRatio: 0.5 }, [cam0]); SSAO.radius = 1.4; SSAO.totalStrength = 1.0; SSAO.base = 0.12; SSAO.samples = 12; SSAO.maxZ = 220; SSAO.expensiveBlur = true; SSAO._rwOn = true; } catch (e) { SSAO = null; console.warn('ssao', e); } }
   } catch (e) { console.warn('pipeline', e); }
+  if (!pipe) { const ip = scene.imageProcessingConfiguration; ip.toneMappingEnabled = true; ip.toneMappingType = ImageProcessingConfiguration.TONEMAPPING_ACES; ip.exposure = 1.4; ip.contrast = 1.1; }
+  DG.info.stage = 'loading world';
   await document.fonts.ready;
   await loadAnims(import.meta.env.BASE_URL + 'data/anims.json').catch(e => console.warn('anims', e));
 
@@ -311,7 +322,14 @@ async function start() {
   window.__rw.setTier = setTier; window.__rw.culler = culler; window.__rw.FL = FL;
   window.__rw.manual = (on) => { if (on) engine.stopRenderLoop(); else engine.runRenderLoop(() => scene.render()); }; window.__rw.renderFrame = (n = 1) => { for (let i = 0; i < n; i++) scene.render(); return true; };
   window.__rw.inst = new SceneInstrumentation(scene); window.__rw.inst.captureFrameTime = true;
-  engine.runRenderLoop(() => scene.render());
+  // render guard: if a frame throws (shader/post-process unsupported on this GPU), drop post-processing and keep going
+  let rErr = 0; const stripPost = (why) => { console.warn('post-processing off:', why); try { if (SSAO) { scene.postProcessRenderPipelineManager.detachCamerasFromRenderPipeline('ssao', cam0); SSAO.dispose(); SSAO = null; } } catch (e) { } try { if (pipe) { pipe.dispose(); pipe = null; } } catch (e) { } try { if (glow) { glow.dispose(); glow = null; } } catch (e) { } };
+  const frame = () => { try { scene.render(); rErr = 0; } catch (e) { rErr++; console.error('render', e); if (rErr === 1) stripPost(e.message); if (rErr > 5) { engine.stopRenderLoop(); DG.fatal('rendering failed', e); } } };
+  engine.runRenderLoop(frame); DG.info.stage = 'running'; DG.info.ready = true;
+  // black-canvas check: the night sky clear colour is never pure black, so an all-black canvas means the GPU output failed
+  const blackCheck = async (pass) => { try { const w = engine.getRenderWidth(), h = engine.getRenderHeight(); const px = await engine.readPixels(Math.floor(w / 2) - 8, Math.floor(h * 0.25), 16, 16); let sum = 0; for (let i = 0; i < px.length; i += 4) sum += px[i] + px[i + 1] + px[i + 2];
+      DG.log('pixel check', pass, sum); if (sum === 0) { if (pass === 1) { stripPost('black canvas'); setTimeout(() => blackCheck(2), 1500); } else DG.show('black screen detected (post-processing already off)'); } } catch (e) { DG.log('pixel check skipped', e.message); } };
+  setTimeout(() => blackCheck(1), 2500);
   addEventListener('resize', () => engine.resize());
   document.getElementById('loading').classList.add('done'); bar(100);
   if (!Q.has('debug') && !Q.has('fps')) { const f = document.getElementById('fps'); if (f) f.style.display = 'none'; }
@@ -327,4 +345,4 @@ async function start() {
     stats: () => { const inst = window.__rw.inst; return { drawCalls: inst ? inst.drawCallsCounter.current : -1, activeMeshes: scene.getActiveMeshes().length, activeIndices: scene.getActiveIndices(), totalVertices: scene.getTotalVertices(), meshes: scene.meshes.length, frameMs: inst ? inst.frameTimeCounter.lastSecAverage : -1 }; }, fps: () => engine.getFps(), ext, T, traffic, posters, whDoor });
 }
 // title screen
-start().catch(e => { console.error(e); document.getElementById('loading').textContent = 'ERROR: ' + e.message; });
+start().catch(e => { console.error(e); const l = document.getElementById('loading'); if (l) l.textContent = 'ERROR: ' + e.message; DG.fatal('could not start', e); });
