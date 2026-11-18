@@ -303,6 +303,7 @@ async function start() {
     const pp = { x: P.x, z: P.z }; (app.inside ? tGrid : city.grid).resolve(pp, 0.38); P.x = pp.x; P.z = pp.z;
     const autoDance = app.inside && T.mode === 'rave' && T.danceFloor(P) && P.speed < 0.2 && !window.__rw.noAutoDance;
     player.root.position.set(P.x, 0, P.z); player.root.rotation.y = P.heading; dust.emitter.set(P.x, 0.05, P.z); dust.emitRate = P.speed > 4.5 && !app.inside ? 45 : 0;
+    if (player.lightRig) player.lightRig(cam);
     if (player.animate) player.animate(dt, { speed: P.speed, dancing: P.dancing || autoDance }); else animateAvatar(player, dt, { speed: P.speed * 0.8, dancing: P.dancing || autoDance });
     // camera with collision
     tgt.set(P.x, 1.5, P.z);
