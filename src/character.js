@@ -380,7 +380,7 @@ export function bakeCrowdVariants(scene, { poses = 4, lod = 0.35, simplify = 0 }
   const VARS = [
     { outfit: 'skate', palette: { tee: hex('#111114'), denim: hex('#6f8fb3') } },
     { outfit: 'stan', palette: { hoodie: hex('#111114'), denim: hex('#4a5f80') } },
-    { outfit: 'base' },
+    { outfit: 'skate', palette: { tee: hex('#8a8f98'), denim: hex('#3b4a63') } },
     { outfit: 'skate', palette: { tee: hex('#f2f2f2'), denim: hex('#2c3e5c') } },
     { outfit: 'stanfull', palette: { hoodie: hex('#2b2f3a'), stanb: hex('#1c1c20') } },
     { outfit: 'skate', palette: { tee: hex('#c62828'), denim: hex('#1f2a3c') } },
