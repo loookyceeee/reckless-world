@@ -87,7 +87,7 @@ async function start() {
     ip.colorCurvesEnabled = true; const cc = new ColorCurves(); cc.globalSaturation = -4; cc.shadowsHue = 215; cc.shadowsDensity = 22; cc.shadowsSaturation = 35; cc.highlightsHue = 40; cc.highlightsDensity = 6; cc.highlightsSaturation = 8; ip.colorCurves = cc;
     pipe.grainEnabled = !LOW; pipe.grain.intensity = 6; pipe.grain.animated = true;
     // SSAO (desktop high tier by default; ?nossao off, ?ssao forces it): soft contact shadows in doorways, kerbs and crowds
-    if ((!isTouch && !Q.has('nossao')) || Q.has('ssao')) { try { SSAO = new SSAO2RenderingPipeline('ssao', scene, { ssaoRatio: 0.5, blurRatio: 0.5 }, [cam0]); SSAO.radius = 1.4; SSAO.totalStrength = 1.0; SSAO.base = 0.12; SSAO.samples = 12; SSAO.maxZ = 220; SSAO.expensiveBlur = true; } catch (e) { SSAO = null; console.warn('ssao', e); } }
+    if ((!isTouch && !Q.has('nossao')) || Q.has('ssao')) { try { SSAO = new SSAO2RenderingPipeline('ssao', scene, { ssaoRatio: 0.5, blurRatio: 0.5 }, [cam0]); SSAO.radius = 1.4; SSAO.totalStrength = 1.0; SSAO.base = 0.12; SSAO.samples = 12; SSAO.maxZ = 220; SSAO.expensiveBlur = true; SSAO._rwOn = true; } catch (e) { SSAO = null; console.warn('ssao', e); } }
   } catch (e) { console.warn('pipeline', e); }
   await document.fonts.ready;
   await loadAnims(import.meta.env.BASE_URL + 'data/anims.json').catch(e => console.warn('anims', e));
@@ -129,12 +129,25 @@ async function start() {
     for (let i = 0; i < cm.pts.length; i++) { const a = cm.pts[i], b = cm.pts[(i + 1) % cm.pts.length]; const m = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
       for (const p of dun) { const d = Math.hypot(p[0] - m[0], p[1] - m[1]); if (d < best) { best = d; const L = Math.hypot(b[0] - a[0], b[1] - a[1]); whDoor = { x: m[0] + (b[1] - a[1]) / L * 2.5, z: m[1] - (b[0] - a[0]) / L * 2.5, nx: (b[1] - a[1]) / L, nz: -(b[0] - a[0]) / L, wx: m[0], wz: m[1] }; } } } }
   mkRing(whDoor.x, whDoor.z, 'whRing');
-  const signTex = (txt, w = 1024, h = 192) => { const t = new (window.__DT)(txt, { width: w, height: h }, scene, true); const c = t.getContext(); c.fillStyle = '#000'; c.fillRect(0, 0, w, h); c.strokeStyle = '#fff'; c.lineWidth = 10; c.strokeRect(8, 8, w - 16, h - 16); c.fillStyle = '#fff'; c.font = '800 96px Unbounded'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(txt, w / 2, h / 2 + 4); t.update(); return t; };
+  const signTex = (txt, w = 1024, h = 192) => { const t = new (window.__DT)(txt, { width: w, height: h }, scene, true); const c = t.getContext(); c.fillStyle = '#000'; c.fillRect(0, 0, w, h); c.strokeStyle = '#fff'; c.lineWidth = 10; c.strokeRect(8, 8, w - 16, h - 16); c.fillStyle = '#fff'; let fs = Math.min(96, h * 0.55); do { c.font = `800 ${fs}px Unbounded`; fs -= 3; } while (c.measureText(txt).width > w - 70 && fs > 20); c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(txt, w / 2, h / 2 + 4); t.update(); return t; };
   window.__DT = DynamicTexture;
   if (whDoor.nx !== undefined) { const sm = new StandardMaterial('whSign', scene); sm.emissiveTexture = signTex('THE WARE-HOUSE XL'); sm.disableLighting = true; sm.backFaceCulling = false;
     const s = toMesh('whSign', plane(9, 1.7), scene, sm); s.position.set(whDoor.wx + whDoor.nx * 0.3, 6.5, whDoor.wz + whDoor.nz * 0.3); s.rotation.y = Math.atan2(-whDoor.nx, -whDoor.nz); s.parent = city.root; }
   { const sm = new StandardMaterial('tSign', scene); sm.emissiveTexture = signTex('THE TEMPLE'); sm.disableLighting = true; sm.backFaceCulling = false;
     const s = toMesh('tSign', plane(6, 1.1), scene, sm); s.position.set(ext.doorPos.x, 4.6, ext.doorPos.z); s.position.addInPlace(new Vector3(Math.sin(ext.yaw), 0, Math.cos(ext.yaw)).scale(0.9)); s.rotation.y = ext.yaw; s.parent = city.root; }
+  // other Reckless venues in the world: fascia sign on the real facade nearest the venue point + entrance ring + prompt
+  const venueDoors = [];
+  for (const v of VENUES.filter(v => v.inSlice && ['thompsons', 'terminus', 'warehouse'].includes(v.id))) {
+    let best = null, bd = 1e9; for (const sg of city.grid.near(v.x, v.z, 45)) { const dx = sg.x1 - sg.x0, dz = sg.z1 - sg.z0, L2 = dx * dx + dz * dz; if (L2 < 30 || sg.h < 3 || sg.h === 30.5) continue; const L = Math.sqrt(L2), m0 = Math.min(0.45, 3.2 / L);
+      const t = Math.max(m0, Math.min(1 - m0, ((v.x - sg.x0) * dx + (v.z - sg.z0) * dz) / L2)); const px = sg.x0 + dx * t, pz = sg.z0 + dz * t, d = Math.hypot(px - v.x, pz - v.z);
+      if (d < bd) { let nx = -dz / L, nz = dx / L; if ((px - v.x) * nx + (pz - v.z) * nz < 0) { nx = -nx; nz = -nz; } bd = d; best = { wx: px, wz: pz, nx, nz, h: sg.h }; } }
+    if (!best) continue; const door = { v, x: best.wx + best.nx * 2.5, z: best.wz + best.nz * 2.5 }; venueDoors.push(door); mkRing(door.x, door.z, 'ring-' + v.id);
+    const sm = new StandardMaterial('vSign-' + v.id, scene); sm.emissiveTexture = signTex(v.name); sm.disableLighting = true; sm.backFaceCulling = false;
+    const sgn = toMesh('vSign-' + v.id, plane(v.name.length > 10 ? 7.5 : 5.5, 1.3), scene, sm); sgn.position.set(best.wx + best.nx * 0.35, Math.min(5.2, best.h - 0.8), best.wz + best.nz * 0.35); sgn.rotation.y = Math.atan2(-best.nx, -best.nz); sgn.parent = city.root;
+    if (v.nostalgia) { const nm = new StandardMaterial('vSignN', scene); nm.emissiveTexture = signTex('EST. · NOSTALGIA', 1024, 128); nm.disableLighting = true; nm.backFaceCulling = false;
+      const n2 = toMesh('vSignN', plane(4.2, 0.5), scene, nm); n2.position.copyFrom(sgn.position); n2.position.y -= 1.05; n2.rotation.y = sgn.rotation.y; n2.parent = city.root; n2.visibility = 0.75; }
+  }
+  window.__rw.venueDoors = venueDoors;
   const FL = buildFlavour(scene, city, { low: LOW }); const WET = buildWetStreaks(scene, city.sf && city.sf.lamps, { low: LOW });
   // posters: snap each spot to the nearest wall
   const posterM = new StandardMaterial('poster', scene); posterM.emissiveTexture = signTex('RECKLESS', 512, 720); posterM.disableLighting = true;
@@ -279,6 +292,7 @@ async function start() {
     interact = null;
     if (!app.inside) {
       if (Math.hypot(P.x - ext.doorPos.x, P.z - ext.doorPos.z) < 3.2) interact = { label: `<b>E</b> ENTER THE TEMPLE`, act: enterTemple };
+      else if (venueDoors.some(d => Math.hypot(P.x - d.x, P.z - d.z) < 3.2)) { const d = venueDoors.find(d => Math.hypot(P.x - d.x, P.z - d.z) < 3.2); interact = d.v.nostalgia ? { label: 'THE WARE-HOUSE · EST. · THE OLD PALM HOUSE / THREE SHEETS SITE', act: () => hud.toast('THE WARE-HOUSE · FOR THE ONES WHO WERE THERE') } : { label: `${d.v.name} · ${d.v.sub} · INSIDE COMING SOON`, act: () => hud.toast(`${d.v.name} OPENS IN A LATER BUILD`) }; }
       else if (Math.hypot(P.x - whDoor.x, P.z - whDoor.z) < 3.2) interact = { label: `THE WARE-HOUSE XL · INTERIOR COMING SOON`, act: () => hud.toast('THE WARE-HOUSE XL OPENS IN A LATER BUILD') };
       else for (const ps of posters) if (Math.hypot(P.x - ps.ix, P.z - ps.iz) < 2.4) { const done = ps.mesh.isEnabled(); interact = { label: done ? 'POSTER UP ✓' : `<b>E</b> PASTE A RECKLESS POSTER`, act: async () => { if (done) return; ps.mesh.setEnabled(true); localStorage.setItem('rw.poster.' + ps.id, '1'); const ev = await EV.posterPlaced(ps.id); hud.toast(ev ? 'POSTER UP · TEST EVENT QUEUED' : 'POSTER UP'); } }; break; }
     } else if (P.z - INTERIOR_ORIGIN.z < 2.4 && Math.abs(P.x - INTERIOR_ORIGIN.x) < 2) interact = { label: `<b>E</b> EXIT TO CARLISLE CIRCUS`, act: exitTemple };
