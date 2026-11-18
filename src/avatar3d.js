@@ -32,7 +32,7 @@ export async function loadAvatar3D(scene, { name = 'player', base = import.meta.
   const tex = (f, onErr) => { const t = new Texture(TEX + f + '.webp', scene, false, false, Texture.TRILINEAR_SAMPLINGMODE, null, () => onErr && onErr()); t.anisotropicFilteringLevel = 4; return t; };
   const mat = (id, col, { rough = 0.75, t = null, fill = 0.42 } = {}) => { const m = new StandardMaterial('av3d-' + id, scene); m.diffuseColor = col.clone(); const sp = (1 - rough) * 0.3; m.specularColor = new Color3(sp, sp, sp); m.specularPower = 28; m.ambientColor = new Color3(0.3, 0.3, 0.32);
     if (t) { m.diffuseTexture = t; m.emissiveTexture = t; m.emissiveColor = new Color3(fill, fill, fill); m.diffuseColor = new Color3(0.78, 0.78, 0.78); } return m; };
-  const skinM = mat('skin', SKIN, { rough: 0.6, t: tex('body'), fill: 0.42 }); skinM.diffuseColor.set(0.7, 0.68, 0.68);
+  const skinM = mat('skin', SKIN, { rough: 0.6, t: tex('body'), fill: 0.32 }); skinM.diffuseColor.set(0.82, 0.8, 0.8); // less fill, more key: arms read apart from the torso
   const hairM = mat('hair', HAIR, { rough: 0.9, t: tex('hair'), fill: 0.5 }); hairM.diffuseColor.set(0.45, 0.45, 0.45); hairM.diffuseTexture.hasAlpha = true; hairM.transparencyMode = 1; hairM.alphaCutOff = 0.5; hairM.backFaceCulling = false; // alpha-tested fringe edge: no forehead band
   const browM = mat('brow', HAIR, { rough: 0.8 });
   const eyeM = mat('eye', Color3.White(), { rough: 0.2, t: tex('eyes'), fill: 0.5 });
@@ -49,7 +49,9 @@ export async function loadAvatar3D(scene, { name = 'player', base = import.meta.
     const tint = () => { m.diffuseTexture = null; m.emissiveTexture = null; m.emissiveColor = Color3.Black(); m.diffuseColor = Color3.FromHexString(g.col); };
     if (gtex[g.id] === false) return tint();
     if (!gtex[g.id]) gtex[g.id] = tex('g-' + g.id, () => { gtex[g.id] = false; if (av.fit) av.setFit(av.fit, av._vis); });
-    const t = gtex[g.id]; m.diffuseTexture = t; m.emissiveTexture = t; m.emissiveColor = new Color3(0.42, 0.42, 0.42); m.diffuseColor = new Color3(0.78, 0.78, 0.78); };
+    const t = gtex[g.id]; m.diffuseTexture = t; m.emissiveTexture = t;
+    const c = Color3.FromHexString(g.col), L = 0.3 * c.r + 0.59 * c.g + 0.11 * c.b, f = L > 0.6 ? 0.26 : 0.4, d = L > 0.6 ? 0.6 : 0.78; // white garments: no blow-out
+    m.emissiveColor = new Color3(f, f, f); m.diffuseColor = new Color3(d, d, d); };
   // animation groups, blended by weight
   const AG = {}; for (const g of res.animationGroups) { g.stop(); AG[g.name] = g; }
   for (const k of ['idle', 'walk', 'jog', 'sprint', 'dance']) if (AG[k]) { AG[k].start(true, 1.0); AG[k].setWeightForAllAnimatables(k === 'idle' ? 1 : 0); }

@@ -154,7 +154,10 @@ if __name__ == '__main__':
     hw = smooth(zneck - 0.03, zneck + 0.03, Z)[..., None]
     vis_body = depth_buffer(['Body'])
     skin_only = fill(rgb, sk & (rgb.mean(-1) > 0.45), 2); face_lo = np.stack([ndi.median_filter(skin_only[..., c], size=25) for c in range(3)], -1); face_lo = ndi.gaussian_filter(face_lo, (10, 10, 0))
-    cH = bake('Body', 1024, head_front, face_lo, hm, vis_body, (0.12, 0.5)); cB = bake('Body', 1024, body_front, plate, gm, vis_body, (-0.15, 0.3))
+    cH = bake('Body', 1024, head_front, face_lo, hm, vis_body, (0.12, 0.5)); # torso / arms / hands from the shirtless 'jeans' look so bare torsos carry the app's abs and arm shading
+    rgbJ, alphaJ = load('jeans'); gmJ = global_map(alphaJ, BODY + ['G_jeans', 'G_shoes'])
+    skJ = skin_mask(rgbJ) & alphaJ; skJ[int(gmJ(0, 0.78)[1]):] = False; skJ = ndi.binary_erosion(skJ, iterations=2)
+    cB = bake('Body', 1024, fill(rgbJ, skJ, 2), plate, gmJ, vis_body, (-0.15, 0.3))
     save(cH * hw + cB * (1 - hw), 'body')
     hairm = alpha & ~skin_mask(rgb) & (rgb.mean(-1) < 0.42)
     hy = np.where(alpha)[0].min(); hairm[int(eyy) - 8:] = False

@@ -73,9 +73,59 @@ def wheel(m, x, y, z, r, w, tyre, hub, seg=18):
         m.tri(i_[0], ri[k], ri[k2], hub) if s > 0 else m.tri(i_[0], ri[k2], ri[k], hub)
         m.tri(o[0], ro[k2], ro[k], tyre) if s > 0 else m.tri(o[0], ro[k], ro[k2], tyre)
 
+def _ofs(m, a, b, c, col, ref):  # triangle wound so its normal faces along ref
+    P = [m.V[i] for i in (a, b, c)]; u = [P[1][k] - P[0][k] for k in range(3)]; w = [P[2][k] - P[0][k] for k in range(3)]
+    n = (u[1] * w[2] - u[2] * w[1], u[2] * w[0] - u[0] * w[2], u[0] * w[1] - u[1] * w[0])
+    m.tri(a, b, c, col) if sum(n[k] * ref[k] for k in range(3)) >= 0 else m.tri(a, c, b, col)
+
+def wheel2(m, x, y, z, r, w, rim='rim', spokes=5, seg=30, dish=0.05):
+    """tyre with rounded shoulders and a bulged sidewall, a bright rim lip, a recessed spoked dish and a hub cap.
+    Axis along x; profile points are (axial offset from centre, outward sign s; radius)."""
+    s = 1 if x > 0 else -1
+    th = [2 * math.pi * k / seg for k in range(seg)]
+    def ring(ax, rr): return [m.v((x + s * ax, y + rr * math.cos(t), z + rr * math.sin(t))) for t in th]
+    h = w / 2
+    prof = [(-h, 0.62 * r, 'tyreS'), (-h, 0.9 * r, 'tyreS'), (-h + 0.035, r, 'tyre'), (h - 0.035, r, 'tyre'), (h, 0.9 * r, 'tyre'),
+            (h + 0.012, 0.8 * r, 'tyreS'), (h, 0.7 * r, 'tyreS'), (h - 0.006, 0.665 * r, rim), (h - 0.012, 0.635 * r, 'rimD')]
+    R = [ring(ax, rr) for ax, rr, _ in prof]
+    core = lambda k: (x + s * 0.0, y + 0.8 * r * math.cos(th[k]), z + 0.8 * r * math.sin(th[k]))
+    for j in range(len(prof) - 1):
+        col = prof[j + 1][2]
+        for k in range(seg):
+            k2 = (k + 1) % seg; a, b, c, d = R[j][k], R[j][k2], R[j + 1][k2], R[j + 1][k]
+            cen = [sum(m.V[i][q] for i in (a, b, c, d)) / 4 for q in range(3)]; cc = core(k)
+            ref = [cen[q] - cc[q] for q in range(3)]
+            if j >= 6: ref = (s, 0, 0)  # rim lip faces out
+            _ofs(m, a, b, c, col, ref); _ofs(m, a, c, d, col, ref)
+    # inner face disc
+    ci = m.v((x - s * h, y, z))
+    for k in range(seg): _ofs(m, ci, R[0][k], R[0][(k + 1) % seg], 'tyreS', (-s, 0, 0))
+    # dish: spokes sit proud (rim colour), gaps are recessed and dark; hub cap in the middle
+    ad = h - dish; rs = 0.635 * r; rh = 0.2 * r
+    outer = ring(ad, rs); inner = ring(ad, rh); outerG = ring(ad - 0.03, rs * 0.99); innerG = ring(ad - 0.03, rh)
+    for k in range(seg):
+        k2 = (k + 1) % seg; sp = (math.floor(k * spokes / seg * 2) % 2 == 0)  # alternating spoke / gap sectors
+        if sp:
+            _ofs(m, outer[k], outer[k2], inner[k2], rim, (s, 0, 0)); _ofs(m, outer[k], inner[k2], inner[k], rim, (s, 0, 0))
+        else:
+            _ofs(m, outerG[k], outerG[k2], innerG[k2], 'rimD', (s, 0, 0)); _ofs(m, outerG[k], innerG[k2], innerG[k], 'rimD', (s, 0, 0))
+        # barrel from the lip down to the dish
+        for (A, B) in ((R[-1], outer if sp else outerG),):
+            _ofs(m, A[k], A[k2], B[k2], 'rimD', (s, 0, 0)); _ofs(m, A[k], B[k2], B[k], 'rimD', (s, 0, 0))
+        if not sp:  # spoke side walls
+            pass
+    hc = m.v((x + s * (ad + 0.025), y, z)); hr = ring(ad + 0.005, rh)
+    for k in range(seg):
+        k2 = (k + 1) % seg; _ofs(m, hr[k], hr[k2], hc, 'hub', (s, 0, 0))
+        _ofs(m, inner[k], inner[k2], hr[k2], 'hub', (s, 0, 0)); _ofs(m, inner[k], hr[k2], hr[k], 'hub', (s, 0, 0))
+        _ofs(m, innerG[k], innerG[k2], inner[k2], 'rimD', (s, 0, 0)); _ofs(m, innerG[k], inner[k2], inner[k], 'rimD', (s, 0, 0))
+    # nuts
+    for q in range(5):
+        t = 2 * math.pi * q / 5 + 0.3; box(m, (x + s * (ad + 0.012), y + 0.13 * r * math.cos(t), z + 0.13 * r * math.sin(t)), (0.02, 0.018, 0.018), 'rimD')
+
 # ---------------- glider-style rapid bus ----------------
 PAL = {'purple': (0.52, 0.17, 0.66), 'purpleD': (0.25, 0.07, 0.32), 'roof': (0.52, 0.2, 0.64), 'silver': (0.86, 0.88, 0.91), 'glass': (0.07, 0.08, 0.12),
-       'skirt': (0.16, 0.12, 0.2), 'bellows': (0.13, 0.13, 0.15), 'tyre': (0.06, 0.06, 0.07), 'hub': (0.2, 0.2, 0.23), 'pod': (0.7, 0.72, 0.76),
+       'skirt': (0.16, 0.12, 0.2), 'bellows': (0.13, 0.13, 0.15), 'tyre': (0.07, 0.07, 0.075), 'tyreS': (0.12, 0.12, 0.13), 'hub': (0.55, 0.56, 0.6), 'rim': (0.74, 0.76, 0.8), 'rimD': (0.1, 0.1, 0.11), 'pod': (0.7, 0.72, 0.76),
        'led': (0.85, 0.9, 1.0), 'head': (1.0, 0.97, 0.88), 'tail': (1.0, 0.08, 0.06), 'dest': (1.0, 0.62, 0.1), 'door': (0.09, 0.1, 0.13), 'frame': (0.3, 0.3, 0.34),
        'white': (0.93, 0.94, 0.95), 'bbY': (0.83, 0.92, 0.1), 'bbB': (0.07, 0.2, 0.62), 'black': (0.08, 0.08, 0.09), 'blue': (0.16, 0.42, 1.0), 'steel': (0.32, 0.33, 0.36),
        'amber': (1.0, 0.6, 0.08), 'glassLit': (0.17, 0.18, 0.21), 'cabin': (0.42, 0.4, 0.34), 'paint': (0.86, 0.87, 0.89), 'trim': (0.12, 0.12, 0.13), 'grille': (0.05, 0.05, 0.06)}
@@ -130,7 +180,7 @@ def glider():
     for d in DOORS:  # door frames
         box(m, (-W / 2 - 0.012, 1.55, d), (0.02, 2.3, 0.05), 'frame'); box(m, (-W / 2 - 0.012, 1.55, d + 0.6), (0.02, 2.3, 0.05), 'frame'); box(m, (-W / 2 - 0.012, 1.55, d - 0.6), (0.02, 2.3, 0.05), 'frame')
     for z in (7.0, 1.0, -6.8):  # axles, wheels mostly hidden behind the skirts ("covered wheels")
-        for x in (-1.0, 1.0): wheel(m, x, 0.5, z, 0.5, 0.32, 'tyre', 'hub')
+        for x in (-1.0, 1.0): wheel2(m, x, 0.5, z, 0.5, 0.32, rim='steel', spokes=10, dish=0.07)
     for x in (-1.0, 1.0): box(m, (x * 1.28, 2.25, 8.1), (0.06, 0.12, 0.26), 'frame')  # camera-mirror stalks
     return m
 
@@ -160,6 +210,11 @@ def wagon():
         tf = max(0.0, (z - 1.75) / 0.8)
         if tf > 0: h = 2.55 - 0.85 * tf ** 1.4; r = 0.14 + 0.06 * tf  # raked armoured screen / bonnet
         if z > 2.3: h = min(h, 1.45)
+        top = y0 + h; y0 = 0.5   # 0.5 m ground clearance under the sills
+        for zw in (1.75, -1.75):  # round wheel arches with a clear gap above the tyre
+            d = abs(z - zw)
+            if d < 0.56: y0 = max(y0, 0.44 + math.sqrt(max(0.0, 0.56 ** 2 - d * d)))
+        h = top - y0
         rings.append((z, rr_ring(w, h, r, y0, 4, (0.62, 0.95, 1.35, 1.75, 2.0, 2.5), 0.4)))
     loft(m, rings, col)
     for sd in (-1, 1): box(m, (sd * 0.8, 0.86, 2.565), (0.36, 0.16, 0.03), 'head')       # headlamps
@@ -170,13 +225,13 @@ def wagon():
     for x in (-0.75, 0.75): box(m, (x, 0.95, 2.78), (0.08, 0.6, 0.08), 'steel')
     box(m, (0, 0.95, 2.82), (1.6, 0.06, 0.06), 'steel')
     for sd in (-1, 1):
-        box(m, (sd * (W / 2 + 0.03), 0.55, 0), (0.07, 0.22, 4.4), 'black')  # armoured sill
+        box(m, (sd * (W / 2 + 0.03), 0.62, 0), (0.07, 0.2, 2.3), 'black')  # armoured sill between the arches
         for k in range(4): box(m, (sd * (W / 2 + 0.02), 2.06 + k * 0.12, 1.45), (0.03, 0.03, 0.95), 'steel')  # window grilles
         box(m, (sd * (W / 2 + 0.1), 2.0, 1.95), (0.06, 0.22, 0.14), 'black')  # mirrors
     box(m, (0, 1.4, -2.72), (0.9, 0.9, 0.18), 'black')                 # rear spare wheel cover
     box(m, (0, 3.0, -0.6), (1.5, 0.05, 2.6), 'steel')                  # roof rack
     for z in (1.75, -1.75):
-        for x in (-0.98, 0.98): wheel(m, x, 0.42, z, 0.42, 0.3, 'tyre', 'steel')
+        for x in (-0.96, 0.96): wheel2(m, x, 0.44, z, 0.44, 0.3, rim='steel', spokes=8, dish=0.06)
     return m
 
 def pestate():
@@ -233,7 +288,7 @@ def pestate():
     for sd in (-1, 1):
         box(m, (sd * 0.93, 1.02, 0.78), (0.1, 0.07, 0.16), 'trim')                     # mirrors
         box(m, (sd * (W / 2 + 0.005), 0.34, 0.02), (0.03, 0.08, 2.0), 'trim')          # sills
-        for zw in ZW: wheel(m, sd * 0.79, 0.33, zw, 0.33, 0.24, 'tyre', 'steel')
+        for zw in ZW: wheel2(m, sd * 0.8, 0.335, zw, 0.335, 0.22, rim='rim', spokes=5, dish=0.045)
     box(m, (0, 1.53, -1.0), (1.2, 0.03, 0.05), 'trim'); box(m, (0, 1.53, -0.2), (1.2, 0.03, 0.05), 'trim')  # roof bars
     return m
 
