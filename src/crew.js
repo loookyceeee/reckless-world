@@ -35,6 +35,8 @@ export const WARDROBE = [
 ];
 export const gearById = (id) => (id && WARDROBE.find(p => p.id === id)) || null;
 export const img = (name) => B() + name + '.webp';
+/** Drop 018 product photo for a wardrobe piece (from the app's shop assets, 256 px webp). */
+export const shopImg = (id) => B() + 'shop/' + id + '.webp';
 /** Same rule as the app: outer covers top; barrel jeans stay on with a jeans render; other bottoms replace legs. */
 export function lookFor(top, outer, legs) {
   const piece = gearById(outer ?? top), leg = gearById(legs);
