@@ -125,11 +125,11 @@ async function start() {
   // player
   let player = createAvatar(scene, { name: 'player', outfit: 'skate', fit: true });
   const CREW = { fit: CR.loadFit(), xp: null, account: CR.getAccount() };
-  const applyFit = (f) => { CREW.fit = f; CR.saveFit(f); player.setFit(f, CR.visibleFor); }; applyFit(CREW.fit);
+  const applyFit = (f) => { CREW.fit = f; CR.saveFit(f); player.setFit(f, CR.visibleFor); }; applyFit(CREW.fit); window.__rw.applyFit = (f) => applyFit(f);
   // smooth rigged crew avatar (models/avatar.glb); the procedural figure stands in until it loads (?procav keeps it)
   if (!Q.has('procav')) loadAvatar3D(scene, { name: 'player3d' }).then(av => { const old = player; av.root.position.copyFrom(old.root.position); av.root.rotation.y = old.root.rotation.y; old.root.setEnabled(false); old.allMeshes().forEach(m => m.setEnabled(false)); player = av; window.__rw.player = av; player.setFit(CREW.fit, CR.visibleFor); if (glow) for (const m of av.allMeshes()) glow.addExcludedMesh(m); DG.log('avatar3d loaded'); }).catch(e => console.warn('avatar3d', e));
   const loadCrew = async () => { if (!CREW.account) return; try { const r = await CR.readCrew(CREW.account); if (r) { CREW.xp = r.xp; if (r.fit.top || r.fit.outer || r.fit.legs) applyFit(r.fit); } } catch (e) { } }; loadCrew();
-  const P = { x: ext.spawn.x, z: ext.spawn.z, heading: 0, speed: 0, dancing: false };
+  const P = { x: ext.spawn.x, z: ext.spawn.z, heading: 0, speed: 0, dancing: false }; window.__rw.P = P;
   { const dx = ext.doorPos.x - P.x, dz = ext.doorPos.z - P.z; P.heading = Math.atan2(dx, dz); }
   // footstep dust puffs when sprinting
   const dustT = new DynamicTexture('dustT', 64, scene, true); { const g = dustT.getContext(); const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, 'rgba(200,200,210,0.6)'); gr.addColorStop(1, 'rgba(200,200,210,0)'); g.fillStyle = gr; g.fillRect(0, 0, 64, 64); dustT.hasAlpha = true; dustT.update(); }
