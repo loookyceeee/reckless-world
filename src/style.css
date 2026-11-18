@@ -74,3 +74,5 @@
 
 .np{display:block;margin-top:6px;font-size:9px;letter-spacing:.08em;color:#fff;text-decoration:none;opacity:.85;text-align:right;max-width:320px;margin-left:auto}.np:empty{display:none}
 .panel .cwlist button.cw.sel img{outline:2px solid #000;outline-offset:-2px}
+
+#stam{position:absolute;left:-10px;top:-10px;width:240px;height:240px;pointer-events:none}.is-touch #stam{left:-7px!important;top:-7px!important;width:164px!important;height:164px!important}

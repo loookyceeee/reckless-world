@@ -42,6 +42,7 @@ import { buildLandmarks, updateLandmarks } from './landmarks.js';
 import { createHUD, buildMinimapBase, loadMinimapImage, makeRouter } from './hud.js';
 import { VENUES, DISTRICTS, POSTER_SPOTS } from './venues.js';
 import * as CR from './crew.js';
+import { loadAvatar3D } from './avatar3d.js';
 import { createMusic } from './music.js';
 import { SegGrid } from './collide.js';
 import * as EV from './events.js';
@@ -108,6 +109,8 @@ async function start() {
   applyWet(scene, SKY.env, { roads: [0.5, 0.02, 0.04, 2.5], puddle: [1.0, 0.4, 0.3, 1.6], markings: [0.3, 0.02], pavement: [0.12, 0.0, 0.02, 3.5] });
   // perf: split merged + thin-instanced static city meshes into 96 m cells, freeze them, distance-cull per tier
   const culler = Q.has('nochunk') ? null : chunkStatic(city.root, { cell: Number(Q.get('cell')) || 128, skip: city.beacons.map(b => b.m.name) });
+  // sharper ground/facade textures at grazing angles: anisotropic filtering (8x desktop, 4x phones, off in safe mode)
+  { const af = SAFE || /swiftshader|llvmpipe|software/i.test(DG.info.gpu) ? 1 : LOW ? 4 : 8; for (const t of scene.textures) if (t && 'anisotropicFilteringLevel' in t && !t.isCube) t.anisotropicFilteringLevel = af; }
   freezeMaterials(scene, ['trunk', 'leaf', 'furn', 'lampPoleM', 'pave', 'roads', 'pavement', 'markings']);
   const templeB = city.buildings.find(b => b.temple);
   const ext = buildTempleExterior(scene, templeB, city.grid); ext.root.parent = city.root;
@@ -119,9 +122,11 @@ async function start() {
   city.templeDoor = ext.doorPos; const carModels = Q.has('nocars') ? null : await (await fetch(import.meta.env.BASE_URL + 'data/cars.json')).json().catch(() => null); const traffic = buildTraffic(scene, city, { models: carModels, low: LOW, stops: (city.sf && city.sf.stops) || [], signals: (city.sf && city.sf.signals) || [] }); bar(85);
   const route = makeRouter(buildGraph(city.roads, false)); let routeT = 0;
   // player
-  const player = createAvatar(scene, { name: 'player', outfit: 'skate', fit: true });
+  let player = createAvatar(scene, { name: 'player', outfit: 'skate', fit: true });
   const CREW = { fit: CR.loadFit(), xp: null, account: CR.getAccount() };
   const applyFit = (f) => { CREW.fit = f; CR.saveFit(f); player.setFit(f, CR.visibleFor); }; applyFit(CREW.fit);
+  // smooth rigged crew avatar (models/avatar.glb); the procedural figure stands in until it loads (?procav keeps it)
+  if (!Q.has('procav')) loadAvatar3D(scene, { name: 'player3d' }).then(av => { const old = player; av.root.position.copyFrom(old.root.position); av.root.rotation.y = old.root.rotation.y; old.root.setEnabled(false); old.allMeshes().forEach(m => m.setEnabled(false)); player = av; window.__rw.player = av; player.setFit(CREW.fit, CR.visibleFor); if (glow) for (const m of av.allMeshes()) glow.addExcludedMesh(m); DG.log('avatar3d loaded'); }).catch(e => console.warn('avatar3d', e));
   const loadCrew = async () => { if (!CREW.account) return; try { const r = await CR.readCrew(CREW.account); if (r) { CREW.xp = r.xp; if (r.fit.top || r.fit.outer || r.fit.legs) applyFit(r.fit); } } catch (e) { } }; loadCrew();
   const P = { x: ext.spawn.x, z: ext.spawn.z, heading: 0, speed: 0, dancing: false };
   { const dx = ext.doorPos.x - P.x, dz = ext.doorPos.z - P.z; P.heading = Math.atan2(dx, dz); }
@@ -192,7 +197,7 @@ async function start() {
   const up = (e) => { if (e.pointerId === stick.id) { stick.id = null; stick.x = stick.y = 0; hud.$('nub').style.transform = ''; hud.$('stick').style.opacity = 0.45; } if (e.pointerId === look.id) look.id = null; drag = null; };
   canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', up);
   canvas.addEventListener('wheel', (e) => { C.dist = Math.max(2.2, Math.min(14, C.dist * (1 + Math.sign(e.deltaY) * 0.1))); e.preventDefault(); }, { passive: false });
-  let touchRun = false; hud.$('tRun').addEventListener('pointerdown', (e) => { e.stopPropagation(); touchRun = !touchRun; hud.$('tRun').classList.toggle('on', touchRun); });
+  let touchRun = false, fullPushT = 0; const ST = { v: 1, idle: 9, locked: false, flash: 0 }; window.__rw.stamina = ST; hud.$('tRun').addEventListener('pointerdown', (e) => { e.stopPropagation(); touchRun = !touchRun; hud.$('tRun').classList.toggle('on', touchRun); });
   hud.$('tAct').addEventListener('pointerdown', (e) => { e.stopPropagation(); app.key('e'); });
   if (isTouch) document.body.classList.add('is-touch');
 
@@ -273,26 +278,37 @@ async function start() {
     let ix = 0, iz = 0;
     if (!app.paused && !app.title) { if (K.has('KeyW') || K.has('ArrowUp')) iz += 1; if (K.has('KeyS') || K.has('ArrowDown')) iz -= 1; if (K.has('KeyA') || K.has('ArrowLeft')) ix -= 1; if (K.has('KeyD') || K.has('ArrowRight')) ix += 1; ix += stick.x; iz -= stick.y; }
     if (window.__rw.auto) { iz = window.__rw.auto.iz || 0; ix = window.__rw.auto.ix || 0; }
-    const mag = Math.min(1, Math.hypot(ix, iz)); const run = K.has('ShiftLeft') || K.has('ShiftRight') || touchRun || (window.__rw.auto && window.__rw.auto.run);
-    const sp = mag * (run ? 5.2 : 2.0);
+    const mag = Math.min(1, Math.hypot(ix, iz)); const kb = K.has('KeyW') || K.has('KeyS') || K.has('KeyA') || K.has('KeyD') || K.has('ArrowUp') || K.has('ArrowDown') || K.has('ArrowLeft') || K.has('ArrowRight');
+    // gait (research/game-design.md 2.1): walk 1.6 / jog 3.2 / sprint 6.0 m/s; keyboard jogs, Shift sprints; stick < 0.55 walks, full push (or RUN) sprints
+    if (stick.x || stick.y) { if (mag > 0.97) fullPushT += dt; else fullPushT = 0; } else fullPushT = 0;
+    const wantRun = K.has('ShiftLeft') || K.has('ShiftRight') || touchRun || fullPushT > 0.35 || (window.__rw.auto && window.__rw.auto.run);
+    const sprint = wantRun && mag > 0.3 && ST.v > 0 && !ST.locked && !app.inside;
+    let gait = mag < 0.05 ? 0 : sprint ? 6.0 : (kb || mag >= 0.55) ? 3.2 : 1.6; if (app.inside) gait *= 0.85;
+    // stamina: 4.5 s of sprint, 2.5 s delay after release, 3.0 s to refill; jogging drains at 0.25x; empty -> jog + red pulse
+    const draining = sprint ? 1 : (gait >= 3.2 && !app.inside ? 0.25 : 0);
+    if (draining) { ST.v = Math.max(0, ST.v - draining * dt / 4.5); ST.idle = 0; if (ST.v === 0 && sprint) { ST.locked = true; ST.flash = 0.6; } }
+    else { ST.idle += dt; if (ST.idle > 2.5) ST.v = Math.min(1, ST.v + dt / 3.0); }
+    if (ST.locked && ST.v > 0.35) ST.locked = false; ST.flash = Math.max(0, ST.flash - dt);
+    const sp = gait * mag / Math.max(mag, 1e-3) * (mag < 0.05 ? 0 : 1);
     if (mag > 0.05) { P.dancing = false; const fx = Math.sin(C.yaw), fz = Math.cos(C.yaw); const mx = fx * iz + fz * ix, mz = fz * iz - fx * ix; const L = Math.hypot(mx, mz);
-      const h = Math.atan2(mx / L, mz / L); let dh = h - P.heading; while (dh > Math.PI) dh -= 2 * Math.PI; while (dh < -Math.PI) dh += 2 * Math.PI; P.heading += dh * Math.min(1, dt * 10);
-      P.x += mx / L * sp * dt; P.z += mz / L * sp * dt; }
-    P.speed += (sp - P.speed) * Math.min(1, dt * 10);
+      const h = Math.atan2(mx / L, mz / L); let dh = h - P.heading; while (dh > Math.PI) dh -= 2 * Math.PI; while (dh < -Math.PI) dh += 2 * Math.PI; P.heading += dh * Math.min(1, dt * (sprint ? 7 : 10)); P.mx = mx / L; P.mz = mz / L; }
+    // envelope: accel 10 (14 sprinting) m/s^2, decel 22 m/s^2
+    if (sp > P.speed) P.speed = Math.min(sp, P.speed + (sprint ? 14 : 10) * dt); else P.speed = Math.max(sp, P.speed - 22 * dt);
+    if (P.speed > 0.01 && P.mx != null) { P.x += P.mx * P.speed * dt; P.z += P.mz * P.speed * dt; }
     const pp = { x: P.x, z: P.z }; (app.inside ? tGrid : city.grid).resolve(pp, 0.38); P.x = pp.x; P.z = pp.z;
     const autoDance = app.inside && T.mode === 'rave' && T.danceFloor(P) && P.speed < 0.2 && !window.__rw.noAutoDance;
-    player.root.position.set(P.x, 0, P.z); player.root.rotation.y = P.heading; dust.emitter.set(P.x, 0.05, P.z); dust.emitRate = P.speed > 3.5 && !app.inside ? 45 : 0;
-    animateAvatar(player, dt, { speed: P.speed, dancing: P.dancing || autoDance });
+    player.root.position.set(P.x, 0, P.z); player.root.rotation.y = P.heading; dust.emitter.set(P.x, 0.05, P.z); dust.emitRate = P.speed > 4.5 && !app.inside ? 45 : 0;
+    if (player.animate) player.animate(dt, { speed: P.speed, dancing: P.dancing || autoDance }); else animateAvatar(player, dt, { speed: P.speed * 0.8, dancing: P.dancing || autoDance });
     // camera with collision
-    tgt.set(P.x, 1.25, P.z);
+    tgt.set(P.x, 1.5, P.z);
     const cp = Math.cos(C.pitch), want = C.dist; const ox = -Math.sin(C.yaw) * cp, oz = -Math.cos(C.yaw) * cp, oy = Math.sin(C.pitch);
-    const camY = 1.25 + oy * want; const hit = (app.inside ? tGrid : city.grid).raycast(P.x, P.z, P.x + ox * want, P.z + oz * want, camY);
+    const camY = 1.5 + oy * want; const hit = (app.inside ? tGrid : city.grid).raycast(P.x, P.z, P.x + ox * want, P.z + oz * want, camY);
     const d = Math.max(1.0, want * hit - (hit < 1 ? 0.35 : 0)); C.curDist += (d - C.curDist) * Math.min(1, dt * (d < C.curDist ? 18 : 4));
-    camPos.set(P.x + ox * C.curDist, Math.max(0.35, 1.25 + oy * C.curDist), P.z + oz * C.curDist);
+    camPos.set(P.x + ox * C.curDist, Math.max(0.35, 1.5 + oy * C.curDist), P.z + oz * C.curDist);
     // smoothed follow camera + slight FOV kick when sprinting
     if (camSnap) { smPos.copyFrom(camPos); smTgt.copyFrom(tgt); camSnap = false; } else { const k = Math.min(1, dt * 12); Vector3.LerpToRef(smPos, camPos, k, smPos); Vector3.LerpToRef(smTgt, tgt, Math.min(1, dt * 16), smTgt); }
     cam.position.copyFrom(smPos); cam.setTarget(smTgt);
-    const wantFov = 0.95 + (P.speed > 3.5 ? 0.09 : 0); cam.fov += (wantFov - cam.fov) * Math.min(1, dt * 3);
+    const wantFov = 0.95 + (P.speed > 4.5 && !app.inside ? 0.09 : 0); cam.fov += (wantFov - cam.fov) * Math.min(1, dt * 3);
     if (app.title) { const f = flyover(window.__rwFly.at != null ? window.__rwFly.at : t - titleT0); cam.position.copyFrom(f.p); cam.setTarget(f.t); cam.fov = 0.9; camSnap = true; }
     if (window.__rw.camRel) { const o = window.__rw.camRel, h = P.heading + o[0], d = o[1]; cam.position.set(P.x + Math.sin(h) * d, o[2], P.z + Math.cos(h) * d); cam.setTarget(new Vector3(P.x, o[3], P.z)); }
     else if (window.__rw.camOverride) { const o = window.__rw.camOverride; cam.position.set(o[0], o[1], o[2]); cam.setTarget(new Vector3(o[3], o[4], o[5])); }
@@ -313,7 +329,7 @@ async function start() {
       { const dd = Math.hypot(P.x - ext.doorPos.x, P.z - ext.doorPos.z); AU.update({ inside: app.inside, dist: dd }); MU.setVolume(app.inside ? 90 : 22 + Math.max(0, 1 - dd / 90) * 30); }
       routeT -= 0.5; if (routeT <= 0 && !app.inside) { routeT = 1.5; state.route = route(P.x, P.z, ext.doorPos.x, ext.doorPos.z); } if (app.inside) state.route = null;
       const tv = VENUES[0]; state.objective = app.inside ? '' : `▲ THE TEMPLE <b>${Math.round(Math.hypot(P.x - ext.doorPos.x, P.z - ext.doorPos.z))}M</b>`; }
-    hud.update(dt, { x: P.x, z: P.z, heading: P.heading, camYaw: C.yaw, inside: app.inside, lx: P.x - INTERIOR_ORIGIN.x, lz: P.z - INTERIOR_ORIGIN.z, ...state });
+    hud.update(dt, { stamina: ST.v, stamFlash: ST.flash, x: P.x, z: P.z, heading: P.heading, camYaw: C.yaw, inside: app.inside, lx: P.x - INTERIOR_ORIGIN.x, lz: P.z - INTERIOR_ORIGIN.z, ...state });
     fpsT += dt; if (fpsT > 0.5) { fpsT = 0; hud.fps(Math.round(engine.getFps())); }
     cullT -= dt; if (culler && cullT <= 0 && !app.inside) { cullT = 0.25; culler.setDist(app.title ? 900 : TIERS[tier].dist); culler.update(cam.position); WET.update(cam.position); const pd = TIERS[tier].dist * 0.3; for (const p of traffic.peds) { const on = Math.hypot(p.av.root.position.x - cam.position.x, p.av.root.position.z - cam.position.z) < pd; if (p._on !== on) { p._on = on; p.av.root.setEnabled(on); } } }
     if (!app.title && !app.inside && autoTier) { tierT += engine.getDeltaTime() / 1000; tierF.push(engine.getFps()); if (tierT > 4) { const avg = tierF.reduce((a, b) => a + b, 0) / tierF.length; tierF = []; tierT = 0;
