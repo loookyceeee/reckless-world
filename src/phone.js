@@ -22,7 +22,7 @@ export function createPhone(ctx) {
   const msgs = []; let unread = 0, view = 'home';
   const S = { open: false };
   const frame = (title, body) => `<div class="phs"><b>RECKLESS</b><span>${clock()}</span><i>●●●●</i></div>
-    ${title ? `<div class="phh"><button class="phback" data-v="home">‹</button><b>${title}</b></div>` : ''}<div class="phb">${body}</div>`;
+    ${title ? `<div class="phh"><button class="phback" data-v="home">‹</button><b>${title}</b></div>` : ''}<div class="phb">${body}</div><button class="phclose" data-act="close" aria-label="Close phone"><i></i></button>`;
   const views = {
     home: () => frame('', `<div class="phgrid">${TILES.map(([id, n, ic]) => `<button class="pht" data-app="${id}"><i>${ic}</i><span>${n}</span>${id === 'msgs' && unread ? `<em>${unread}</em>` : ''}</button>`).join('')}</div>
       ${msgs[0] ? `<button class="phpeek" data-app="msgs"><small>${esc(msgs[0].from)} · ${esc(msgs[0].t)}</small><b>${esc(msgs[0].title)}</b><span>${esc(msgs[0].body)}</span></button>` : ''}`),
@@ -45,7 +45,8 @@ export function createPhone(ctx) {
       <p class="phfine">Map data © OpenStreetMap contributors. Terrain: LiDAR open data. Full credits in CREDITS.</p>`); },
     msgs: () => frame('MSGS', msgs.length ? `<div class="phlist">${msgs.map((m, i) => `<button class="phmsg" data-msg="${i}"><small>${esc(m.from)} · ${esc(m.t)}</small><b>${esc(m.title)}</b><span>${esc(m.body)}</span>${m.dest ? '<i>TAP TO SET GPS ›</i>' : ''}</button>`).join('')}</div>` : '<p class="phfine">No messages.</p>'),
   };
-  const render = () => { el.innerHTML = (views[view] || views.home)(); };
+  let lastHtml = '';
+  const render = () => { const h = (views[view] || views.home)(); if (h === lastHtml) return; lastHtml = h; el.innerHTML = h; }; // only touch the DOM on change, so taps aren't lost
   const go = (v) => {
     if (v === 'map') { api.close(); return ctx.open.map(); }
     if (v === 'camera') { api.close(); return ctx.open.camera(); }
@@ -61,6 +62,7 @@ export function createPhone(ctx) {
     if (b.dataset.poster != null) { const p = ctx.posters()[+b.dataset.poster]; if (p && !p.done) { ctx.setDest({ x: p.x, z: p.z, label: 'POSTER · ' + p.name, kind: 'waypoint' }); api.close(); } return; }
     if (b.dataset.msg != null) { const m = msgs[+b.dataset.msg]; if (m && m.dest) { ctx.setDest(m.dest); api.close(); } return; }
     const a = b.dataset.act;
+    if (a === 'close') return api.close();
     if (a === 'sound') { ctx.sound.toggle(); return setTimeout(render, 50); }
     if (a === 'skip') { ctx.skip(); return setTimeout(render, 600); }
     if (a === 'credits') { api.close(); return ctx.open.credits(); }
@@ -94,19 +96,23 @@ export function createWheel(ctx) {
     return `<g class="ws" data-i="${i}"><path d="${seg(i)}"/><text x="${(R + rr * Math.cos(a)).toFixed(1)}" y="${(R + rr * Math.sin(a) + 4).toFixed(1)}">${n}</text></g>`; }).join('')}
     <circle cx="${R}" cy="${R}" r="${r0 - 6}" class="wc"/></svg><div class="wmid"><b></b><span></span></div>`;
   ctx.root.appendChild(el);
-  let open = false, sel = 0, last = 0, t0 = 0, cx = 0, cy = 0, lastAng = null;
+  let open = false, sel = 0, last = 0, t0 = 0, cx = 0, cy = 0, lastAng = null, touchOpen = false;
   const setSel = (i) => { if (i === sel && el.querySelector('.ws.on')) return; sel = i; el.querySelectorAll('.ws').forEach((g, k) => g.classList.toggle('on', k === i)); el.querySelector('.wmid b').textContent = WHEEL[i][1]; el.querySelector('.wmid span').textContent = WHEEL[i][2]; buzz(8); };
   const pick = (x, y) => { const dx = x - cx, dy = y - cy; if (Math.hypot(dx, dy) < 24) return; let a = Math.atan2(dx, -dy); if (a < 0) a += 2 * Math.PI;
     const deg = a * 180 / Math.PI; if (lastAng != null) { const d = Math.abs(((deg - lastAng + 540) % 360) - 180); if (d < 8) return; } lastAng = deg; setSel(Math.round(a / (2 * Math.PI / N)) % N); };
   const move = (e) => { if (open) pick(e.clientX, e.clientY); };
   const api = {
     get isOpen() { return open; },
-    open() { if (open) return; open = true; t0 = performance.now(); const r = el.getBoundingClientRect(); cx = innerWidth / 2; cy = innerHeight / 2; lastAng = null; setSel(last); el.classList.remove('hidden'); requestAnimationFrame(() => el.classList.add('on')); addEventListener('pointermove', move); },
+    open(touch = false) { if (open) return; open = true; touchOpen = touch; t0 = performance.now(); const r = el.getBoundingClientRect(); cx = innerWidth / 2; cy = innerHeight / 2; lastAng = null; setSel(last); el.classList.remove('hidden'); requestAnimationFrame(() => el.classList.add('on')); addEventListener('pointermove', move); },
     release(confirm = true) { if (!open) return; open = false; removeEventListener('pointermove', move); el.classList.remove('on'); setTimeout(() => !open && el.classList.add('hidden'), 90);
-      const quick = performance.now() - t0 < 180; const id = WHEEL[quick ? last : sel][0]; if (!quick) last = sel; if (confirm) ctx.run(id); },
+      const quick = t0 > 0 && performance.now() - t0 < 180 && lastAng == null && !touchOpen; const id = WHEEL[quick ? last : sel][0]; if (!quick) last = sel; if (confirm) ctx.run(id); },
     point(x, y) { if (open) pick(x, y); },
     select(id) { const i = WHEEL.findIndex(w => w[0] === id); if (i >= 0) setSel(i); },
   };
-  el.addEventListener('pointerup', (e) => { if (open && e.pointerType !== 'mouse') api.release(true); });
+  // touch: hold the WHEEL button, drag to a slice, lift to confirm; or tap the button and then tap a slice (tap outside closes)
+  addEventListener('pointerup', (e) => { if (open && e.pointerType !== 'mouse' && lastAng != null && performance.now() - t0 > 180) api.release(true); });
+  let armed = false; el.addEventListener('pointerdown', () => { armed = open; });  // only taps that start on the wheel count (not the tap that opened it)
+  el.addEventListener('click', (e) => { if (!open || !armed) return; armed = false; const g = e.target.closest('.ws'); if (g) { setSel(+g.dataset.i); t0 = 0; return api.release(true); }
+    api.release(false); });
   return api;
 }

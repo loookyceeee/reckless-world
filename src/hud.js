@@ -53,7 +53,7 @@ export function createHUD(app) {
   <div class="notes" id="notes"></div>
   <div class="stamp" id="stamp"><div class="lb t"></div><div class="lb b"></div><div class="sbody"><div class="stitle"></div><div class="ssub"></div><div class="slines"></div></div></div>
   <div class="btns"><button data-k="phone" class="phfab">PHONE</button><button data-k="m">MAP</button><button data-k="o">WARDROBE</button><button data-k="f">DANCE</button><button data-k="p">PHOTO</button><button data-k="c">CREDITS</button><button data-k="n" id="sndBtn">SOUND: OFF</button><button data-k="l" id="lightsBtn" class="hide">LIGHTS: RAVE</button></div>
-  <div class="touch" id="touch"><div class="stick" id="stick"><div class="nub" id="nub"></div></div><button class="tbtn run" id="tRun">RUN</button><button class="tbtn act" id="tAct">E</button></div>
+  <div class="touch" id="touch"><div class="stick" id="stick"><div class="nub" id="nub"></div></div><button class="tbtn run" id="tRun">RUN</button><button class="tbtn act" id="tAct">E</button><button class="tbtn whl" id="tWheel">◎</button></div>
   <div class="fade" id="fade"></div>`;
   const $ = (id) => hud.querySelector('#' + id);
   // overlays

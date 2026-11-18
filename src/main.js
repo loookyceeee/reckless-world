@@ -394,6 +394,7 @@ async function start() {
   } });
   const _key = app.key; app.key = (k) => { if (k === 'phone') { if (hud.isOpen()) hud.close(); return app.phone.toggle(); } return _key(k); };
   window.__rw.phone = app.phone; window.__rw.wheel = app.wheel;
+  hud.$('tWheel').addEventListener('pointerdown', (e) => { e.stopPropagation(); if (app.wheel.isOpen) return app.wheel.release(false); app.wheel.open(true); });
   hud.hud.classList.add('titlehide'); titleT0 = t; document.getElementById('title').classList.add('ready');
   const posterText = () => { const P0 = posters.find(p => !(EV.postedToday(p.id) || (!EV.getEmail() && p.mesh.isEnabled()))); if (!P0) return;
     app.phone.text({ title: 'POSTER RUN. ' + posters.length + ' WALLS.', body: 'Watch for patrols. Start when you are ready.', dest: { x: P0.ix, z: P0.iz, label: 'POSTER · ' + spotName(P0.id), kind: 'waypoint' } }); };
