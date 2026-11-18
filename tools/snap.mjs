@@ -13,6 +13,7 @@ for (const st of (process.env.S || '').split(' ;; ')) {
   if (!st) continue;
   if (st === 'ready') { for (let i = 0; i < 120; i++) { const ok = await page.evaluate(() => { __rw.scene.render(); return __rw.scene.meshes.filter(m => m.isEnabled() && m.isVisible && (m.getTotalVertices() > 0)).every(m => m.isReady(true)); }); if (ok) break; await new Promise(r => setTimeout(r, 500)); } }
   else if (st.startsWith('frames:')) await page.evaluate((n) => { for (let i = 0; i < n; i++) __rw.scene.render(); }, +st.slice(7));
+  else if (st.startsWith('shot:')) { await page.evaluate(() => __rw.scene.render()); await page.screenshot({ path: '/tmp/rwx/' + st.slice(5) + '.png' }); console.log('shot', st.slice(5)); }
   else if (st.startsWith('snap:')) { const d = await page.evaluate(() => { __rw.scene.render(); return document.getElementById('c').toDataURL('image/png'); }); fs.writeFileSync('/tmp/rwx/' + st.slice(5) + '.png', Buffer.from(d.split(',')[1], 'base64')); console.log('snap', st.slice(5)); }
   else { const r = await page.evaluate(st).catch(e => 'ERR ' + e.message); if (r !== undefined) console.log(JSON.stringify(r)); }
 }
