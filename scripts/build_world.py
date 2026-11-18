@@ -67,6 +67,7 @@ for e in d['elements']:
         else:
             r = {'t': hw, 'w': WALK[hw], 'd': 0, 'n': e['nodes']}
         if 'name' in t: r['nm'] = t['name']
+        if t.get('surface') in ('sett', 'cobblestone', 'unhewn_cobblestone'): r['sf'] = 'sett'
         r['p'] = [round(c, 1) for p in xz for c in p]
         roads.append(r)
 # node ids used by roads -> compact index for graph

@@ -187,8 +187,13 @@ export async function buildCity(scene, { low = false } = {}) {
   const roadM = new StandardMaterial('roads', scene); roadM.diffuseTexture = asphT; roadM.specularColor = new Color3(0.34, 0.35, 0.42); roadM.specularPower = 64; roadM.backFaceCulling = false; // damp Belfast tarmac sheen
   const paveM = new StandardMaterial('pavement', scene); paveM.diffuseTexture = paveT; paveM.specularColor = new Color3(0.12, 0.12, 0.14); paveM.specularPower = 32; paveM.backFaceCulling = false;
   const markM = new StandardMaterial('markings', scene); markM.specularColor = new Color3(0.2, 0.2, 0.2); markM.emissiveColor = new Color3(0.08, 0.08, 0.08); markM.backFaceCulling = false;
+  const cobT = mkTex('cobT', 512, (g, N) => { const r = rng(13); g.fillStyle = '#4a4744'; g.fillRect(0, 0, N, N); const rows = 16, h = N / rows;
+    for (let j = 0; j < rows; j++) { let x = (j % 2) * h * 0.6 - h; while (x < N) { const w = h * (1.1 + r() * 0.7), v = 120 + r() * 70 | 0; g.fillStyle = `rgb(${v},${v - 4},${v - 10})`;
+      g.beginPath(); g.roundRect ? g.roundRect(x + 2, j * h + 2, w - 4, h - 4, 5) : g.rect(x + 2, j * h + 2, w - 4, h - 4); g.fill();
+      g.fillStyle = 'rgba(255,255,255,0.10)'; g.fillRect(x + 4, j * h + 3, w - 9, 3); x += w; } } });
+  const cobM = new StandardMaterial('cobbles', scene); cobM.diffuseTexture = cobT; cobM.specularColor = new Color3(0.4, 0.4, 0.45); cobM.specularPower = 50; cobM.backFaceCulling = false;
   const NB = () => ({ p: [], c: [], u: [], i: [] });
-  const RD = NB(), PV = NB(), MK = NB();
+  const RD = NB(), PV = NB(), MK = NB(), CB = NB(); const SETT = [];
   const quadB = (B, a, b, w, y, col, uvs = 6) => {
     const dx = b[0] - a[0], dz = b[1] - a[1]; const L = Math.hypot(dx, dz); if (L < 0.01) return;
     const nx = -dz / L * w / 2, nz = dx / L * w / 2; const base = B.p.length / 3;
@@ -214,8 +219,9 @@ export async function buildCity(scene, { low = false } = {}) {
   for (const r of roadsOut) {
     const pts = r.pts;
     if (r.d) {
-      for (let i = 0; i < pts.length - 1; i++) quadB(RD, pts[i], pts[i + 1], r.w, YR, ASPH);
-      for (let i = 0; i < pts.length; i++) { const p = pts[i]; discB(RD, p, r.w / 2, YR, ASPH); const jn = r.n && nodeDeg.get(r.n[i]) > 2; if (jn) discB(PV, p, nodeW.get(r.n[i]) / 2 + PW, YR - 0.004, PAVE, 3); }
+      const RB = r.sf ? CB : RD; if (r.sf) SETT.push(r);
+      for (let i = 0; i < pts.length - 1; i++) quadB(RB, pts[i], pts[i + 1], r.w, YR, r.sf ? hex('#ffffff') : ASPH, r.sf ? 3 : 6);
+      for (let i = 0; i < pts.length; i++) { const p = pts[i]; discB(RB, p, r.w / 2, r.sf ? YR + 0.002 : YR, r.sf ? hex('#ffffff') : ASPH, r.sf ? 3 : 6); const jn = r.n && nodeDeg.get(r.n[i]) > 2; if (jn) discB(PV, p, nodeW.get(r.n[i]) / 2 + PW, YR - 0.004, PAVE, 3); }
       if (r.t === 'service') continue;
       for (let i = 0; i < pts.length - 1; i++) {
         let a = pts[i], b = pts[i + 1]; const dx = b[0] - a[0], dz = b[1] - a[1]; const L = Math.hypot(dx, dz); if (L < 0.05) continue; const ux = dx / L, uz = dz / L;
@@ -232,7 +238,8 @@ export async function buildCity(scene, { low = false } = {}) {
         }
       }
     } else {
-      for (let i = 0; i < pts.length - 1; i++) quadB(PV, pts[i], pts[i + 1], Math.max(1.6, r.w), r.t === 'pedestrian' ? YP + 0.002 : YP + 0.003, FOOT, 3);
+      if (r.sf) SETT.push(r);
+      for (let i = 0; i < pts.length - 1; i++) quadB(r.sf ? CB : PV, pts[i], pts[i + 1], Math.max(1.6, r.w), r.t === 'pedestrian' ? YP + 0.002 : YP + 0.003, r.sf ? hex('#ffffff') : FOOT, 3);
     }
   }
   const dyRoad = (r) => ['primary', 'secondary', 'trunk', 'tertiary'].includes(r.t) || Math.abs(Math.floor(r.p[0] * 7)) % 3 === 0;
@@ -282,6 +289,22 @@ export async function buildCity(scene, { low = false } = {}) {
   }
   const mkMesh = (name, B, m) => { const vd = new VertexData(); vd.positions = B.p; vd.colors = B.c; vd.uvs = B.u; vd.indices = B.i; vd.normals = []; VertexData.ComputeNormals(B.p, B.i, vd.normals); for (let i = 1; i < vd.normals.length; i += 3) if (B.p[i] !== undefined && Math.abs(vd.normals[i]) > 0.5) vd.normals[i] = 1; const me = toMesh(name, vd, scene, m); me.parent = root; me.freezeWorldMatrix(); me.isPickable = false; return me; };
   const roads = mkMesh('roads', RD, roadM); mkMesh('pavement', PV, paveM); mkMesh('markings', MK, markM);
+  if (CB.p.length) mkMesh('cobbles', CB, cobM);
+  // festoon lights: warm bulb strings zig-zagging across the Cathedral Quarter's cobbled streets
+  { const bulbs = [], WI = []; const inCQ = (x, z) => Math.hypot(x - 150, z + 230) < 260;
+    for (const r of SETT) { const pts = r.pts; let acc = 3, flip = 0;
+      for (let i = 0; i < pts.length - 1; i++) { const a = pts[i], b = pts[i + 1]; const dx = b[0] - a[0], dz = b[1] - a[1], L = Math.hypot(dx, dz); if (L < 0.5) continue; const ux = dx / L, uz = dz / L;
+        while (acc < L) { const cx = a[0] + ux * acc, cz = a[1] + uz * acc; if (inCQ(cx, cz)) { const half = (r.d ? r.w / 2 + PW : Math.max(1.6, r.w) / 2 + 1.2) - 0.3, sk = flip ? 2.2 : -2.2; flip ^= 1;
+            const A = [cx - uz * half - ux * sk / 2, cz + ux * half - uz * sk / 2], B2 = [cx + uz * half + ux * sk / 2, cz - ux * half + uz * sk / 2]; const n = Math.max(4, Math.round(Math.hypot(B2[0] - A[0], B2[1] - A[1]) / 0.75));
+            let prev = null; for (let k = 0; k <= n; k++) { const t = k / n, y = 5.6 - Math.sin(t * Math.PI) * 0.7; const q = [A[0] + (B2[0] - A[0]) * t, y, A[1] + (B2[1] - A[1]) * t];
+              if (k > 0 && k < n) bulbs.push(q); if (prev) WI.push(xf(box(0.025, 0.025, Math.hypot(q[0] - prev[0], q[1] - prev[1], q[2] - prev[2])), { r: [-Math.atan2(q[1] - prev[1], Math.hypot(q[0] - prev[0], q[2] - prev[2])), Math.atan2(q[0] - prev[0], q[2] - prev[2]), 0], t: [(q[0] + prev[0]) / 2, (q[1] + prev[1]) / 2, (q[2] + prev[2]) / 2] })); prev = q; } }
+          acc += 6.5; }
+        acc -= L; } }
+    if (bulbs.length) { const bm = new StandardMaterial('festoonBulb', scene); bm.emissiveColor = hex('#e0943a'); bm.disableLighting = true;
+      const bulb = toMesh('festoonBulbs', xf(sphere(6), { s: [0.13, 0.16, 0.13] }), scene, bm); const buf = new Float32Array(bulbs.length * 16);
+      bulbs.forEach((q, i) => Matrix.Translation(q[0], q[1], q[2]).copyToArray(buf, i * 16)); bulb.thinInstanceSetBuffer('matrix', buf, 16, true); bulb.parent = root; bulb.isPickable = false;
+      const wm = new StandardMaterial('festoonWire', scene); wm.diffuseColor = hex('#151515'); wm.specularColor = Color3.Black();
+      for (let i = 0; i < WI.length; i += 3000) { const w = toMesh('festoonWire', merge(WI.slice(i, i + 3000)), scene, wm); w.parent = root; w.isPickable = false; } } }
   // puddles: glossy dark patches near the kerbs that catch lamp and moon highlights (wet Belfast night)
   { const pud = []; const rr = rng(31); for (const r of roadsOut) { if (!r.d || r.t === 'service') continue; for (let i = 0; i < r.pts.length - 1; i++) { const a = r.pts[i], b = r.pts[i + 1]; const L = Math.hypot(b[0] - a[0], b[1] - a[1]); const ux = (b[0] - a[0]) / L, uz = (b[1] - a[1]) / L;
       for (let s = rr() * 25; s < L; s += 18 + rr() * 30) { const sd = rr() < 0.5 ? -1 : 1, off = (r.w / 2 - 0.6 - rr() * 1.2) * sd; pud.push([a[0] + ux * s - uz * off, a[1] + uz * s + ux * off, Math.atan2(ux, uz), 0.8 + rr() * 1.6]); } } }

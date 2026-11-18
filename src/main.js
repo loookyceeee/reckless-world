@@ -78,7 +78,7 @@ async function start() {
   const cam = new FreeCamera('cam', new Vector3(0, 5, -10), scene); cam.minZ = 0.1; cam.maxZ = 900; cam.fov = 0.95; cam.inputs.clear(); const cam0 = cam;
   const glow = LOW ? null : new GlowLayer('glow', scene, { mainTextureRatio: 0.35, blurKernelSize: 48 }); if (glow) glow.intensity = 0.7;
   // cinematic pipeline: gentle bloom, ACES filmic tone mapping, contrast grade, vignette, light grain, FXAA (+ SSAO on ?ssao)
-  let pipe = null;
+  let pipe = null, SSAO = null;
   try {
     pipe = new DefaultRenderingPipeline('cine', true, scene, [cam0]);
     pipe.fxaaEnabled = true; pipe.bloomEnabled = !LOW; pipe.bloomThreshold = 0.72; pipe.bloomWeight = 0.32; pipe.bloomKernel = 48; pipe.bloomScale = 0.5;
@@ -86,7 +86,8 @@ async function start() {
     ip.vignetteEnabled = true; ip.vignetteWeight = 2.2; ip.vignetteColor = new Color4(0, 0, 0, 0); ip.vignetteStretch = 0.2;
     ip.colorCurvesEnabled = true; const cc = new ColorCurves(); cc.globalSaturation = -4; cc.shadowsHue = 215; cc.shadowsDensity = 22; cc.shadowsSaturation = 35; cc.highlightsHue = 40; cc.highlightsDensity = 6; cc.highlightsSaturation = 8; ip.colorCurves = cc;
     pipe.grainEnabled = !LOW; pipe.grain.intensity = 6; pipe.grain.animated = true;
-    if (Q.has('ssao')) { const ss = new SSAO2RenderingPipeline('ssao', scene, { ssaoRatio: 0.5, blurRatio: 0.5 }, [cam0]); ss.radius = 1.2; ss.totalStrength = 0.9; ss.samples = 8; }
+    // SSAO (desktop high tier by default; ?nossao off, ?ssao forces it): soft contact shadows in doorways, kerbs and crowds
+    if ((!isTouch && !Q.has('nossao')) || Q.has('ssao')) { try { SSAO = new SSAO2RenderingPipeline('ssao', scene, { ssaoRatio: 0.5, blurRatio: 0.5 }, [cam0]); SSAO.radius = 1.4; SSAO.totalStrength = 1.0; SSAO.base = 0.12; SSAO.samples = 12; SSAO.maxZ = 220; SSAO.expensiveBlur = true; } catch (e) { SSAO = null; console.warn('ssao', e); } }
   } catch (e) { console.warn('pipeline', e); }
   await document.fonts.ready;
   await loadAnims(import.meta.env.BASE_URL + 'data/anims.json').catch(e => console.warn('anims', e));
@@ -235,7 +236,8 @@ async function start() {
   let tier = Q.get('q') || (isTouch ? 'med' : 'high'); if (!TIERS[tier]) tier = 'high'; const autoTier = Q.has('auto') || (!Q.get('q') && !Q.has('webgl')); let tierT = 0, tierF = [], tierUp = false, cullT = 0;
   const baseScale = 1 / Math.min(1.5, devicePixelRatio || 1);
   function setTier(n) { tier = n; const T0 = TIERS[n]; const dprE = Math.min(2.5, devicePixelRatio || 1); engine.setHardwareScalingLevel(isTouch ? T0.scale / dprE : T0.scale === 1 ? baseScale : Math.min(T0.scale, 1.25) / Math.min(1.5, dprE)); // phones: native px / scale (1.5x down on med)
-    if (pipe) { pipe.bloomEnabled = T0.bloom; pipe.grainEnabled = T0.grain; } if (glow) glow.isEnabled = T0.glow; if (typeof T !== 'undefined' && T) T.crowdMax = T0.crowd; window.__rw.tier = n; console.log('[rw] quality tier', n); }
+    if (pipe) { pipe.bloomEnabled = T0.bloom; pipe.grainEnabled = T0.grain; try { pipe.samples = n === 'high' && !isTouch ? 4 : 1; } catch (e) { } }
+    if (SSAO) { const on = n === 'high'; const M = scene.postProcessRenderPipelineManager; if (on && !SSAO._rwOn) M.attachCamerasToRenderPipeline('ssao', cam0); if (!on && SSAO._rwOn !== false) M.detachCamerasFromRenderPipeline('ssao', cam0); SSAO._rwOn = on; } if (glow) glow.isEnabled = T0.glow; if (typeof T !== 'undefined' && T) T.crowdMax = T0.crowd; window.__rw.tier = n; console.log('[rw] quality tier', n); }
   setTier(tier);
   const FLY = 26; let titleT0 = 0;
   const flyover = (s) => { const u = Math.min(1, Math.max(0, s / FLY)); const e = u < 0.5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2; const n = KP.length - 1, x = e * n, i = Math.min(n - 1, Math.floor(x)), f = x - i;
