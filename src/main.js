@@ -104,7 +104,7 @@ async function start() {
   T.root.setEnabled(false);
   const tGrid = new SegGrid(8); for (const s of T.segs) tGrid.add(s[0], s[1], s[2], s[3], 99);
   const LM = buildLandmarks(scene, city, city.grid); LM.root.parent = city.root;
-  city.templeDoor = ext.doorPos; const traffic = buildTraffic(scene, city, { low: LOW, stops: (city.sf && city.sf.stops) || [] }); bar(85);
+  city.templeDoor = ext.doorPos; const traffic = buildTraffic(scene, city, { low: LOW, stops: (city.sf && city.sf.stops) || [], signals: (city.sf && city.sf.signals) || [] }); bar(85);
   const route = makeRouter(buildGraph(city.roads, false)); let routeT = 0;
   // player
   const player = createAvatar(scene, { name: 'player', outfit: 'skate', fit: true });

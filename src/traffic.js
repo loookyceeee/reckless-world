@@ -89,9 +89,14 @@ function lightsVD(kind) { // headlights front (+z), tail lights back
   return merge(P);
 }
 
-export function buildTraffic(scene, city, { low = false, stops = [] } = {}) {
+export function buildTraffic(scene, city, { low = false, stops = [], signals = [] } = {}) {
   const R = rng(77);
   const G = buildGraph(city.roads, true), PG = buildGraph(city.roads, false);
+  // Real OSM traffic-signal nodes -> graph junction nodes (within 6 m). Two-phase cycle per junction: N-S then E-W.
+  const SIG = new Map(); { const cell = new Map(); for (const [id, p] of G.pos) { const k = Math.floor(p[0] / 12) + ',' + Math.floor(p[1] / 12); if (!cell.has(k)) cell.set(k, []); cell.get(k).push(id); }
+    for (const [x, z] of signals) { let best = null, bd = 6; const gx = Math.floor(x / 12), gz = Math.floor(z / 12);
+      for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) for (const id of cell.get((gx + i) + ',' + (gz + j)) || []) { const p = G.pos.get(id); const d = Math.hypot(p[0] - x, p[1] - z); if (d < bd) { bd = d; best = id; } }
+      if (best != null) SIG.set(best, ((x * 0.137 + z * 0.291) % 1 + 1) % 1 * 24); } }
   const bodyM = new StandardMaterial('carBody', scene); bodyM.specularColor = new Color3(0.45, 0.45, 0.5); bodyM.specularPower = 48; if (scene.__env) { bodyM.reflectionTexture = scene.__env; const f = new FresnelParameters(); f.bias = 0.08; f.power = 2; f.leftColor = new Color3(0.7, 0.7, 0.75); f.rightColor = new Color3(0.1, 0.1, 0.12); bodyM.reflectionFresnelParameters = f; }
   const lightM = new StandardMaterial('carLights', scene); lightM.disableLighting = true; lightM.emissiveColor = Color3.White();
   const COLS = ['#d64545', '#f2f2f2', '#2b2b30', '#3f6fd8', '#e7c33a', '#7d8a96', '#4e9a6b', '#b8b0a0', '#c2185b'].map(hex);
@@ -188,7 +193,7 @@ export function buildTraffic(scene, city, { low = false, stops = [] } = {}) {
     for (let tries = 0; tries < 60; tries++) { const a = PG.nodes[Math.floor(R() * PG.nodes.length)]; const q = PG.pos.get(a); const d = Math.hypot(q[0] - near.x, q[1] - near.z);
       if (d < 120 && d > 8) { const nb = PG.adj.get(a); setPedEdge(p, a, nb[Math.floor(R() * nb.length)]); p.s = R() * p.len; return; } }
   };
-  return { cars, parked, busStop, peds, G, PG, placeCar, setEdge, placePed, setPedEdge, barM, barM2, inited: false, R };
+  return { cars, parked, busStop, peds, G, PG, SIG, placeCar, setEdge, placePed, setPedEdge, barM, barM2, inited: false, R };
 }
 
 const tmp = new Vector3();
@@ -205,6 +210,10 @@ export function updateTraffic(T, dt, player, t) {
     for (const o of T.cars) { if (o === c) continue; const ox = o.node.position.x - cx, oz = o.node.position.z - cz; const ah = ox * ux + oz * uz; if (ah > 0 && ah < 9 && Math.abs(-ox * uz + oz * ux) < 1.6) { target = Math.min(target, Math.max(0, (ah - 5) * 1.5)); } }
     // corner slowdown
     if (c.len - c.s < 8) target = Math.min(target, c.max * 0.55);
+    // stop at red signals: 24 s cycle, N-S green 0-10 s, all-red 10-12, E-W green 12-22, all-red 22-24
+    if (T.SIG.has(c.b)) { const rem = c.len - c.s; if (rem < 22) { const ph = (t + T.SIG.get(c.b)) % 24, qa0 = G.pos.get(c.a), qb0 = G.pos.get(c.b);
+      const ns = Math.abs(qb0[1] - qa0[1]) >= Math.abs(qb0[0] - qa0[0]); const green = ns ? ph < 10 : (ph >= 12 && ph < 22);
+      if (!green && !(c.speed > 4 && rem < 4)) target = Math.min(target, Math.max(0, (rem - 7) * 0.9)); } }
     c.speed += (target - c.speed) * Math.min(1, dt * (target < c.speed ? 4 : 1.2));
     c.s += c.speed * dt;
     while (c.s >= c.len) {
