@@ -8,7 +8,7 @@ const ease = x => 1 - (1 - x) * (1 - x);
 export function createRapid({ scene, traffic, hud, app }) {
   const stops = traffic.rapid || [];
   const tp = traffic.tpl('bus', 'bus', Color3.FromHexString('#7e2a91'));
-  const node = new TransformNode('rapidBus', scene); const b = tp.b.createInstance('rapidBusBody'); b.parent = node; const l = tp.l.createInstance('rapidBusLights'); l.parent = node; node.setEnabled(false);
+  const node = new TransformNode('rapidBus', scene); const b = tp.b.createInstance('rapidBusBody'); b.parent = node; b.position.setAll(0); const l = tp.l.createInstance('rapidBusLights'); l.parent = node; l.position.setAll(0); node.setEnabled(false);
   const parkedBus = (traffic.parked || []).filter(p => p.kind === 'bus');
   const fade = document.createElement('div'); fade.id = 'rbFade'; fade.innerHTML = '<div class="rbcard"><small>RAPID BUS</small><b></b></div>'; document.body.appendChild(fade);
   let C = null; const tgt = new Vector3();
@@ -34,8 +34,8 @@ export function createRapid({ scene, traffic, hud, app }) {
       const k = Math.max(0, t - 3.4); placeBus(s, 32 * Math.pow(Math.min(1, k / 2.2), 2)); op = t < 3.4 ? 1 : Math.max(0, 1 - (t - 3.4) / 0.6); }
     fade.style.opacity = op.toFixed(3); fade.classList.toggle('on', op > 0.5);
     // wide kerbside shot: from the pavement ahead of the stop, looking back along the bus
-    const nx = s.sx - s.bx, nz = s.sz - s.bz, nl = Math.hypot(nx, nz) || 1;
-    cam.position.set(s.sx + s.ux * 14 + nx / nl * 2.5, 2.4, s.sz + s.uz * 14 + nz / nl * 2.5); tgt.set(node.position.x - s.ux * 3, 1.6, node.position.z - s.uz * 3); cam.setTarget(tgt); cam.fov = 0.85;
+    const kx = (s.sx + s.bx) / 2 + (s.sx - s.bx) * 0.15, kz = (s.sz + s.bz) / 2 + (s.sz - s.bz) * 0.15; // just on the kerb
+    cam.position.set(kx + s.ux * 15, 1.9, kz + s.uz * 15); tgt.set(node.position.x - s.ux * 4, 1.5, node.position.z - s.uz * 4); cam.setTarget(tgt); cam.fov = 0.8;
     if (t > 5.6) { C = null; node.setEnabled(false); parkedBus.forEach(p => p.node.setEnabled(true)); app.paused = false; app.cine = false; fade.style.opacity = '0'; fade.classList.remove('on'); }
     return true;
   };
