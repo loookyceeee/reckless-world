@@ -17,6 +17,6 @@ console.log('ready', ok, ((Date.now() - t0) / 1000).toFixed(1) + 's', await page
 console.log('transferred to ready', (bytes / 1e6).toFixed(2) + ' MB', big.join(', '));
 const tag = process.env.TAG || 'live';
 await page.screenshot({ path: `/tmp/rwx/${tag}-title.png` });
-if (ok) { await page.click('#play').catch(() => {}); await new Promise(r => setTimeout(r, 5000)); await page.screenshot({ path: `/tmp/rwx/${tag}-play.png` });
+if (ok) { await page.click('#play').catch(() => {}); await new Promise(r => setTimeout(r, +(process.env.WAIT || 5000))); await page.screenshot({ path: `/tmp/rwx/${tag}-play.png` });
   console.log('fps', await page.evaluate(() => window.__rw.scene.getEngine().getFps().toFixed(1))); }
 await browser.close();
