@@ -159,7 +159,7 @@ export function buildTraffic(scene, city, { low = false, stops = [], signals = [
   };
   const setEdge = (c, a, b) => {
     c.a = a; c.b = b; const pa = G.pos.get(a), pb = G.pos.get(b); c.len = Math.max(0.01, Math.hypot(pb[0] - pa[0], pb[1] - pa[1]));
-    const r = G.info.get(a + ',' + b); c.offset = r.o ? (r.ln > 1 ? r.w * 0.2 : 0) : Math.max(1.6, r.w / 4); c.road = r;
+    const r = G.info.get(a + ',' + b); c.offset = r.o ? (r.ln > 1 ? r.w * 0.2 : 0) : Math.max(1.6, r.w / 4); if (c.kind === 'bus' || c.kind === 'wagon') { const half = c.kind === 'bus' ? 1.6 : 1.45; c.offset = r.o ? Math.min(c.offset, Math.max(0, r.w / 2 - half)) : Math.max(1.35, Math.min(c.offset, r.w / 2 - half)); } c.road = r; /* big vehicles keep clear of the kerb */
   };
   // parked cars along kerbs, a black-taxi rank and a bus waiting at a real stop
   const parked = []; let busStop = null;
@@ -172,7 +172,7 @@ export function buildTraffic(scene, city, { low = false, stops = [], signals = [
   { const near = (x, z) => { let best = null, bd = 1e9; for (const r of city.roads) { if (!r.d || r.t === 'service') continue; for (let i = 0; i < r.pts.length - 1; i++) { const a = r.pts[i], b = r.pts[i + 1]; const dx = b[0] - a[0], dz = b[1] - a[1], L = Math.hypot(dx, dz); if (L < 16) continue; const t = Math.max(0.2, Math.min(0.8, ((x - a[0]) * dx + (z - a[1]) * dz) / (L * L))); const px = a[0] + dx * t, pz = a[1] + dz * t; const d = Math.hypot(px - x, pz - z); if (d < bd) { bd = d; best = { px, pz, ux: dx / L, uz: dz / L, w: r.w, L }; } } } return best; };
     const tp = city.templeDoor; if (tp) { const s = near(tp.x + 30, tp.z - 10); if (s) for (let k = 0; k < 3; k++) park('cab', 'cab', hex('#121214'), s.px - s.ux * k * 5.4 - s.uz * (s.w / 2 - 1.1), s.pz - s.uz * k * 5.4 + s.ux * (s.w / 2 - 1.1), Math.atan2(s.ux, s.uz), { lights: true }); }
     const ref = tp || { x: 0, z: 0 }; let stop = null, sd = 1e9; for (const st of stops) { const d = Math.hypot(st[0] - ref.x, st[1] - ref.z); if (d < sd) { sd = d; stop = st; } }
-    if (stop) { const s = near(stop[0], stop[1]); if (s) { const bx = s.px - s.uz * (s.w / 2 - 1.5), bz = s.pz + s.ux * (s.w / 2 - 1.5); park('bus', 'bus', hex('#7e2a91'), bx, bz, Math.atan2(s.ux, s.uz), { lights: true }); busStop = { x: bx - s.uz * 3.2, z: bz + s.ux * 3.2, h: Math.atan2(s.ux, s.uz) }; } } }
+    if (stop) { const s = near(stop[0], stop[1]); if (s) { const bx = s.px - s.uz * (s.w / 2 - 1.65), bz = s.pz + s.ux * (s.w / 2 - 1.65); park('bus', 'bus', hex('#7e2a91'), bx, bz, Math.atan2(s.ux, s.uz), { lights: true }); busStop = { x: bx - s.uz * 3.2, z: bz + s.ux * 3.2, h: Math.atan2(s.ux, s.uz) }; } } }
   if (busStop) { // bus shelter with a lit Reckless ad panel
     const shM = new StandardMaterial('shelter', scene); shM.diffuseColor = new Color3(1, 1, 1); shM.specularColor = new Color3(0.4, 0.4, 0.4);
     const sh = toMesh('busShelter', merge([color(xf(box(3.6, 0.08, 1.5), { t: [0, 2.5, 0] }), hex('#30343c')), ...[-1.75, 1.75].map(x => color(xf(box(0.08, 2.5, 0.08), { t: [x, 1.25, -0.65] }), hex('#30343c'))), color(xf(box(3.5, 2.1, 0.03), { t: [0, 1.25, -0.7] }), hex('#8fa4b8')), color(xf(box(2.2, 0.08, 0.4), { t: [0, 0.5, -0.45] }), hex('#30343c'))]), scene, shM);
