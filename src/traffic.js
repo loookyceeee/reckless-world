@@ -251,7 +251,8 @@ export function updateTraffic(T, dt, player, t) {
     c.s += c.speed * dt;
     while (c.s >= c.len) {
       c.s -= c.len; const nb = (G.adj.get(c.b) || []).filter(n => n !== c.a);
-      const next = nb.length ? nb[Math.floor(T.R() * nb.length)] : (G.adj.get(c.b) || [c.a])[0];
+      const out = G.adj.get(c.b) || []; const next = nb.length ? nb[Math.floor(T.R() * nb.length)] : out[0];
+      if (next == null || !G.info.has(c.b + ',' + next)) { T.placeCar(c, player); break; } // dead-end one-way: respawn near the player instead of throwing
       T.setEdge(c, c.b, next);
     }
     const qa = G.pos.get(c.a), qb = G.pos.get(c.b); const vx = (qb[0] - qa[0]) / c.len, vz = (qb[1] - qa[1]) / c.len; const f = c.s;
