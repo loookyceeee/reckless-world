@@ -32,7 +32,7 @@ import '@babylonjs/core/Animations/animatable';
 import { buildCity, updateCity } from './city.js';
 import { chunkStatic, freezeMaterials, TIERS } from './perf.js';
 import { buildSky, applyWet } from './sky.js';
-import { buildFlavour } from './flavour.js';
+import { buildFlavour, buildWetStreaks } from './flavour.js';
 import { buildTempleExterior, updateTempleExterior, buildTempleInterior, setTempleMode, updateTempleInterior, INTERIOR_ORIGIN } from './temple.js';
 import { createAvatar, animateAvatar, OUTFITS, loadAnims, bakeCrowdVariants } from './character.js';
 import { buildGraph, buildTraffic, updateTraffic } from './traffic.js';
@@ -128,7 +128,7 @@ async function start() {
     const s = toMesh('whSign', plane(9, 1.7), scene, sm); s.position.set(whDoor.wx + whDoor.nx * 0.3, 6.5, whDoor.wz + whDoor.nz * 0.3); s.rotation.y = Math.atan2(-whDoor.nx, -whDoor.nz); s.parent = city.root; }
   { const sm = new StandardMaterial('tSign', scene); sm.emissiveTexture = signTex('THE TEMPLE'); sm.disableLighting = true; sm.backFaceCulling = false;
     const s = toMesh('tSign', plane(6, 1.1), scene, sm); s.position.set(ext.doorPos.x, 4.6, ext.doorPos.z); s.position.addInPlace(new Vector3(Math.sin(ext.yaw), 0, Math.cos(ext.yaw)).scale(0.9)); s.rotation.y = ext.yaw; s.parent = city.root; }
-  const FL = buildFlavour(scene, city, { low: LOW });
+  const FL = buildFlavour(scene, city, { low: LOW }); const WET = buildWetStreaks(scene, city.sf && city.sf.lamps, { low: LOW });
   // posters: snap each spot to the nearest wall
   const posterM = new StandardMaterial('poster', scene); posterM.emissiveTexture = signTex('RECKLESS', 512, 720); posterM.disableLighting = true;
   { const c = posterM.emissiveTexture.getContext(); c.fillStyle = '#000'; c.fillRect(0, 0, 512, 720); const img = new Image(); img.src = import.meta.env.BASE_URL + 'img/logo.png'; await img.decode().catch(() => {}); c.drawImage(img, 56, 140, 400, 347); c.fillStyle = '#fff'; c.font = '800 54px Unbounded'; c.textAlign = 'center'; c.fillText('RECKLESS', 256, 580); c.font = '600 30px "DM Sans"'; c.fillText('BELFAST · THE TEMPLE', 256, 640); posterM.emissiveTexture.update(); }
@@ -170,7 +170,7 @@ async function start() {
   const fadeTo = async (fn) => { hud.fade(true); await new Promise(r => setTimeout(r, 380)); await fn(); await new Promise(r => setTimeout(r, 120)); hud.fade(false); };
   const cityLights = [hemi, moon, ext.light];
   const enterTemple = async () => fadeTo(() => {
-    app.inside = true; city.root.setEnabled(false); SKY.sky.setEnabled(false); FL.setEnabled(false); traffic.cars.forEach(c => c.node.setEnabled(false)); traffic.parked.forEach(c => c.node.setEnabled(false)); traffic.peds.forEach(p => p.av.root.setEnabled(false));
+    app.inside = true; city.root.setEnabled(false); SKY.sky.setEnabled(false); FL.setEnabled(false); WET.setEnabled(false); traffic.cars.forEach(c => c.node.setEnabled(false)); traffic.parked.forEach(c => c.node.setEnabled(false)); traffic.peds.forEach(p => p.av.root.setEnabled(false));
     cityLights.forEach(l => l.setEnabled(false)); Object.values(T.lights).forEach(l => l.setEnabled(true)); T.root.setEnabled(true); if (glow) glow.intensity = 0.55; if (pipe) pipe.imageProcessing.exposure = 2.0;
     setTempleMode(T, scene, Q.get('lights') === 'day' ? 'day' : 'rave'); hud.interior(true, T.mode);
     P.x = T.spawn.x; P.z = T.spawn.z; P.heading = 0; C.yaw = 0; C.pitch = 0.16; C.dist = 4.6; C.curDist = 4.6; // hero view: the chancel arch
@@ -178,7 +178,7 @@ async function start() {
   });
   const exitTemple = async () => fadeTo(async () => {
     app.inside = false; T.root.setEnabled(false); Object.values(T.lights).forEach(l => l.setEnabled(false)); cityLights.forEach(l => l.setEnabled(true)); if (glow) glow.intensity = 0.7; if (pipe) pipe.imageProcessing.exposure = 1.4;
-    city.root.setEnabled(true); SKY.sky.setEnabled(true); FL.setEnabled(true); traffic.cars.forEach(c => c.node.setEnabled(true)); traffic.parked.forEach(c => c.node.setEnabled(true)); traffic.peds.forEach(p => { p.av.root.setEnabled(true); p._on = undefined; });
+    city.root.setEnabled(true); SKY.sky.setEnabled(true); FL.setEnabled(true); WET.setEnabled(true); traffic.cars.forEach(c => c.node.setEnabled(true)); traffic.parked.forEach(c => c.node.setEnabled(true)); traffic.peds.forEach(p => { p.av.root.setEnabled(true); p._on = undefined; });
     scene.clearColor = NIGHT; scene.fogDensity = 0.0028; scene.fogColor = new Color3(0.1, 0.105, 0.17); hud.interior(false);
     P.x = ext.doorPos.x - Math.sin(ext.yaw) * 2.5; P.z = ext.doorPos.z - Math.cos(ext.yaw) * 2.5; P.heading = ext.yaw + Math.PI; C.yaw = P.heading; C.pitch = 0.2; C.dist = 6.2;
     await EV.raveExit();
@@ -272,7 +272,7 @@ async function start() {
       const tv = VENUES[0]; state.objective = app.inside ? '' : `▲ THE TEMPLE <b>${Math.round(Math.hypot(P.x - ext.doorPos.x, P.z - ext.doorPos.z))}M</b>`; }
     hud.update(dt, { x: P.x, z: P.z, heading: P.heading, camYaw: C.yaw, inside: app.inside, lx: P.x - INTERIOR_ORIGIN.x, lz: P.z - INTERIOR_ORIGIN.z, ...state });
     fpsT += dt; if (fpsT > 0.5) { fpsT = 0; hud.fps(Math.round(engine.getFps())); }
-    cullT -= dt; if (culler && cullT <= 0 && !app.inside) { cullT = 0.25; culler.setDist(app.title ? 900 : TIERS[tier].dist); culler.update(cam.position); const pd = TIERS[tier].dist * 0.3; for (const p of traffic.peds) { const on = Math.hypot(p.av.root.position.x - cam.position.x, p.av.root.position.z - cam.position.z) < pd; if (p._on !== on) { p._on = on; p.av.root.setEnabled(on); } } }
+    cullT -= dt; if (culler && cullT <= 0 && !app.inside) { cullT = 0.25; culler.setDist(app.title ? 900 : TIERS[tier].dist); culler.update(cam.position); WET.update(cam.position); const pd = TIERS[tier].dist * 0.3; for (const p of traffic.peds) { const on = Math.hypot(p.av.root.position.x - cam.position.x, p.av.root.position.z - cam.position.z) < pd; if (p._on !== on) { p._on = on; p.av.root.setEnabled(on); } } }
     if (!app.title && !app.inside && autoTier) { tierT += engine.getDeltaTime() / 1000; tierF.push(engine.getFps()); if (tierT > 4) { const avg = tierF.reduce((a, b) => a + b, 0) / tierF.length; tierF = []; tierT = 0;
       const order = ['low', 'med', 'high'], i = order.indexOf(tier); if (avg < 24 && i > 0) setTier(order[i - 1]); else if (avg > 55 && i < 2 && !tierUp) { tierUp = true; setTier(order[i + 1]); } } }
   });

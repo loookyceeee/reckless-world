@@ -50,3 +50,28 @@ export function buildFlavour(scene, city, { low = false, parent = null } = {}) {
   out.setEnabled = (on) => { out.signs.forEach(s => s.mesh.setEnabled(on)); out.steam.forEach(s => on ? s.ps.start() : s.ps.stop()); };
   return out;
 }
+
+// wet-pavement reflections: stretched additive streaks under nearby street lamps, turned toward the camera each tick
+import { Mesh } from '@babylonjs/core/Meshes/mesh';
+import { Matrix, Quaternion } from '@babylonjs/core/Maths/math.vector';
+import { CreatePlaneVertexData } from '@babylonjs/core/Meshes/Builders/planeBuilder';
+export function buildWetStreaks(scene, lamps, { low = false } = {}) {
+  if (!lamps || !lamps.length) return { update() {}, setEnabled() {} };
+  const T = new DynamicTexture('wetStreakT', { width: 64, height: 256 }, scene, true); { const g = T.getContext(); const img = g.createImageData(64, 256);
+    for (let y = 0; y < 256; y++) for (let x = 0; x < 64; x++) { const u = Math.abs(x - 31.5) / 32, v = y / 255; const a = Math.pow(Math.max(0, 1 - u), 2.2) * Math.pow(Math.sin(Math.PI * v), 1.3) * (0.75 + 0.25 * Math.sin(y * 0.9 + x * 0.3)); const i = (y * 64 + x) * 4; img.data[i] = img.data[i + 1] = img.data[i + 2] = 255; img.data[i + 3] = Math.min(255, a * 255); }
+    g.putImageData(img, 0, 0); T.hasAlpha = true; T.update(); }
+  const mk = (name, col) => { const m = new StandardMaterial(name, scene); m.diffuseTexture = T; m.useAlphaFromDiffuseTexture = true; m.emissiveColor = col; m.disableLighting = true; m.alphaMode = 1; m.backFaceCulling = false; m.disableDepthWrite = true; m.diffuseColor = Color3.Black();
+    const vd = CreatePlaneVertexData({ width: 1, height: 1 }); const me = new Mesh(name, scene); vd.applyToMesh(me); me.material = m; me.isPickable = false; me.alwaysSelectAsActiveMesh = true; me.thinInstanceSetBuffer('matrix', new Float32Array(16 * 64), 16, false); me.thinInstanceCount = 0; return me; };
+  const led = mk('wetLED', new Color3(0.75, 0.8, 0.95)), sod = mk('wetSod', new Color3(1.0, 0.56, 0.2));
+  const maxN = low ? 16 : 40, R = 70, mat = new Matrix(), q = new Quaternion(), s = new Vector3(), p = new Vector3();
+  let on = true;
+  return {
+    setEnabled(v) { on = v; led.setEnabled(v); sod.setEnabled(v); },
+    update(cam) { if (!on) return; const near = []; for (const L of lamps) { const dx = L[0] - cam.x, dz = L[1] - cam.z, d2 = dx * dx + dz * dz; if (d2 < R * R && d2 > 4) near.push([d2, L]); } near.sort((a, b) => a[0] - b[0]);
+      let nl = 0, ns = 0; const bl = led._thinInstanceDataStorage.matrixData, bs = sod._thinInstanceDataStorage.matrixData;
+      for (const [d2, L] of near.slice(0, maxN)) { const d = Math.sqrt(d2), ux = (cam.x - L[0]) / d, uz = (cam.z - L[1]) / d; const len = Math.min(9, 3 + d * 0.12), wd = 0.7 + d * 0.012;
+        Quaternion.FromEulerAnglesToRef(Math.PI / 2, Math.atan2(ux, uz), 0, q); s.set(wd, len, 1); p.set(L[0] + ux * (len / 2 + 0.6), 0.015, L[1] + uz * (len / 2 + 0.6)); Matrix.ComposeToRef(s, q, p, mat);
+        if (L[3]) { mat.copyToArray(bl, nl * 16); nl++; } else { mat.copyToArray(bs, ns * 16); ns++; } }
+      led.thinInstanceCount = nl; sod.thinInstanceCount = ns; led.thinInstanceBufferUpdated('matrix'); sod.thinInstanceBufferUpdated('matrix'); },
+  };
+}
