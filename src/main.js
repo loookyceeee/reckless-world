@@ -77,7 +77,7 @@ function gpuName(engine) { try { const gl = engine._gl; const ext = gl.getExtens
 async function start() {
   const canvas = document.getElementById('c');
   const bar = (p) => { const b = document.getElementById('lbar'); if (b) b.style.width = p + '%'; };
-  DG.info.stage = 'engine'; const engine = await makeEngine(canvas); bar(15); DG.info.engine = engine.__kind; DG.info.gpu = gpuName(engine); DG.log('engine', engine.__kind, DG.info.gpu);
+  DG.info.stage = 'engine'; const engine = await makeEngine(canvas); if (Q.has('novao')) engine.disableVertexArrayObjects = true; bar(15); DG.info.engine = engine.__kind; DG.info.gpu = gpuName(engine); DG.log('engine', engine.__kind, DG.info.gpu);
   engine.onContextLostObservable && engine.onContextLostObservable.add(() => { console.error('WebGL context lost'); DG.show('graphics context lost'); });
   engine.setHardwareScalingLevel(SAFE ? 2 : LOW ? 1.5 : 1 / Math.min(1.5, devicePixelRatio || 1));
   const scene = new Scene(engine); scene.skipPointerMovePicking = true;
