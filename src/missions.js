@@ -38,7 +38,7 @@ export function createMissions(ctx) {
       let gx = tgt.x, gz = tgt.z, v = sp;
       const dP = Math.hypot(tgt.x - n.x, tgt.z - n.z);
       if (ch.path && ch.path.length > 1 && dP > 12) { while (ch.i < ch.path.length - 1 && Math.hypot(ch.path[ch.i][0] - n.x, ch.path[ch.i][1] - n.z) < 3) ch.i++; gx = ch.path[ch.i][0]; gz = ch.path[ch.i][1]; }
-      else v = Math.min(sp, Math.max(0, dP - 2.2) * 1.2); // cut off and stop beside the player, never ram
+      else v = Math.min(sp, Math.max(0, dP - 3.0) * 2.2); // cut off and stop beside the player, never ram
       if (H.hidden > 0 && dP < 6) v = 0;
       const dx = gx - n.x, dz = gz - n.z, d = Math.hypot(dx, dz) || 1; const h = Math.atan2(dx, dz); let dh = h - c.heading; while (dh > Math.PI) dh -= 2 * Math.PI; while (dh < -Math.PI) dh += 2 * Math.PI;
       c.heading += dh * Math.min(1, dt * 4); c.node.rotation.y = c.heading; c.speed = v; const step = Math.min(d, v * dt); n.x += Math.sin(c.heading) * step; n.z += Math.cos(c.heading) * step; }
@@ -53,7 +53,7 @@ export function createMissions(ctx) {
     else { H.inView = 0; H.hidden += inside ? dt * (H.hidden > 4 ? 6 : 1) : dt; if (H.hidden >= HIDE[H.level]) return clearHeat(); }
     driveChasers(dt);
     // caught: a patrol within 3 m (stopped beside you) for 1.2 s
-    if (!inside && H.chasers.some(c => near(c.node.position, P) < 3.2)) { H.caughtT += dt; if (H.caughtT > 1.2) caught(); } else H.caughtT = Math.max(0, H.caughtT - dt);
+    if (!inside && H.chasers.some(c => near(c.node.position, P) < 3.7)) { H.caughtT += dt; if (H.caughtT > 1.2) caught(); } else H.caughtT = Math.max(0, H.caughtT - dt);
   }
   function caught() {
     const wasRun = PR.state === 'running', wasFly = FD.state === 'running';
@@ -70,7 +70,7 @@ export function createMissions(ctx) {
     if (PR.state === 'running' || PR.state === 'intro') { hud.toast('POSTER RUN ALREADY ON'); return false; }
     if (FD.state === 'running' || FD.state === 'pickup') { hud.toast('FINISH THE FLYER DROP FIRST'); return false; }
     if (!left().length) { hud.note({ title: 'ALL WALLS UP TODAY', body: 'Every wall has a poster. Come back tomorrow (walls reset at midnight, London time).' }); return false; }
-    PR.state = 'intro'; PR.queued = 0; PR.blocked = ''; PR.t0 = tNow; PR.n0 = ctx.posters.length - left().length; H.seenRun = false;
+    PR.state = 'intro'; PR.queued = 0; PR.blocked = ''; PR.nb = 0; PR.t0 = tNow; PR.n0 = ctx.posters.length - left().length; H.seenRun = false;
     hud.mtitle({ kicker: 'NEW ACTIVITY · HEAT RISK', title: 'POSTER RUN', red: true });
     setTimeout(() => { if (PR.state !== 'intro') return; PR.state = 'running'; routeNext(); }, 2600);
     return true;
@@ -79,11 +79,11 @@ export function createMissions(ctx) {
     // patrol in view of the paste raises heat (twice while seen = heat 2)
     if (!ctx.inside() && patrols().some(c => coneSees(c))) raise(H.level >= 1 ? 2 : 1, 'Pasting in front of a patrol. Move on, now.');
     if (PR.state !== 'running') return false;
-    if (ev && !ev.blocked) PR.queued++; else if (ev && ev.blocked) PR.blocked = ev.blocked;
+    if (ev && !ev.blocked) PR.queued++; else if (ev && ev.blocked) { PR.blocked = ev.blocked; PR.nb++; }
     const w = routeNext();
     if (!w) {
       PR.state = 'done'; ctx.setDest(null); const tot = ctx.posters.length;
-      const lines = [`POSTERS ${tot} / ${tot}`, PR.queued ? `TEST EVENT QUEUED × ${PR.queued}` : (PR.blocked ? PR.blocked.toUpperCase() : 'SIGN IN WITH YOUR CREW EMAIL TO QUEUE POSTER EVENTS'), `TIME ${fmt(tNow - PR.t0)}`];
+      const lines = [`POSTERS ${tot} / ${tot}`]; if (PR.queued) lines.push(`TEST EVENT QUEUED × ${PR.queued}`); if (PR.nb) lines.push(`${PR.nb} OVER TODAY'S LIMIT · NOT QUEUED`); if (!PR.queued && !PR.nb) lines.push('SIGN IN WITH YOUR CREW EMAIL TO QUEUE POSTER EVENTS'); lines.push(`TIME ${fmt(tNow - PR.t0)}`);
       if (!H.seenRun) lines.push('UNSEEN ✓');
       hud.stamp({ title: 'WALLS DONE', sub: 'POSTER RUN', lines });
     } else hud.toast(`POSTER UP · ${ctx.posters.length - left().length} / ${ctx.posters.length}${ev && !ev.blocked ? ' · TEST EVENT QUEUED' : ''}`);
@@ -112,9 +112,9 @@ export function createMissions(ctx) {
   }
   function pickUp() {
     FD.state = 'running'; FD.done = [];
-    // clock from a nearest-neighbour tour of the drops at a brisk jog (road factor 1.35), +45 s grace; rapid bus counts
+    // clock from a nearest-neighbour tour of the drops at a mostly-sprinted pace (road factor 1.3, 6 m/s), +40 s grace; the rapid bus counts
     let at = { x: P.x, z: P.z }, L = ctx.drops.slice(), dist = 0; while (L.length) { L.sort((a, b) => near(a, at) - near(b, at)); dist += near(L[0], at); at = L.shift(); }
-    FD.total = Math.round((dist * 1.35 / 4.2 + 45) / 5) * 5; FD.left = FD.total; FD.t0 = tNow; ctx.buzz([20, 40, 20]);
+    FD.total = Math.round((dist * 1.3 / 6.0 + 40) / 5) * 5; FD.left = FD.total; FD.t0 = tNow; ctx.buzz([20, 40, 20]);
     hud.toast('FLYERS IN HAND · ' + fmt(FD.total)); routeDrop();
   }
   function drop(d) {
@@ -126,7 +126,7 @@ export function createMissions(ctx) {
   }
   // ---------- per frame ----------
   return {
-    H, PR, FD, startPosterRun, startFlyers, cancel, onPaste, caught, clearHeat, raise,
+    H, PR, FD, startPosterRun, startFlyers, cancel, onPaste, caught, clearHeat, raise, pickup: ctx.pickup, drops: ctx.drops,
     active: () => PR.state === 'running' || PR.state === 'intro' ? 'pr' : (FD.state === 'running' || FD.state === 'pickup') ? 'fd' : null,
     update(dt) {
       tNow += dt; updateHeat(dt);
