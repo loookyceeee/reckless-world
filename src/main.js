@@ -32,6 +32,7 @@ import '@babylonjs/core/Animations/animatable';
 import { buildCity, updateCity } from './city.js';
 import { chunkStatic, freezeMaterials, TIERS } from './perf.js';
 import { buildSky, applyWet } from './sky.js';
+import { createAudio } from './audio.js';
 import { buildFlavour, buildWetStreaks } from './flavour.js';
 import { buildTempleExterior, updateTempleExterior, buildTempleInterior, setTempleMode, updateTempleInterior, INTERIOR_ORIGIN } from './temple.js';
 import { createAvatar, animateAvatar, OUTFITS, loadAnims, bakeCrowdVariants } from './character.js';
@@ -146,7 +147,7 @@ async function start() {
   hud.setLive(app.live);
   // ---------- input ----------
   const K = app.keys;
-  addEventListener('keydown', (e) => { if (e.target.tagName === 'INPUT') return; K.add(e.code); const k = e.key.toLowerCase(); if ('emfopcl'.includes(k) && k.length === 1) app.key(k); if (e.code === 'Escape') hud.close(); });
+  addEventListener('keydown', (e) => { if (e.target.tagName === 'INPUT') return; K.add(e.code); const k = e.key.toLowerCase(); if ('emfopcln'.includes(k) && k.length === 1) app.key(k); if (e.code === 'Escape') hud.close(); });
   addEventListener('keyup', (e) => K.delete(e.code));
   let drag = null; const stick = { id: null, x: 0, y: 0, ox: 0, oy: 0 }; const look = { id: null, x: 0, y: 0 };
   canvas.addEventListener('pointerdown', (e) => {
@@ -183,7 +184,10 @@ async function start() {
     P.x = ext.doorPos.x - Math.sin(ext.yaw) * 2.5; P.z = ext.doorPos.z - Math.cos(ext.yaw) * 2.5; P.heading = ext.yaw + Math.PI; C.yaw = P.heading; C.pitch = 0.2; C.dist = 6.2;
     await EV.raveExit();
   });
+  const AU = createAudio(); const sndLbl = () => { const b = document.getElementById('sndBtn'); if (b) b.textContent = 'SOUND: ' + (AU.on ? 'ON' : 'OFF'); };
+  addEventListener('pointerdown', () => { if (!app.title) { AU.unlock(); sndLbl(); } }, { once: false });
   app.key = (k) => {
+    if (k === 'n') { AU.toggle(); sndLbl(); return; }
     if (k === 'c') { if (hud.isOpen()) return hud.close(); hud.openCredits(`<button id="exp">EXPORT TEST EVENTS (${EV.queue().length})</button><button id="livebtn">RAVE MODE: ${app.live ? 'ON' : 'OFF'}</button>`);
       document.getElementById('exp').onclick = () => EV.exportQueue(); document.getElementById('livebtn').onclick = (e) => { app.live = !app.live; hud.setLive(app.live); e.target.textContent = 'RAVE MODE: ' + (app.live ? 'ON' : 'OFF'); }; return; }
     if (k === 'm') { if (hud.isOpen()) return hud.close(); return hud.openMap(P); }
@@ -268,6 +272,7 @@ async function start() {
     hud.prompt(interact ? interact.label : '');
     // HUD
     slowT -= dt; if (slowT <= 0) { slowT = 0.5; if (app.inside) EV.raveTick().then(ev => ev && hud.toast('10 MINUTES IN · TEST VISIT QUEUED')); state.street = app.inside ? 'THE TEMPLE' : nearestStreet(); state.district = app.inside ? (T.mode === 'day' ? 'NAVE · DAYLIGHT' : 'NAVE · RAVE') : nearestDistrict();
+      AU.update({ inside: app.inside, dist: Math.hypot(P.x - ext.doorPos.x, P.z - ext.doorPos.z) });
       routeT -= 0.5; if (routeT <= 0 && !app.inside) { routeT = 1.5; state.route = route(P.x, P.z, ext.doorPos.x, ext.doorPos.z); } if (app.inside) state.route = null;
       const tv = VENUES[0]; state.objective = app.inside ? '' : `▲ THE TEMPLE <b>${Math.round(Math.hypot(P.x - ext.doorPos.x, P.z - ext.doorPos.z))}M</b>`; }
     hud.update(dt, { x: P.x, z: P.z, heading: P.heading, camYaw: C.yaw, inside: app.inside, lx: P.x - INTERIOR_ORIGIN.x, lz: P.z - INTERIOR_ORIGIN.z, ...state });
@@ -284,7 +289,7 @@ async function start() {
   document.getElementById('loading').classList.add('done'); bar(100);
   if (!Q.has('debug') && !Q.has('fps')) { const f = document.getElementById('fps'); if (f) f.style.display = 'none'; }
   hud.hud.classList.add('titlehide'); titleT0 = t; document.getElementById('title').classList.add('ready');
-  const startGame = () => { if (!app.title) return; const ti = document.getElementById('title'); ti.classList.add('gone'); app.title = false; camSnap = true; hud.hud.classList.remove('titlehide'); removeEventListener('keydown', anyKey); };
+  const startGame = () => { if (!app.title) return; const ti = document.getElementById('title'); ti.classList.add('gone'); app.title = false; camSnap = true; hud.hud.classList.remove('titlehide'); removeEventListener('keydown', anyKey); if (!Q.has('mute')) { AU.unlock(); sndLbl(); } };
   const anyKey = (e) => { if (app.title) startGame(); }; addEventListener('keydown', anyKey);
   document.getElementById('play').onclick = startGame; document.getElementById('title').addEventListener('pointerdown', (e) => { if (document.getElementById('title').classList.contains('ready')) startGame(); });
   if (isTouch) document.getElementById('play').textContent = 'TAP TO ENTER';

@@ -50,7 +50,7 @@ export function createHUD(app) {
   <div class="mapwrap"><canvas id="minimap" width="220" height="220"></canvas><div class="street" id="street"></div><div class="district" id="district"></div></div>
   <div class="prompt" id="prompt"></div>
   <div class="toast" id="toast"></div>
-  <div class="btns"><button data-k="m">MAP</button><button data-k="o">WARDROBE</button><button data-k="f">DANCE</button><button data-k="p">PHOTO</button><button data-k="c">CREDITS</button><button data-k="l" id="lightsBtn" class="hide">LIGHTS: RAVE</button></div>
+  <div class="btns"><button data-k="m">MAP</button><button data-k="o">WARDROBE</button><button data-k="f">DANCE</button><button data-k="p">PHOTO</button><button data-k="c">CREDITS</button><button data-k="n" id="sndBtn">SOUND: OFF</button><button data-k="l" id="lightsBtn" class="hide">LIGHTS: RAVE</button></div>
   <div class="touch" id="touch"><div class="stick" id="stick"><div class="nub" id="nub"></div></div><button class="tbtn run" id="tRun">RUN</button><button class="tbtn act" id="tAct">E</button></div>
   <div class="fade" id="fade"></div>`;
   const $ = (id) => hud.querySelector('#' + id);
@@ -147,12 +147,13 @@ export function createHUD(app) {
       <p><b>LIDAR</b> Belfast City LIDAR is provided by the Department for Infrastructure (Rivers) with the permission of the copyright owner, Cyient Europe Limited, and licensed under the Open Government Licence v3.0.</p>
       <p><b>OPEN DATA</b> Contains DfI Roads street lighting and crossing data, Belfast City Council trees data and Translink route data, all under the Open Government Licence v3.0 via OpenDataNI.</p>
       <p><b>ANIMATION</b> Quaternius Universal Animation Library (CC0), retargeted to the Reckless avatar. Other CC0 assets: Kenney, Quaternius, Poly Haven, ambientCG.</p>
+      <p><b>SKY &amp; SOUND</b> Night reflections from the Poly Haven HDRI “Cobblestone Street Night” (CC0). Night sky, city ambience and the 140 BPM Temple beat are generated in the browser (original, no samples). Shop names are invented.</p>
       <p><b>ENGINE</b> Babylon.js (Apache-2.0) · earcut (ISC) · Vite (MIT)</p>
       <p><b>FONTS</b> Unbounded and DM Sans (SIL Open Font License, via Fontsource)</p>
       <p><b>CHARACTER</b> Clay avatar built for Reckless Raves from the canonical Crew avatar art. Outfits approximate RCKLS Clothing Drop 018.</p>
       <p><b>THE TEMPLE</b> Interior modelled from Reckless Raves reference photos.</p>
       <p><b>VEHICLES</b> Patrol vehicles are fictional. No real police force, wordmark, emblem or manufacturer badge is depicted.</p>
-      <p class="fine">CONTROLS: WASD / ARROWS MOVE · SHIFT RUN · DRAG TO LOOK · WHEEL ZOOM · E INTERACT · F DANCE · M MAP · O WARDROBE · P PHOTO · L TEMPLE LIGHTS</p>
+      <p class="fine">CONTROLS: WASD / ARROWS MOVE · SHIFT RUN · DRAG TO LOOK · WHEEL ZOOM · E INTERACT · F DANCE · M MAP · O WARDROBE · P PHOTO · L TEMPLE LIGHTS · N SOUND</p>
       <div class="row">${extra || ''}</div>`);
     },
     open,
