@@ -4,7 +4,12 @@
 // READ-ONLY against the Crew API: GET /api/crew only. Never PUT, never XP, never codes.
 const B = () => import.meta.env.BASE_URL + 'crew/';
 export const API = 'https://reckless-raves-api-30is.onrender.com';
-export const RANKS = [0, 200, 500, 1000, 1800, 2800, 4500, 6500, 9000, 13000, 18000, 24000, 32000, 42000, 55000];
+// ---- crew rules: owned by RECKLESS CREW LOYALTY. Ranks are being redesigned (~500 XP per ticket); swap the numbers here only. ----
+export const CREW_RULES = {
+  RANKS: [0, 200, 500, 1000, 1800, 2800, 4500, 6500, 9000, 13000, 18000, 24000, 32000, 42000, 55000], // xp_to_enter for levels 1..15
+  SIGNED_OUT_LEVEL: 1, // signed-out players (and signed-in before the crew loads) only get L1 pieces
+};
+export const RANKS = CREW_RULES.RANKS;
 export const levelFor = (xp) => { let l = 1; RANKS.forEach((x, i) => { if (xp >= x) l = i + 1; }); return l; };
 // col = colour sampled from the app render for the in-world 3D figure; kind = which 3D garment shape.
 const W = (id, name, slot, level, icon, look, withJeans, col, kind) => ({ id, name, slot, level, icon, look, withJeans, col, kind });
@@ -33,6 +38,7 @@ export const WARDROBE = [
   W('rcklstv-jersey', 'RCKLSTV JERSEY', 'top', 15, 'icon-jersey', 'jersey', 'jersey', '#dfddde', 'tee'),
   W('mesh-jersey', 'MESH JERSEY', 'top', 15, 'icon-mesh', 'mesh', 'mesh', '#932822', 'tee'),
 ];
+export const EMPTY_FIT = { top: null, outer: null, legs: null };
 export const gearById = (id) => (id && WARDROBE.find(p => p.id === id)) || null;
 export const img = (name) => B() + name + '.webp';
 /** Drop 018 product photo for a wardrobe piece (from the app's shop assets, 256 px webp). */
@@ -54,8 +60,13 @@ export function visibleFor(top, outer, legs) {
   if (piece) return { upper: piece, lower: piece.withJeans === piece.look ? jeans : null };
   return { upper: null, lower: leg };
 }
-export const EMPTY_FIT = { top: null, outer: null, legs: null };
-export const DEFAULT_FIT = { top: 'skate-tee', outer: null, legs: 'barrel-jeans' };
+// default fit must be L1-only. Drop 018 has no L1 garment (lowest: Skate Tee L2, See Me Shorts L3, Barrel Jeans L5), so the
+// L1 look is the app's own base-body render, exactly what a new L1 crew member sees in the app.
+export const DEFAULT_FIT = { top: null, outer: null, legs: null };
+/** Current crew level: signed out / not loaded = SIGNED_OUT_LEVEL; otherwise from Crew XP (read-only). */
+export const playerLevel = (xp) => xp == null ? CREW_RULES.SIGNED_OUT_LEVEL : levelFor(xp);
+/** Strip any piece above the player's level (e.g. a saved try-on fit from before the rule). */
+export const allowedFit = (fit, lvl) => { const o = { ...EMPTY_FIT }; for (const k of ['top', 'outer', 'legs']) { const p = gearById(fit && fit[k]); o[k] = p && p.level <= lvl ? p.id : null; } return o; };
 export function loadFit() { try { const f = JSON.parse(localStorage.getItem('rw.fit') || 'null'); if (f && 'top' in f) return f; } catch (e) { } return { ...DEFAULT_FIT }; }
 export const saveFit = (f) => localStorage.setItem('rw.fit', JSON.stringify(f));
 /** Tap behaviour from crew.tsx: tap an unlocked piece to equip it in its slot, tap again to remove. */

@@ -126,7 +126,7 @@ async function start() {
   // player
   let player = createAvatar(scene, { name: 'player', outfit: 'skate', fit: true });
   const CREW = { fit: CR.loadFit(), xp: null, account: CR.getAccount() };
-  const applyFit = (f) => { CREW.fit = f; CR.saveFit(f); player.setFit(f, CR.visibleFor); }; applyFit(CREW.fit); window.__rw.applyFit = (f) => applyFit(f);
+  const applyFit = (f) => { f = CR.allowedFit(f, CR.playerLevel(CREW.xp)); CREW.fit = f; CR.saveFit(f); player.setFit(f, CR.visibleFor); }; applyFit(CREW.fit); window.__rw.applyFit = (f) => applyFit(f);
   // smooth rigged crew avatar (models/avatar.glb); the procedural figure stands in until it loads (?procav keeps it)
   if (!Q.has('procav')) loadAvatar3D(scene, { name: 'player3d' }).then(av => { if (glow) av.root.getChildMeshes().forEach(m => glow.addExcludedMesh(m)); const old = player; av.root.position.copyFrom(old.root.position); av.root.rotation.y = old.root.rotation.y; old.root.setEnabled(false); old.allMeshes().forEach(m => m.setEnabled(false)); player = av; window.__rw.player = av; player.setFit(CREW.fit, CR.visibleFor); if (glow) for (const m of av.allMeshes()) glow.addExcludedMesh(m); DG.log('avatar3d loaded'); }).catch(e => console.warn('avatar3d', e));
   const loadCrew = async () => { if (!CREW.account) return; try { const r = await CR.readCrew(CREW.account); if (r) { CREW.xp = r.xp; if (r.fit.top || r.fit.outer || r.fit.legs) applyFit(r.fit); } } catch (e) { } }; loadCrew();
@@ -238,7 +238,7 @@ async function start() {
     if (k === 'm') { if (hud.isOpen()) return hud.close(); return hud.openMap(P); }
     if (k === 'o') { if (hud.isOpen()) return hud.close(); const reopen = () => { hud.close(); app.key('o'); };
       return hud.openWardrobe(CR, { fit: { ...CREW.fit }, xp: CREW.xp, account: CREW.account, email: EV.getEmail(), setEmail: EV.setEmail, apply: applyFit,
-        signIn: async (e) => { CREW.account = await CR.signIn(e); await loadCrew(); reopen(); }, signOut: () => { CR.signOut(); CREW.account = null; CREW.xp = null; reopen(); } }); }
+        signIn: async (e) => { CREW.account = await CR.signIn(e); await loadCrew(); reopen(); }, signOut: () => { CR.signOut(); CREW.account = null; CREW.xp = null; applyFit(CREW.fit); reopen(); } }); }
     if (k === 'f') { P.dancing = !P.dancing; return; }
     if (k === 'l' && app.inside) { setTempleMode(T, scene, T.mode === 'day' ? 'rave' : 'day'); hud.interior(true, T.mode); return; }
     if (k === 'p') return photo();

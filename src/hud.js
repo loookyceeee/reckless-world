@@ -139,12 +139,12 @@ export function createHUD(app) {
       const px = X(st.x), py = Y(st.z); g.save(); g.translate(px, py); g.rotate(st.heading); g.fillStyle = '#fff'; g.strokeStyle = '#000'; g.lineWidth = 2; g.beginPath(); g.moveTo(0, -12); g.lineTo(9, 9); g.lineTo(0, 4); g.lineTo(-9, 9); g.closePath(); g.fill(); g.stroke(); g.restore();
     },
     openWardrobe(C, st) { // C = crew module, st = { fit, xp|null, account, apply(fit), signIn(email), signOut(), email, setEmail }
-      const lvl = st.xp == null ? 15 : C.levelFor(st.xp);
+      const lvl = C.playerLevel(st.xp);
       const rows = C.WARDROBE.map(p => { const locked = p.level > lvl, on = !locked && st.fit[p.slot] === p.id;
-        return `<button class="cw ${on ? 'sel' : ''} ${locked ? 'lock' : ''}" data-id="${p.id}" ${locked ? 'disabled' : ''}><img src="${C.shopImg(p.id)}" onerror="this.onerror=null;this.src='${C.img(p.icon)}'" alt="${p.name}" loading="lazy"/><span><b>${p.name}</b><small>${p.slot.toUpperCase()} · LVL ${p.level}${locked ? ' · LOCKED' : ''}</small></span></button>`; }).join('');
+        return `<button class="cw ${on ? 'sel' : ''} ${locked ? 'lock' : ''}" data-id="${p.id}" ${locked ? 'disabled' : ''}><img src="${C.shopImg(p.id)}" onerror="this.onerror=null;this.src='${C.img(p.icon)}'" alt="${p.name}" loading="lazy"/><span><b>${p.name}</b><small>${p.slot.toUpperCase()} · ${locked ? 'LOCKED · UNLOCKS AT LVL ' + p.level : 'LVL ' + p.level}</small></span></button>`; }).join('');
       const acct = st.account ? `<p class="fine">SIGNED IN AS ${st.account.email.toUpperCase()} · ${st.xp == null ? 'CREW NOT LOADED' : 'LVL ' + lvl + ' · FIT FROM THE APP'} <button id="crewOut">SIGN OUT</button></p>`
         : `<h3>SIGN IN <small>(SAME CREW ACCOUNT AS THE APP · LOADS YOUR EQUIPPED FIT)</small></h3><div class="row"><input id="email" type="email" placeholder="you@example.com" value="${st.email || ''}"/><button id="crewIn">SIGN IN</button></div>`;
-      open(`<h2>WARDROBE</h2><p class="sub">CLOTHING DROP 018 · ${st.account ? 'YOUR CREW FIT' : 'TRY-ON ONLY'}</p>
+      open(`<h2>WARDROBE</h2><p class="sub">CLOTHING DROP 018 · ${st.account ? 'YOUR CREW FIT · LVL ' + lvl : 'SIGNED OUT · LVL 1 PIECES ONLY · SIGN IN TO WEAR WHAT YOUR CREW RANK UNLOCKS'}</p>
       <div class="crewfig"><img id="crewLook" src="${C.lookFor(st.fit.top, st.fit.outer, st.fit.legs)}" alt="CREW AVATAR"/></div>
       <div class="cwlist">${rows}</div>${acct}
       <p class="fine">NO XP OR CODES ARE AWARDED IN THE GAME. CHANGES HERE STAY ON THIS DEVICE AND NEVER WRITE TO YOUR CREW. VISITS ARE QUEUED AS TEST EVENTS ONLY.</p>`, 'wardov');

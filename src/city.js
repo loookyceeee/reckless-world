@@ -133,7 +133,7 @@ export async function buildCity(scene, { low = false } = {}) {
   const R = rng(42);
   // ---------- ground ----------
   const gm = new StandardMaterial('ground', scene); gm.diffuseColor = hex('#2b2f2a'); gm.specularColor = new Color3(0.05, 0.05, 0.08);
-  const ground = toMesh('ground', xf(box(2200, 0.2, 3560), { t: [-85, -0.22, -760] }), scene, gm); ground.parent = root;
+  const ground = toMesh('ground', xf(box(2200, 0.2, 3560), { t: [-85, -0.205, -760] }), scene, gm); ground.parent = root;
   // ---------- buildings ----------
   const { d, e } = windowTextures(scene);
   const wm = new StandardMaterial('walls', scene); wm.diffuseTexture = d; wm.emissiveTexture = e; wm.specularColor = new Color3(0.12, 0.12, 0.14); wm.specularPower = 24; wm.backFaceCulling = false;
@@ -187,6 +187,7 @@ export async function buildCity(scene, { low = false } = {}) {
     g.fillStyle = 'rgba(70,68,64,0.6)'; for (let i = 0; i <= n; i++) { g.fillRect(i * s - 1.5, 0, 3, N); g.fillRect(0, i * s - 1.5, N, 3); } });
   const roadM = new StandardMaterial('roads', scene); roadM.diffuseTexture = asphT; roadM.specularColor = new Color3(0.34, 0.35, 0.42); roadM.specularPower = 64; roadM.backFaceCulling = false; // damp Belfast tarmac sheen
   const paveM = new StandardMaterial('pavement', scene); paveM.diffuseTexture = paveT; paveM.specularColor = new Color3(0.12, 0.12, 0.14); paveM.specularPower = 32; paveM.backFaceCulling = false;
+  { const gT = paveT.clone(); gT.uScale = 2200 / 4.2; gT.vScale = 3560 / 4.2; gT.anisotropicFilteringLevel = 8; gm.diffuseTexture = gT; gm.diffuseColor = hex('#6c6a67'); gm.specularColor = new Color3(0.1, 0.1, 0.12); gm.specularPower = 40; } // the city floor is paving (forecourts, yards, plazas), not a dark void
   const markM = new StandardMaterial('markings', scene); markM.specularColor = new Color3(0.2, 0.2, 0.2); markM.emissiveColor = new Color3(0.08, 0.08, 0.08); markM.backFaceCulling = false;
   const cobT = mkTex('cobT', 512, (g, N) => { const r = rng(13); g.fillStyle = '#4a4744'; g.fillRect(0, 0, N, N); const rows = 16, h = N / rows;
     for (let j = 0; j < rows; j++) { let x = (j % 2) * h * 0.6 - h; while (x < N) { const w = h * (1.1 + r() * 0.7), v = 120 + r() * 70 | 0; g.fillStyle = `rgb(${v},${v - 4},${v - 10})`;
@@ -222,7 +223,7 @@ export async function buildCity(scene, { low = false } = {}) {
     if (r.d) {
       const RB = r.sf ? CB : RD; if (r.sf) SETT.push(r);
       for (let i = 0; i < pts.length - 1; i++) quadB(RB, pts[i], pts[i + 1], r.w, YR, r.sf ? hex('#ffffff') : ASPH, r.sf ? 3 : 6);
-      for (let i = 0; i < pts.length; i++) { const p = pts[i]; discB(RB, p, r.w / 2, r.sf ? YR + 0.002 : YR, r.sf ? hex('#ffffff') : ASPH, r.sf ? 3 : 6); const jn = r.n && nodeDeg.get(r.n[i]) > 2; if (jn) discB(PV, p, nodeW.get(r.n[i]) / 2 + PW, YR - 0.004, PAVE, 3); }
+      for (let i = 0; i < pts.length; i++) { const p = pts[i]; discB(RB, p, r.w / 2, r.sf ? YR + 0.002 : YR, r.sf ? hex('#ffffff') : ASPH, r.sf ? 3 : 6); }
       if (r.t === 'service') continue;
       for (let i = 0; i < pts.length - 1; i++) {
         let a = pts[i], b = pts[i + 1]; const dx = b[0] - a[0], dz = b[1] - a[1]; const L = Math.hypot(dx, dz); if (L < 0.05) continue; const ux = dx / L, uz = dz / L;
@@ -240,7 +241,7 @@ export async function buildCity(scene, { low = false } = {}) {
       }
     } else {
       if (r.sf) SETT.push(r);
-      for (let i = 0; i < pts.length - 1; i++) quadB(r.sf ? CB : PV, pts[i], pts[i + 1], Math.max(1.6, r.w), r.t === 'pedestrian' ? YP + 0.002 : YP + 0.003, r.sf ? hex('#ffffff') : FOOT, 3);
+      for (let i = 0; i < pts.length - 1; i++) quadB(r.sf ? CB : PV, pts[i], pts[i + 1], Math.max(1.6, r.w), r.sf ? YP + 0.002 : YR - 0.012, r.sf ? hex('#ffffff') : FOOT, 3);
     }
   }
   const dyRoad = (r) => ['primary', 'secondary', 'trunk', 'tertiary'].includes(r.t) || Math.abs(Math.floor(r.p[0] * 7)) % 3 === 0;
@@ -380,7 +381,7 @@ export async function buildCity(scene, { low = false } = {}) {
   for (const [x, z] of lamps) grid.add(x - 0.12, z, x + 0.12, z, 8);
 
   // ---------- venue beacons (sky searchlights), ground rings ----------
-  const beamM = new StandardMaterial('beamM', scene); beamM.diffuseTexture = beamTex(scene); beamM.useAlphaFromDiffuseTexture = true; beamM.emissiveColor = new Color3(0.32, 0.3, 0.42); beamM.disableLighting = true; beamM.alphaMode = 1; beamM.backFaceCulling = false;
+  const beamM = new StandardMaterial('beamM', scene); beamM.diffuseTexture = beamTex(scene); beamM.useAlphaFromDiffuseTexture = true; beamM.emissiveColor = new Color3(0.17, 0.16, 0.23); beamM.disableLighting = true; beamM.alphaMode = 1; beamM.backFaceCulling = false;
   { const f = new FresnelParameters(); f.leftColor = Color3.Black(); f.rightColor = Color3.White(); f.bias = 0; f.power = 1.6; beamM.opacityFresnelParameters = f; } // soft volumetric edges instead of hard-edged bands across the sky
   const beacons = [];
   for (const v of VENUES.filter(v => v.inSlice)) {
