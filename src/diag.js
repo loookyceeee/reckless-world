@@ -23,7 +23,7 @@ export function show(why) {
   if (why && !reason) reason = why;
   if (!box) {
     box = document.createElement('div'); box.id = 'diag';
-    box.style.cssText = 'position:fixed;left:8px;right:8px;bottom:8px;max-height:60vh;overflow:auto;z-index:99999;background:rgba(0,0,0,.88);color:#fff;border:2px solid #fff;font:11px/1.35 ui-monospace,Menlo,monospace;padding:10px;';
+    box.style.cssText = 'position:fixed;left:8px;right:8px;top:8px;max-height:36vh;overflow:auto;z-index:99999;background:rgba(0,0,0,.88);color:#fff;border:2px solid #fff;font:11px/1.35 ui-monospace,Menlo,monospace;padding:10px;';
     box.innerHTML = '<div style="display:flex;gap:8px;margin-bottom:6px"><a href="?safe=1" style="color:#000;background:#fff;padding:4px 8px;text-decoration:none;font-weight:700">TRY SAFE MODE</a><button style="background:#000;color:#fff;border:1px solid #fff;padding:4px 8px">CLOSE</button></div><pre style="white-space:pre-wrap;margin:0"></pre>';
     box.querySelector('button').onclick = () => { box.remove(); box = null; };
     document.body.appendChild(box);
