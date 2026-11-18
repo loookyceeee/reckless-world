@@ -15,6 +15,7 @@ CLIPS = {'Walk_Loop': 'walk', 'Jog_Fwd_Loop': 'jog', 'Sprint_Loop': 'sprint', 'J
 USE_QHAIR = False  # the app's short textured crop with a fade is built as a scalp shell below
 SMOOTH_IT = int(__import__('os').environ.get('SMIT', '0'))
 HEAD_S = 1.88
+HEAD_AX = (1.15, 1.1, 1.22)   # app render (front overlay, shots/pass8): head ~4.2 heads tall figure, taller oval skull
 LEG_F = 0.86     # app figure has shorter legs than the superhero base     # app renders: ~5.6 heads tall
 TARGET_H = 1.74   # metres, matches cars (~4.3 m) and lanes
 
@@ -61,11 +62,11 @@ for o in meshes:
         w = d.get('Head', 0.0) + 0.5 * d.get('neck_01', 0.0) * 0.0
         if o.name in ('Hair', 'Eyes', 'Eyebrows'): w = 1.0
         if w <= 0: continue
-        p = toA @ v.co; s = 1 + (HEAD_S - 1) * w
-        v.co = toM @ (pivot + (p - pivot) * s)
+        p = toA @ v.co; s = 1 + (HEAD_S - 1) * w; q = p - pivot
+        v.co = toM @ (pivot + Vector((q.x * s * (1 + (HEAD_AX[0] - 1) * w), q.y * s * (1 + (HEAD_AX[1] - 1) * w), q.z * s * (1 + (HEAD_AX[2] - 1) * w))))
 
 # --- slim the superhero build toward the app's lean figure (radial scale about each bone axis) ---
-SLIM = {'upperarm': 0.84, 'lowerarm': 0.88, 'spine_03': 0.93, 'spine_02': 0.94, 'clavicle': 0.9, 'thigh': 0.9, 'calf': 0.9, 'neck_01': 0.9}
+SLIM = {'upperarm': 1.12, 'lowerarm': 1.04, 'spine_03': 1.28, 'spine_02': 1.28, 'spine_01': 1.26, 'pelvis': 1.05, 'clavicle': 0.95, 'thigh': 1.22, 'calf': 1.24, 'neck_01': 0.78}  # tuned on the front overlay vs the app body render
 def axis_pt(p, bn):
     h, t = bone_ws(bn); a = t - h; u = max(0.0, min(1.0, (p - h).dot(a) / a.length_squared)); return h + a * u
 Wb = wmap(body); toAb = arm.matrix_world.inverted() @ body.matrix_world
@@ -100,6 +101,28 @@ for eb in arm.data.edit_bones:
     if eb.name.startswith(LEGB): sd = eb.name[-2:] if eb.name[-2:] in ('_l', '_r') else '_l'; eb.head = T_leg(eb.head, sd); eb.tail = T_leg(eb.tail, sd)
     else: eb.head = T_up(eb.head); eb.tail = T_up(eb.tail)
 bpy.ops.object.mode_set(mode='OBJECT')
+# --- arms: the app figure's arms are ~18% longer (fingertips at mid-thigh) and the shoulders sit wider ---
+ARM_L, SH_OUT = 1.18, 0.04
+def _bws(n): b = arm.data.bones[n]; return b.head_local.copy(), b.tail_local.copy()
+ADESC = {sd: {b.name for b in arm.data.bones if b.name == 'upperarm' + sd or any(q.name == 'upperarm' + sd for q in b.parent_recursive)} for sd in ('_l', '_r')}
+SJ = {sd: _bws('upperarm' + sd)[0] for sd in ADESC}
+def T_arm(p, sd): s_ = SJ[sd]; q = p - s_; sg = 1 if s_.x > 0 else -1; return Vector((s_.x + sg * SH_OUT + q.x * ARM_L, p.y, p.z))
+for o in meshes:
+    Wm = wmap(o); toA2 = arm.matrix_world.inverted() @ o.matrix_world; inv = toA2.inverted()
+    for v, d in zip(o.data.vertices, Wm):
+        if not d: continue
+        p = toA2 @ v.co; tw = sum(d.values()) or 1.0; a = p.copy(); moved = False
+        for sd in ADESC:
+            wa = sum(w for bn, w in d.items() if bn in ADESC[sd]) / tw; wc = d.get('clavicle' + sd, 0.0) / tw
+            if wa > 0: a = a + (T_arm(p, sd) - p) * wa; moved = True
+            if wc > 0: a.x += (1 if SJ[sd].x > 0 else -1) * SH_OUT * 0.5 * wc; moved = True
+        if moved: v.co = inv @ a
+bpy.ops.object.mode_set(mode='EDIT')
+for eb in arm.data.edit_bones:
+    for sd in ADESC:
+        if eb.name in ADESC[sd]: eb.head = T_arm(eb.head, sd); eb.tail = T_arm(eb.tail, sd)
+        if eb.name == 'clavicle' + sd: eb.tail = T_arm(eb.tail, sd)
+bpy.ops.object.mode_set(mode='OBJECT')
 def bone_ws(n):
     b = arm.data.bones[n]; return b.head_local.copy(), b.tail_local.copy()
 z_neck = bone_ws('neck_01')[0].z; z_pelvis = bone_ws('pelvis')[0].z; z_sp2 = bone_ws('spine_02')[0].z; hh, ht = bone_ws('Head')
@@ -110,7 +133,7 @@ def _sm(a, b, x): t = max(0.0, min(1.0, (x - a) / (b - a))); return t * t * (3 -
 for v in body.data.vertices:
     p = toAs @ v.co; ax_ = abs(p.x)
     if p.z < z_neck - 0.2 or p.z > z_neck + 0.03: continue
-    dz = -0.026 * _sm(0.045, 0.19, ax_) * _sm(z_neck - 0.17, z_neck - 0.05, p.z); p.z += dz; v.co = invs @ p
+    dz = -0.042 * _sm(0.045, 0.19, ax_) * _sm(z_neck - 0.17, z_neck - 0.05, p.z); p.z += dz; v.co = invs @ p
 # --- face: rounder, softer, younger (app crew render): shorter lower face, fuller cheeks and jaw, smaller nose, smoothed features ---
 toA = arm.matrix_world.inverted() @ body.matrix_world
 Wf = wmap(body); Pf = [toA @ v.co for v in body.data.vertices]
@@ -132,7 +155,7 @@ for i in fv:
     if n.y < -0.7 and abs(n.x) < 0.3 and -0.45 < n.z < 0.15: p.y += (hc0.y - ex0.y * 0.7 - p.y) * 0.6 * sm(0.3, 0.0, abs(n.x))  # smaller nose
     if abs(n.x) > 0.8 and -0.55 < n.z < 0.25 and -0.45 < n.y < 0.5:  # ears: smaller and tucked in like the app render
         ew = sm(0.8, 0.95, abs(n.x)); ec_ = Vector((math.copysign(hc0.x + ex0.x * 0.82, n.x) if hc0.x == 0 else hc0.x + math.copysign(ex0.x * 0.82, n.x), hc0.y + 0.05 * ex0.y, hc0.z - 0.12 * ex0.z))
-        p = p + ((ec_ + (p - ec_) * 0.72) - p) * ew
+        p = p + ((ec_ + (p - ec_) * 1.0) - p) * ew
     newP[i] = hc0 + (p - hc0) if w > 0 else Pf[i]
 bmf = bmesh.new(); bmf.from_mesh(body.data); bmf.verts.ensure_lookup_table()
 for i, p in newP.items(): bmf.verts[i].co = toA.inverted() @ p
@@ -256,7 +279,7 @@ def make(kind):
         elif kind == 'cuffed': k = (1.3 if b.startswith('thigh') else 1.45 if b.startswith('calf') else 1.1)
         elif kind == 'shorts': k = 1.4 if b.startswith('thigh') else 1.12
         elif kind == 'briefs': k = 1.04
-        elif kind == 'shoes': k = 1.45
+        elif kind == 'shoes': k = 1.62
         if kind in ('jeans', 'pants', 'cuffed', 'shorts') and p.z > z_pelvis - 0.03:  # waistband tucks under any top
             f = max(0.0, min(1.0, (p.z - (z_pelvis - 0.03)) / 0.04)); k = k + (1.02 - k) * f; d = d + (0.005 - d) * f
         if k != 1.0 and b and b != 'Head':
