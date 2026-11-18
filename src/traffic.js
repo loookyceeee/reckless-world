@@ -232,7 +232,7 @@ export function buildTraffic(scene, city, { low = false, stops = [], signals = [
     const sN = near(v.x, v.z); if (!sN) continue;
     let side = 1; { const nx = -sN.uz, nz = sN.ux; if ((v.x - sN.px) * nx + (v.z - sN.pz) * nz < 0) side = -1; } // kerb on the venue's side of the road
     const nx = -sN.uz * side, nz = sN.ux * side; const ux = sN.ux * side, uz = sN.uz * side; // drive on the left: travel so the kerb is on the left
-    const bx = sN.px + nx * (sN.w / 2 - 1.65), bz = sN.pz + nz * (sN.w / 2 - 1.65), sx = sN.px + nx * (sN.w / 2 + 1.6), sz = sN.pz + nz * (sN.w / 2 + 1.6);
+    const sh = 10, bx = sN.px + nx * (sN.w / 2 - 1.65) + ux * sh, bz = sN.pz + nz * (sN.w / 2 - 1.65) + uz * sh, sx = sN.px + nx * (sN.w / 2 + 1.6) + ux * sh, sz = sN.pz + nz * (sN.w / 2 + 1.6) + uz * sh;
     const st = { ...v, sx, sz, bx, bz, h: Math.atan2(ux, uz), ux, uz };
     mkShelter({ id: v.id, x: sx + nx * 0.9, z: sz + nz * 0.9, h: st.h, ad: v.name }); rapid.push(st);
   } return rapid; };
@@ -245,12 +245,15 @@ export function buildTraffic(scene, city, { low = false, stops = [], signals = [
     const s = 0.94 + R() * 0.12; av.root.scaling.set(s, s, s);
     peds.push({ av, a: 0, b: 0, s: 0, len: 1, speed: 1.1 + R() * 0.5, side: R() < 0.5 ? -1 : 1 });
   }
+  // venue queues: a small pool of idle clay avatars, moved to whichever venue queue lane the player is nearest
+  const qPool = []; for (let i = 0; i < (low ? 3 : 6); i++) { const av = createAvatar(scene, { name: 'qped' + i, outfit: ['stan', 'skate', 'stanfull'][i % 3], decals: i % 2 === 0, lod: 0.4, palette: { tee: PCOL[Math.floor(R() * PCOL.length)], hoodie: PCOL[Math.floor(R() * PCOL.length)], denim: Color3.Lerp(hex('#6f8fb3'), hex('#2c3e5c'), R()) } });
+    const s = 0.93 + R() * 0.13; av.root.scaling.set(s, s, s); av.root.setEnabled(false); qPool.push(av); }
   const setPedEdge = (p, a, b) => { p.a = a; p.b = b; const pa = PG.pos.get(a), pb = PG.pos.get(b); p.len = Math.max(0.01, Math.hypot(pb[0] - pa[0], pb[1] - pa[1])); const r = PG.info.get(a + ',' + b); p.off = r.d ? (r.w / 2 + 1.3) * p.side : 0; };
   const placePed = (p, near) => {
     for (let tries = 0; tries < 60; tries++) { const a = PG.nodes[Math.floor(R() * PG.nodes.length)]; const q = PG.pos.get(a); const d = Math.hypot(q[0] - near.x, q[1] - near.z);
       if (d < 120 && d > 8) { const nb = PG.adj.get(a); setPedEdge(p, a, nb[Math.floor(R() * nb.length)]); p.s = R() * p.len; return; } }
   };
-  return { cars, parked, busStop, rapid, addStops, tpl, peds, G, PG, SIG, placeCar, setEdge, placePed, setPedEdge, barM, barM2, inited: false, R };
+  return { cars, parked, busStop, rapid, addStops, qPool, queues: [], qCur: null, tpl, peds, G, PG, SIG, placeCar, setEdge, placePed, setPedEdge, barM, barM2, inited: false, R };
 }
 
 const tmp = new Vector3();
@@ -290,6 +293,9 @@ export function updateTraffic(T, dt, player, t) {
     if (Math.hypot(c.node.position.x - player.x, c.node.position.z - player.z) > 330) { T.placeCar(c, player); const p = G.pos.get(c.a); c.node.position.set(p[0], -0.085, p[1]); }
   }
   const on = Math.floor(t * 4) % 2; T.barM.emissiveColor.set(on ? 0.15 : 0.1, on ? 0.4 : 0.1, on ? 1 : 0.2); T.barM2.emissiveColor.set(on ? 0.1 : 0.15, on ? 0.1 : 0.4, on ? 0.2 : 1);
+  if (T.queues.length) { let best = null, bd = 85; for (const q of T.queues) { const d = Math.hypot(q.x - player.x, q.z - player.z); if (d < bd) { bd = d; best = q; } }
+    if (best !== T.qCur) { T.qCur = best; T.qPool.forEach((a, i) => { const p = best && best.pts[i]; a.root.setEnabled(!!p); if (p) { a.root.position.set(p[0], 0, p[1]); a.root.rotation.y = p[2]; } }); }
+    if (best && bd < 60) T.qPool.forEach((a, i) => { if (best.pts[i]) animateAvatar(a, dt, { speed: 0 }); }); }
   for (const p of T.peds) {
     p.s += p.speed * dt;
     while (p.s >= p.len) { p.s -= p.len; const nb = (PG.adj.get(p.b) || []).filter(n => n !== p.a); const next = nb.length ? nb[Math.floor(T.R() * nb.length)] : p.a; T.setPedEdge(p, p.b, next); }

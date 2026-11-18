@@ -15,14 +15,14 @@ import { hex, rng, box, cyl, sphere, rbox, xf, color, merge, toMesh, plane, plan
 import { beamTex } from './city.js';
 
 const BASE = import.meta.env.BASE_URL;
-function mat(scene, name, o = {}) {
+export function mat(scene, name, o = {}) {
   const m = new StandardMaterial(name, scene);
   m.diffuseColor = o.d || new Color3(1, 1, 1); m.specularColor = o.s || new Color3(0.06, 0.06, 0.06); m.specularPower = o.p || 16;
   if (o.e) m.emissiveColor = o.e; if (o.unlit) m.disableLighting = true;
   if (o.add) { m.alphaMode = 1; m.backFaceCulling = false; } if (o.two) m.backFaceCulling = false;
   return m;
 }
-function canvasTex(scene, name, w, h, draw) { const t = new DynamicTexture(name, { width: w, height: h }, scene, true); const c = t.getContext(); draw(c, w, h); t.update(); return t; }
+export function canvasTex(scene, name, w, h, draw) { const t = new DynamicTexture(name, { width: w, height: h }, scene, true); const c = t.getContext(); draw(c, w, h); t.update(); return t; }
 function signTex(scene, txt, { fg = '#fff', bg = '#000', w = 1024, h = 192, frame = true, font = 'Unbounded' } = {}) {
   return canvasTex(scene, 'csign-' + txt, w, h, (c) => { c.fillStyle = bg; c.fillRect(0, 0, w, h); if (frame) { c.strokeStyle = fg; c.lineWidth = 10; c.strokeRect(8, 8, w - 16, h - 16); }
     c.fillStyle = fg; let fs = Math.min(110, h * 0.58); do { c.font = `800 ${fs}px ${font}`; fs -= 3; } while (c.measureText(txt).width > w - 70 && fs > 16); c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(txt, w / 2, h / 2 + 4); });
@@ -30,7 +30,7 @@ function signTex(scene, txt, { fg = '#fff', bg = '#000', w = 1024, h = 192, fram
 const speckle = (scene, name, base, dots, n = 1400, size = 512, seed = 3) => canvasTex(scene, name, size, size, (c, w, h) => { const R = rng(seed); c.fillStyle = base; c.fillRect(0, 0, w, h); for (let i = 0; i < n; i++) { c.fillStyle = dots[Math.floor(R() * dots.length)]; const r = 1 + R() * 3; c.fillRect(R() * w, R() * h, r, r); } });
 
 // ---------------------------------------------------------------- kit
-function kit(scene, root, R) {
+export function kit(scene, root, R) {
   const G = {}; // colour-merged static geometry per material key
   const add = (k, vd, col) => { (G[k] = G[k] || []).push(col ? color(vd, col) : vd); };
   const segs = [];
@@ -153,7 +153,7 @@ const SPECS = {
     const b1 = K.bar(-W / 2 + 1.2, 9.5, -W / 2 + 1.2, 16, { side: -1, top: '#c9ced6', glow: 'barGlowW', stools: 0 });
     const b2 = K.bar(W / 2 - 1.2, 2.2, W / 2 - 1.2, 6.2, { side: 1, top: '#c9ced6', glow: 'barGlowW' });
     return { W, D, H, dj, crowd: { n: 130, x: [-7.5, 7.5], z: [8.5, D - 5.2] }, floorZ: [8, D - 4.6], bars: [b1, b2], tierZ: [1.4, 7.4, 0.6],
-      rig: { movers: [-6, -3, 0, 3, 6].map(x => [x, H - 0.4, D - 6]), moverCol: '#ffffff', lasers: { at: [0, 4.6, D - 1.2], n: 6, col: '#38ff7a' }, washCol: '#4a2bff', hemi: 0.35, fog: [0.026, '#08060f'], strobe: true },
+      rig: { movers: [-6, -3, 0, 3, 6].map(x => [x, H - 0.4, D - 6]), moverCol: '#ffffff', lasers: { at: [0, 4.6, D - 1.2], n: 6, col: '#38ff7a' }, washCol: '#4a2bff', hemi: 0.5, fog: [0.026, '#08060f'], strobe: true },
       plan: [{ x: -4, z: D - 4.6, w: 8, d: 4, c: '#fff', t: 'STAGE' }, { x: -W / 2, z: 1.4, w: W, d: 6, c: '#2a2a2e', t: 'TIER' }, { x: -W / 2 + 0.7, z: 9.5, w: 1, d: 6.5, c: '#ff2a3c', t: 'BAR' }] };
   },
   // THE WARE-HOUSE (nostalgia): the old Palm House, now Three Sheets, 1 Bankmore Sq (Marcus Ward building). Warm timber slat
@@ -161,7 +161,7 @@ const SPECS = {
   // and for the night a booth in the corner under amber + red (Three Sheets opening photos; past Palm House raves).
   warehouse(scene, K, R) {
     const W = 20, D = 22, H = 5;
-    K.shell(W, D, H, { floor: '#6e6a64', wall: '#2c2420', gapX: 1.8 });
+    K.shell(W, D, H, { floor: '#d8c8b0', wall: '#3a2c24', gapX: 1.8 });
     for (let x = -W / 2 + 0.2; x < W / 2; x += 0.22) K.B('wood', 0.12, 0.16, D, x, H - 0.4, D / 2, hex(R() < 0.5 ? '#8a5a34' : '#9b6a40'));
     for (const x of [-5, 0, 5]) K.add('copper', xf(cyl(D, 0.28, 0.28, 16), { r: [Math.PI / 2, 0, 0], t: [x, H - 1.0, D / 2] }));
     for (const [x, z] of [[-6, 6], [-6, 11]]) { K.B('wood', 2.6, 0.18, 1.5, x, 0.82, z, hex('#5a3a22')); K.B('felt', 2.36, 0.02, 1.28, x, 0.92, z); for (const dx of [-1.1, 1.1]) for (const dz of [-0.6, 0.6]) K.B('wood', 0.12, 0.75, 0.12, x + dx, 0.38, z + dz, hex('#3d2716'));
@@ -174,8 +174,8 @@ const SPECS = {
     const b1 = K.bar(3, D - 2.2, 9, D - 2.2, { side: 1, body: '#3d2716', top: '#c49a5a', stools: 6, stool: '#5f8f4a', glow: 'barGlowA' });
     const dj = K.booth(-5.5, D - 2.4, { w: 3.0, y: 0.4, front: 'ledA' }); K.B('kit', 5, 0.4, 3, -5.5, 0.2, D - 2.2, hex('#2a1e18')); K.stack(-8.6, D - 2.4, 2.0); K.stack(-2.4, D - 2.4, 2.0);
     K.B('estSign', 0.02, 0.9, 5, -W / 2 + 0.03, 3.4, 11);
-    return { W, D, H, dj, crowd: { n: 90, x: [-8.5, 7.5], z: [12.5, D - 4.2] }, floorZ: [12, D - 3.8], bars: [b1],
-      rig: { movers: [-8, -5.5, -3].map(x => [x, H - 0.5, D - 5]), moverCol: '#ffb04a', washCol: '#ff5a10', hemi: 0.75, fog: [0.02, '#1c1008'], warm: true },
+    return { W, D, H, dj, crowd: { n: 95, x: [-8.5, 8], z: [9.5, D - 4.2], avoid: (x, z) => (x < -3.8 && z < 12.6) || Math.hypot(x + 8, z - 15.5) < 1.6 }, floorZ: [9, D - 3.8], bars: [b1],
+      rig: { movers: [-8, -5.5, -3].map(x => [x, H - 0.5, D - 5]), moverCol: '#ffb04a', washCol: '#ff5a10', hemi: 1.0, fog: [0.02, '#1c1008'], warm: true },
       plan: [{ x: -8, z: D - 3.7, w: 5, d: 3, c: '#fff', t: 'DJ' }, { x: 3, z: D - 2.7, w: 6, d: 1, c: '#ff2a3c', t: 'BAR' }, { x: -7.3, z: 5.2, w: 2.6, d: 6.6, c: '#2e6b3a', t: 'POOL' }, { x: W / 2 - 1, z: 2.4, w: 1, d: 5, c: '#d24ad6', t: 'ARCADE' }] };
   },
   // LOCATION X: 149 Lisburn Rd (Ma Nelsons, then Cuckoo, now Happy's). A narrow terrace bar-club: jam-jar cocktail bar
@@ -230,8 +230,9 @@ export function buildClub(scene, id, { index = 0, low = false, posters = [], ven
   for (let i = 0; i < 4; i++) mats['pad' + i] = mat(scene, id + '-pad' + i, { unlit: true, e: hex(['#ff2a6a', '#2ad0ff', '#ffe02a', '#6aff2a'][i]), d: Color3.Black() });
   // textures: terrazzo / concrete floor, mural, signs, LED screen
   if (id === 'terminus') mats.floor.diffuseTexture = speckle(scene, id + '-terrazzo', '#c9c2b4', ['#7a746a', '#e8e2d4', '#a35d3d', '#4a5a5c', '#ddd2b8'], 5000, 512, 5);
+  else if (id === 'warehouse') mats.floor.diffuseTexture = canvasTex(scene, id + '-planks', 512, 512, (c, w, h) => { const Rp = rng(23); for (let y = 0; y < h; y += 32) for (let x = -Math.floor(Rp() * 200); x < w; x += 200) { const k = Rp(); c.fillStyle = k < 0.33 ? '#9a6a42' : k < 0.66 ? '#a8774c' : '#8a5c38'; c.fillRect(x, y, 198, 30); c.fillStyle = 'rgba(60,35,20,0.25)'; for (let g = 0; g < 6; g++) c.fillRect(x + Rp() * 190, y + 4 + Rp() * 22, 30 + Rp() * 60, 1.5); } });
   else mats.floor.diffuseTexture = speckle(scene, id + '-conc', '#8a8a8a', ['#7a7a7a', '#999', '#6a6a6a'], 900, 256, 9);
-  mats.floor.diffuseTexture.uScale = mats.floor.diffuseTexture.vScale = id === 'terminus' ? 4 : 6;
+  mats.floor.diffuseTexture.uScale = mats.floor.diffuseTexture.vScale = id === 'terminus' ? 4 : id === 'warehouse' ? 5 : 6;
   const um = (k, tex) => { const m = mat(scene, id + '-' + k, { unlit: true, two: true, d: Color3.Black() }); m.emissiveTexture = tex; mats[k] = m; return m; };
   um('exit', signTex(scene, '⟵ EXIT', { bg: '#11a84a', w: 256, h: 96 }));
   um('tickets', signTex(scene, 'TICKETS · COCKTAILS', { fg: '#1d5f63', bg: '#f2efe6', w: 1024, h: 160, frame: false }));
@@ -245,7 +246,7 @@ export function buildClub(scene, id, { index = 0, low = false, posters = [], ven
   for (const [k, list] of Object.entries(K.G)) { if (!mats[k]) mats[k] = mat(scene, id + '-' + k); const me = toMesh(id + '-' + k, merge(list), scene, mats[k]); me.parent = root; me.isPickable = false; meshes[k] = me; }
   if (meshes.ball) meshes.ball.setPivotPoint(new Vector3(...S.ball));
   // posters: two real Reckless event posters either side of the door (inside face)
-  posters.slice(0, 2).forEach((p, i) => { const pm = mat(scene, id + '-poster' + i, { unlit: true }); pm.emissiveTexture = new Texture(BASE + p.file, scene, false, true); pm.emissiveColor = new Color3(0.6, 0.6, 0.6);
+  posters.slice(0, 2).forEach((p, i) => { const pm = mat(scene, id + '-poster' + i, { unlit: true }); pm.emissiveTexture = new Texture(BASE + p.file, scene, false, true); pm.emissiveTexture.level = 0.75; pm.emissiveColor = Color3.Black();
     const pl = toMesh(id + '-posterM' + i, planeR(1.2, 1.6), scene, pm); pl.parent = root; pl.position.set((i ? 1 : -1) * (Math.min(S.W / 2 - 1, 3.4)), 1.7, 0.05); pl.rotation.y = Math.PI; });
   // beams / lasers / haze
   const bT = beamTex(scene); const beams = [];
@@ -266,15 +267,19 @@ export function buildClub(scene, id, { index = 0, low = false, posters = [], ven
   const hazeM = mat(scene, id + '-haze', { unlit: true, add: true, d: Color3.Black() }); hazeM.opacityTexture = hazeT; hazeM.emissiveColor = hex(S.rig.fog[1]).scale(1.4);
   const hazes = []; for (let k = 0; k < (low ? 3 : 6); k++) { const m = toMesh(id + '-hz' + k, plane(S.W, S.H * 1.1), scene, hazeM); m.parent = root; m.position.set((R() - 0.5) * 3, S.H * 0.5, 5 + k * (S.D - 6) / 6); m.isPickable = false; hazes.push(m); }
   // crowd slots
-  const crowd = []; const CA = S.crowd;
-  for (let i = 0; i < (low ? Math.round(CA.n * 0.6) : CA.n); i++) { let x, z, g = 0; do { x = CA.x[0] + R() * (CA.x[1] - CA.x[0]); z = CA.z[0] + Math.pow(R(), 0.7) * (CA.z[1] - CA.z[0]); } while (CA.avoid && CA.avoid(x, z) && ++g < 20);
-    crowd.push({ x, z, ph: R() * 4, yaw: Math.PI + (R() - 0.5) * 0.7 + (id === 'terminus' ? Math.atan2(-x, (S.D - 7) - z) - Math.PI : 0), s: 0.9 + R() * 0.18, v: Math.floor(R() * 6) }); }
-  if (S.crowd.face === undefined && id !== 'terminus') crowd.forEach(c => { c.yaw = (R() - 0.5) * 0.7; }); // face the booth (+z)
-  if (id === 'terminus') crowd.forEach(c => { c.yaw = Math.atan2(S.dj[0] - c.x, (S.D - 7) - c.z) + (R() - 0.5) * 0.5; });
+  // natural spread: dart-throwing with a minimum spacing (denser toward the booth), varied height, everyone faces the DJ
+  const crowd = []; const CA = S.crowd, target = Math.round(CA.n * 0.6 * (low ? 0.6 : 1)), [djx, djz] = S.dj;
+  const zs = CA.z[1] - CA.z[0], gap2 = (d) => crowd.every(c => (c.x - d.x) ** 2 + (c.z - d.z) ** 2 > d.r * d.r);
+  for (let g = 0; g < target * 60 && crowd.length < target; g++) {
+    const x = CA.x[0] + R() * (CA.x[1] - CA.x[0]), z = CA.z[0] + R() * zs, f = (z - CA.z[0]) / zs;
+    if (R() > 0.35 + 0.65 * f) continue; if (CA.avoid && CA.avoid(x, z)) continue;
+    if (Math.hypot(x - djx, z - djz) < 2.2) continue;
+    const r = 0.95 + (1 - f) * 0.45 + R() * 0.35; if (!gap2({ x, z, r })) continue;
+    const s0 = 0.93 + R() * 0.12; crowd.push({ x, z, ph: R() * 4, yaw: Math.atan2(djx - x, djz - z) + (R() - 0.5) * 0.6, s: s0, sy: s0 * (0.94 + R() * 0.13), v: Math.floor(R() * 6) }); }
   // lights
-  const lights = { hemi: new HemisphericLight(id + '-hemi', new Vector3(0.2, 1, 0.1), scene), wash: new PointLight(id + '-wash', new Vector3(0, S.H - 1, S.D - 3).add(OFF), scene), front: new PointLight(id + '-front', new Vector3(0, S.H - 0.5, S.D * 0.45).add(OFF), scene) };
+  const lights = { hemi: new HemisphericLight(id + '-hemi', new Vector3(0.2, 1, 0.1), scene), wash: new PointLight(id + '-wash', new Vector3(0, S.H - 1, S.D - 3).add(OFF), scene), front: new PointLight(id + '-front', new Vector3((S.crowd.x[0] + S.crowd.x[1]) / 2, S.H - 0.4, (S.crowd.z[0] + S.crowd.z[1]) / 2 + 1).add(OFF), scene) };
   lights.hemi.intensity = S.rig.hemi; lights.hemi.diffuse = S.rig.warm ? hex('#ffd2a0') : hex('#b8c0d8'); lights.hemi.groundColor = hex('#201820');
-  lights.wash.diffuse = hex(S.rig.washCol); lights.wash.range = S.D * 1.1; lights.front.diffuse = hex(S.rig.moverCol); lights.front.range = S.D;
+  lights.wash.diffuse = hex(S.rig.washCol); lights.wash.range = S.D * 1.1; lights.front.diffuse = Color3.Lerp(hex(S.rig.moverCol), Color3.White(), 0.45); lights.front.range = S.D * 0.9;
   for (const l of Object.values(lights)) l.setEnabled(false);
   const T = {
     club: true, id, name: venue.name, sub: venue.sub, root, crowd, lights, mode: 'rave', dancers: [], S, mats, meshes, beams, lasers, hazes, wash, scrT,
@@ -306,7 +311,7 @@ export function updateClub(T, t, dt, CV) {
     T.crowd.forEach((c, ci) => {
       if (ci >= cmax) return; const it = CV.list[c.v * CV.poses + (Math.floor(beat * 2 + c.ph) % CV.poses)];
       const b = Math.max(0, Math.sin((beat + c.ph) * Math.PI)); const sway = Math.sin(beat * 0.5 * Math.PI + c.ph) * 0.12;
-      Quaternion.FromEulerAnglesToRef(0, c.yaw + sway * 0.5, 0, q4); s4.set(c.s, c.s, c.s); v4.set(c.x, b * 0.06, c.z); Matrix.ComposeToRef(s4, q4, v4, m4);
+      Quaternion.FromEulerAnglesToRef(0, c.yaw + sway * 0.5, 0, q4); s4.set(c.s, c.sy || c.s, c.s); v4.set(c.x, b * 0.06, c.z); Matrix.ComposeToRef(s4, q4, v4, m4);
       const far = it.farReady && cp && ((c.x + rp.x - cp.x) ** 2 + (c.z + rp.z - cp.z) ** 2) > FAR2;
       if (far) { m4.copyToArray(it.far._buf, it.fn * 16); it.fn++; } else { m4.copyToArray(it.body._buf, it.n * 16); it.n++; }
       if (it.head) { m4.copyToArray(it.head._buf, it.hn2 * 16); it.hn2++; }
@@ -322,7 +327,7 @@ export function updateClub(T, t, dt, CV) {
   const wc = hex(S.rig.washCol); T.wash.material.emissiveColor.set(wc.r * (0.35 + 0.3 * kick), wc.g * (0.35 + 0.3 * kick), wc.b * (0.35 + 0.3 * kick));
   T.beams.forEach(b => { const s = t * 0.9 + b.i * 0.8; b.m.rotation.x = 0.9 + Math.sin(s) * 0.4; b.m.rotation.z = Math.sin(s * 0.7 + b.i) * 0.7; b.m.visibility = (Math.floor(beat / 4 + b.i) % 3 ? 0.75 : 0.3) + 0.25 * kick; });
   T.lasers.forEach(l => { const n = T.lasers.length, a = (l.i / Math.max(1, n - 1) - 0.5) * 1.4; const sweep = Math.sin(t * 0.8) * 0.5; l.m.rotation.y = Math.PI + a + sweep; l.m.rotation.x = -0.08 - 0.12 * Math.sin(t * 0.5 + l.i); l.m.visibility = Math.floor(beat / 2) % 4 === 3 ? 0 : 0.9; });
-  T.lights.wash.intensity = 0.6 + 0.8 * kick + strobe; T.lights.front.intensity = 0.35 + 0.35 * kick; T.lights.hemi.intensity = S.rig.hemi + strobe * 0.8;
+  T.lights.wash.intensity = 0.6 + 0.8 * kick + strobe; T.lights.front.intensity = 0.8 + 0.35 * kick; T.lights.hemi.intensity = S.rig.hemi + strobe * 0.8;
   T.hazes.forEach((h, k) => { h.position.x = Math.sin(t * 0.07 + k) * 2; });
   if (T.meshes.ball) T.meshes.ball.rotation.y = t * 0.8;
   if (T.scrT && (T._scr = (T._scr || 0) + dt) > 0.08) { T._scr = 0; const c = T.scrT.getContext(), w = 320, h = 128; c.fillStyle = '#000'; c.fillRect(0, 0, w, h);
