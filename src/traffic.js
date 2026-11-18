@@ -50,21 +50,22 @@ function carVD(kind, body) {
     P.push(color(xf(box(2.32, 0.32, 0.2), { t: [0, 0.58, 2.7] }), hex('#25272c'))); // plain steel front bumper
     P.push(color(xf(box(1.6, 0.38, 0.05), { t: [0, 1.25, 2.66] }), hex('#3a3d44'))); // plain flat front panel (no logo)
     P.push(color(xf(box(2.0, 0.9, 0.05), { t: [0, 2.3, -2.66] }), hex('#3a3d44'))); // rear doors
-  } else if (kind === 'bus') { // generic purple rapid-transit bus (Glider-style colour, no operator marks)
-    P.push(color(xf(rbox(2.5, 2.6, 11.8, 0.12, 10), { t: [0, 1.65, 0] }), body));
-    P.push(color(xf(box(2.54, 1.0, 10.6), { t: [0, 2.1, -0.3] }), glass));
-    P.push(color(xf(box(2.3, 1.6, 0.05), { t: [0, 2.0, 5.92] }), glass));
-    P.push(color(xf(rbox(2.52, 0.25, 11.82, 0.2, 8), { t: [0, 0.48, 0] }), hex('#3a1446')));
-    P.push(color(xf(rbox(2.3, 0.3, 4.0, 0.3, 8), { t: [0, 3.05, -2] }), Color3.Lerp(body, hex('#ffffff'), 0.15)));
-    P.push(color(xf(box(1.6, 0.25, 0.04), { t: [0, 2.95, 5.93] }), hex('#ffb000')));
-    P.push(color(xf(box(2.56, 2.5, 0.45), { t: [0, 1.75, -1.2] }), hex('#1a1420'))); // articulation bellows (bendy rapid-transit look)
-    P.push(color(xf(box(2.53, 0.12, 11.0), { t: [0, 1.05, 0] }), hex('#e8e0ee'))); // pale waist band
+  } else if (kind === 'bus') { // generic purple 18 m articulated rapid-transit bus (Glider-style colour, no operator marks)
+    for (const [z0, len] of [[4.2, 9.6], [-4.95, 8.1]]) { // front section 9.6 m, rear section 8.1 m, bellows between
+      P.push(color(xf(rbox(2.55, 2.55, len, 0.12, 10), { t: [0, 1.62, z0] }), body));
+      P.push(color(xf(box(2.59, 1.0, len - 1.0), { t: [0, 2.08, z0 - 0.1] }), glass));
+      P.push(color(xf(rbox(2.57, 0.25, len + 0.02, 0.2, 8), { t: [0, 0.48, z0] }), hex('#3a1446')));
+      P.push(color(xf(box(2.58, 0.12, len - 0.6), { t: [0, 1.05, z0] }), hex('#e8e0ee'))); // pale waist band
+      P.push(color(xf(rbox(2.2, 0.3, len * 0.45, 0.3, 8), { t: [0, 3.0, z0] }), Color3.Lerp(body, hex('#ffffff'), 0.15))); }
+    P.push(color(xf(box(2.3, 1.6, 0.05), { t: [0, 2.0, 9.0] }), glass));
+    P.push(color(xf(box(1.6, 0.25, 0.04), { t: [0, 2.92, 9.01] }), hex('#ffb000')));
+    P.push(color(xf(box(2.45, 2.45, 0.9), { t: [0, 1.7, -0.6] }), hex('#1a1420'))); // articulation bellows
   } else if (kind === 'cab') { // Belfast black cab (classic tall hackney shape)
     P.push(color(xf(rbox(1.9, 0.85, 4.55, 0.28, 10), { t: [0, 0.78, 0] }), body));
-    P.push(color(xf(rbox(1.75, 1.0, 2.7, 0.3, 10), { t: [0, 1.6, -0.35] }), body));
-    P.push(color(xf(box(1.6, 0.55, 2.6), { t: [0, 1.68, -0.35] }), glass));
+    P.push(color(xf(rbox(1.75, 0.74, 2.7, 0.26, 10), { t: [0, 1.5, -0.35] }), body)); // roof ~1.85 m (TX-style hackney)
+    P.push(color(xf(box(1.77, 0.42, 2.5), { t: [0, 1.53, -0.35] }), glass));
     P.push(color(xf(rbox(0.95, 0.22, 0.95, 0.25, 8), { t: [0, 0.62, 2.1] }), hex('#c9ccd2'))); // grille
-    P.push(color(xf(rbox(0.55, 0.16, 0.22, 0.3, 6), { t: [0, 2.17, 0.5] }), hex('#ffb12a'))); // TAXI light
+    P.push(color(xf(rbox(0.55, 0.16, 0.22, 0.3, 6), { t: [0, 1.9, 0.6] }), hex('#ffb12a'))); // TAXI light
   } else if (kind === 'taxi') {
     P.push(color(xf(rbox(1.85, 0.8, 4.4, 0.25, 10), { t: [0, 0.75, 0] }), body));
     P.push(color(xf(rbox(1.7, 0.85, 2.4, 0.3, 10), { t: [0, 1.45, -0.2] }), body));
@@ -80,12 +81,14 @@ function carVD(kind, body) {
     P.push(color(xf(rbox(1.55, 0.62, L * 0.5, 0.32, 10), { t: [0, 1.25, kind === 'hatch' ? -0.25 : -0.15] }), body));
     P.push(color(xf(box(1.4, 0.4, L * 0.47), { t: [0, 1.28, kind === 'hatch' ? -0.25 : -0.15] }), glass));
   }
-  const wz = kind === 'bus' ? 4.0 : kind === 'wagon' ? 1.7 : 1.35, wx = kind === 'bus' ? 1.12 : kind === 'wagon' ? 1.0 : 0.82, wr = kind === 'bus' ? 0.5 : kind === 'wagon' ? 0.48 : 0.36;
-  for (const a of [-1, 1]) for (const b of [-1, 1]) { P.push(color(xf(cyl(0.3, wr, wr, 14), { r: [0, 0, Math.PI / 2], t: [a * wx, wr, b * wz] }), tyre)); P.push(color(xf(cyl(0.31, wr * 0.55, wr * 0.55, 10), { r: [0, 0, Math.PI / 2], t: [a * wx, wr, b * wz] }), rim)); }
+  const wz = kind === 'bus' ? 4.0 : kind === 'wagon' ? 1.7 : 1.35, wx = kind === 'bus' ? 1.12 : kind === 'wagon' ? 1.0 : 0.76, wr = kind === 'bus' ? 0.5 : kind === 'wagon' ? 0.42 : 0.33;
+  const AX = kind === 'bus' ? [6.6 / wz, -1.9 / wz, -7.4 / wz] : [-1, 1]; // bus: front, middle and trailer axles
+  for (const a of [-1, 1]) for (const b of AX) { P.push(color(xf(cyl(0.3, wr, wr, 14), { r: [0, 0, Math.PI / 2], t: [a * wx, wr, b * wz] }), tyre)); P.push(color(xf(cyl(0.31, wr * 0.55, wr * 0.55, 10), { r: [0, 0, Math.PI / 2], t: [a * wx, wr, b * wz] }), rim)); }
   return merge(P);
 }
+const HALF = c => c.kind === 'bus' ? 9 : c.kind === 'wagon' ? 2.7 : 2.3; // half body length for following gaps
 function lightsVD(kind) { // headlights front (+z), tail lights back
-  const L = kind === 'bus' ? 5.92 : kind === 'wagon' ? 2.68 : kind === 'estate' ? 2.36 : kind === 'hatch' ? 1.92 : kind === 'cab' ? 2.3 : 2.22, y = kind === 'bus' ? 0.75 : kind === 'wagon' ? 1.0 : 0.78, x = kind === 'bus' ? 0.95 : kind === 'wagon' ? 0.85 : 0.62;
+  const L = kind === 'bus' ? 9.02 : kind === 'wagon' ? 2.68 : kind === 'estate' ? 2.36 : kind === 'hatch' ? 1.92 : kind === 'cab' ? 2.3 : 2.22, y = kind === 'bus' ? 0.75 : kind === 'wagon' ? 1.0 : 0.78, x = kind === 'bus' ? 0.95 : kind === 'wagon' ? 0.85 : 0.62;
   const P = []; for (const sd of [-1, 1]) { P.push(color(xf(box(0.36, 0.14, 0.06), { t: [sd * x, y, L] }), hex('#fff6dc'))); P.push(color(xf(box(0.34, 0.14, 0.06), { t: [sd * x, y, -L] }), hex('#ff2020'))); }
   return merge(P);
 }
@@ -223,8 +226,8 @@ export function updateTraffic(T, dt, player, t) {
     // stop for the player if they are in front of the car
     const cx = c.node.position.x, cz = c.node.position.z; const dx = player.x - cx, dz = player.z - cz;
     const ahead = dx * ux + dz * uz, lat = Math.abs(-dx * uz + dz * ux);
-    let target = c.max; if (ahead > 0 && ahead < 11 && lat < 2.2) target = 0;
-    for (const o of T.cars) { if (o === c) continue; const ox = o.node.position.x - cx, oz = o.node.position.z - cz; const ah = ox * ux + oz * uz; if (ah > 0 && ah < 9 && Math.abs(-ox * uz + oz * ux) < 1.6) { target = Math.min(target, Math.max(0, (ah - 5) * 1.5)); } }
+    let target = c.max; if (ahead > 0 && ahead < 8.5 + HALF(c) && lat < 2.2) target = 0;
+    for (const o of T.cars) { if (o === c) continue; const ox = o.node.position.x - cx, oz = o.node.position.z - cz; const ah = ox * ux + oz * uz; const hl = HALF(c) + HALF(o); if (ah > 0 && ah < hl + 4.5 && Math.abs(-ox * uz + oz * ux) < 1.6) { target = Math.min(target, Math.max(0, (ah - hl - 0.8) * 1.5)); } }
     // corner slowdown
     if (c.len - c.s < 8) target = Math.min(target, c.max * 0.55);
     // stop at red signals: 24 s cycle, N-S green 0-10 s, all-red 10-12, E-W green 12-22, all-red 22-24

@@ -5,9 +5,12 @@ import bpy, sys, json, os, math
 from collections import Counter
 OUT = sys.argv[sys.argv.index('--') + 1]
 SRC = '/workspace/reckless-world/research/assets/kenney/car-kit/Models/GLB format/'
-CARS = {'sedan': 4.5, 'hatchback-sports': 4.0, 'taxi': 4.5, 'van': 5.0, 'suv': 4.7, 'delivery': 5.6}
+# realistic targets (length, width, height, wheel diameter) in metres; body and wheels are scaled separately so the
+# toy-proportioned kit reads like real UK traffic next to a 1.74 m avatar (car ~4.3 x 1.8 x 1.45, wheels ~0.65)
+CARS = {'sedan': (4.5, 1.8, 1.45, 0.66), 'hatchback-sports': (4.1, 1.78, 1.42, 0.63), 'taxi': (4.6, 1.8, 1.52, 0.66),
+        'van': (5.0, 2.0, 2.0, 0.7), 'suv': (4.7, 1.9, 1.72, 0.74), 'delivery': (5.6, 2.05, 2.45, 0.72)}
 out = {}
-for name, length in CARS.items():
+for name, (length, width, height, wheelD) in CARS.items():
     bpy.ops.wm.read_factory_settings(use_empty=True)
     bpy.ops.import_scene.gltf(filepath=SRC + name + '.glb')
     objs = [o for o in bpy.context.scene.objects if o.type == 'MESH']
@@ -33,23 +36,44 @@ for name, length in CARS.items():
                 bc = o.active_material.diffuse_color; col = (bc[0], bc[1], bc[2])
             ps = [M @ me.vertices[vi].co for vi in t.vertices]; nr = (R @ t.normal).normalized()
             area = t.area; key = tuple(round(c, 2) for c in col); pal[key] += area
-            tris.append((ps, nr, key))
+            tris.append((ps, nr, key, o.name.startswith('wheel') and o.name))
         o.evaluated_get(dg).to_mesh_clear()
     # paint colour = largest-area saturated/bright colour
     def sat(c): return max(c) - min(c)
     paint = max(pal, key=lambda c: pal[c] * (0.3 + sat(c) * 2 + (0.5 if max(c) > 0.6 else 0)))
-    xs = [p.x for t in tris for p in t[0]]; ys = [p.y for t in tris for p in t[0]]; zs = [p.z for t in tris for p in t[0]]
+    body = [t for t in tris if not t[3]]
+    xs = [p.x for t in body for p in t[0]]; ys = [p.y for t in body for p in t[0]]; zs = [p.z for t in tris for p in t[0]]
+    WB = {}
+    for t in tris:
+        if t[3]: WB.setdefault(t[3], []).extend(t[0])
+    WC = {}
+    for wn, pts in WB.items():
+        mn = [min(p[i] for p in pts) for i in range(3)]; mx = [max(p[i] for p in pts) for i in range(3)]
+        WC[wn] = ([(a + b) / 2 for a, b in zip(mn, mx)], mx[2] - mn[2])
     # glTF import -> Blender Z-up; vehicle forward is -Y or +Y: use the longer horizontal extent as length
-    lx, ly = max(xs) - min(xs), max(ys) - min(ys); s = length / max(lx, ly); cx, cy = (max(xs) + min(xs)) / 2, (max(ys) + min(ys)) / 2; z0 = min(zs)
+    lx, ly = max(xs) - min(xs), max(ys) - min(ys); cx, cy = (max(xs) + min(xs)) / 2, (max(ys) + min(ys)) / 2; z0 = min(zs)
     along_x = lx > ly
+    L0, W0 = (lx, ly) if along_x else (ly, lx); H0 = max(zs) - z0
+    sL, sW, sH = length / L0, width / W0, height / H0
+    def tob(x, y):  # Blender ground plane -> (game x across, game z along)
+        a, b = x - cx, y - cy
+        return ((b * sW, a * sL) if along_x else (a * sW, -b * sL))
     palette = sorted(pal.keys()); pidx = {k: i for i, k in enumerate(palette)}
     V, VI, I = {}, [], []
-    for ps, nr, key in tris:
+    for ps, nr, key, wn in tris:
         tri = []
         for p in ps:
-            a, b = (p.x - cx) * s, (p.y - cy) * s
-            bx, bz = (b, a) if along_x else (a, -b)
-            q = (round(bx * 500), round((p.z - z0) * s * 500), round(bz * 500), pidx[key])
+            if wn:
+                (c, dia) = WC[wn]; k = wheelD / dia
+                ccx, ccz = tob(c[0], c[1])
+                # uniform wheel scale: offsets from the hub scaled by k on every axis
+                dx, dy, dz = (p.x - c[0]) * k, (p.y - c[1]) * k, (p.z - c[2]) * k
+                ax, az = ((dy, dx) if along_x else (dx, -dy)); ax *= 0.62  # tyre width ~0.22 m
+                hubx = (1 if ccx >= 0 else -1) * (width / 2 - 0.14)  # track ~1.52 m: wheels sit under the arches, flush with the body side
+                bx, by, bz = hubx + ax, wheelD / 2 + dz, ccz + az
+            else:
+                bx, bz = tob(p.x, p.y); by = (p.z - z0) * sH
+            q = (round(bx * 500), round(by * 500), round(bz * 500), pidx[key])
             if q not in V: V[q] = len(VI); VI.append(q)
             tri.append(V[q])
         I += [tri[0], tri[2], tri[1]]
