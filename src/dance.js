@@ -16,7 +16,7 @@ export function createDance({ hud, AU, MU, onPunch, isTouch }) {
   let st = null; const root = document.createElement('div'); root.className = 'dance'; root.innerHTML = `<div class="dhead"><small>DANCE · 140 BPM</small><b class="dsc">0</b><i class="dcb"></i></div><canvas width="360" height="300"></canvas><div class="dgr"></div><div class="dpads">${LANES.map((l, i) => `<button data-l="${i}">${l}</button>`).join('')}</div>`;
   (hud.hud || document.body).appendChild(root); const cv = root.querySelector('canvas'), cx = cv.getContext('2d'), gr = root.querySelector('.dgr'), sc = root.querySelector('.dsc'), cb = root.querySelector('.dcb');
   root.querySelectorAll('.dpads button').forEach(b => b.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); hit(+b.dataset.l); }));
-  let gameT = 0; const clock = () => { const a = !(window.__rw && window.__rw.danceGameClock) && AU && AU.clock && AU.clock(); return a != null ? a : gameT * 140 / 60; };
+  let gameT = 0; const clock = () => { const a = (window.__rw && window.__rw.danceGameClock) ? null : (AU && AU.clock ? AU.clock() : null); return typeof a === 'number' ? a : gameT * 140 / 60; };
   const flash = (txt, cls) => { gr.textContent = txt; gr.className = 'dgr on ' + cls; clearTimeout(flash.t); flash.t = setTimeout(() => { gr.className = 'dgr'; }, 380); };
   function grade(n, g) { n.g = g; st.counts[g]++; st.score += PTS[g]; if (g === 'miss') { st.combo = 0; AU && AU.hit && AU.hit('miss'); } else { st.combo++; st.best = Math.max(st.best, st.combo); AU && AU.hit && AU.hit(g); if (g !== 'ok' && onPunch) onPunch(g === 'reckless' ? 1 : 0.6); }
     st.laneFx[n.lane] = { g, t: performance.now() }; flash(g.toUpperCase(), g); }
