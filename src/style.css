@@ -87,3 +87,10 @@
 .rbstop span{font:600 12px 'DM Sans',Arial;color:#c9b8d8;letter-spacing:.08em}
 .rbstop:hover:not(:disabled){border-color:#c77dff}
 .rbstop.here{opacity:.5;cursor:default}
+/* rapid-bus menu: high-contrast rows (generic panel button styles made them white-on-grey) */
+.overlay .panel .rbstop{background:#0d0d0f;color:#fff;border:1px solid #3a3a40;text-transform:uppercase}
+.overlay .panel .rbstop b{color:#fff;font-weight:800}
+.overlay .panel .rbstop span{color:#e8e8ea;font-weight:700}
+.overlay .panel .rbstop:hover:not(:disabled){border-color:#e10600;background:#16161a}
+.overlay .panel .rbstop.here{opacity:1;background:#1c1c20;border-color:#e10600}
+.overlay .panel .rbstop.here span{color:#ff4d47}

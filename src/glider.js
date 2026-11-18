@@ -5,7 +5,7 @@ import { Color3 } from '@babylonjs/core/Maths/math.color';
 import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
 
 const ease = x => 1 - (1 - x) * (1 - x);
-export function createRapid({ scene, traffic, hud, app }) {
+export function createRapid({ scene, traffic, hud, app, grid }) {
   const stops = traffic.rapid || [];
   const tp = traffic.tpl('bus', 'bus', Color3.FromHexString('#7e2a91'));
   const node = new TransformNode('rapidBus', scene); const b = tp.b.createInstance('rapidBusBody'); b.parent = node; b.position.setAll(0); const l = tp.l.createInstance('rapidBusLights'); l.parent = node; l.position.setAll(0); node.setEnabled(false);
@@ -36,7 +36,9 @@ export function createRapid({ scene, traffic, hud, app }) {
     // wide kerbside shot: from the pavement ahead of the stop, looking back along the bus
     const nl = Math.hypot(s.sx - s.bx, s.sz - s.bz) || 1, kx = s.bx - (s.sx - s.bx) / nl * 2.2, kz = s.bz - (s.sz - s.bz) / nl * 2.2; // in the next lane out (clear of kerb-parked cars)
     const side = t < 3.0 ? 15 : -17; // arrival: ahead of the stop watching it pull in; destination: behind it watching it pull away
-    cam.position.set(kx + s.ux * side, 2.3, kz + s.uz * side); tgt.set(node.position.x - s.ux * 4 + (t < 3.0 ? 0 : (s.sx - s.bx) * 0.8), 1.5, node.position.z - s.uz * 4 + (t < 3.0 ? 0 : (s.sz - s.bz) * 0.8)); cam.setTarget(tgt); cam.fov = 0.8;
+    let cx = kx + s.ux * side, cz = kz + s.uz * side;
+    if (grid) { const f = grid.raycast(s.bx, s.bz, cx, cz, 2.3); if (f < 1) { const g = Math.max(0.25, f - 1.2 / Math.max(1, Math.hypot(cx - s.bx, cz - s.bz))); cx = s.bx + (cx - s.bx) * g; cz = s.bz + (cz - s.bz) * g; } } // never inside a building (road bends)
+    cam.position.set(cx, 2.3, cz); tgt.set(node.position.x - s.ux * 4 + (t < 3.0 ? 0 : (s.sx - s.bx) * 0.8), 1.5, node.position.z - s.uz * 4 + (t < 3.0 ? 0 : (s.sz - s.bz) * 0.8)); cam.setTarget(tgt); cam.fov = 0.8;
     if (t > 5.6) { C = null; node.setEnabled(false); parkedBus.forEach(p => p.node.setEnabled(true)); app.paused = false; app.cine = false; fade.style.opacity = '0'; fade.classList.remove('on'); }
     return true;
   };

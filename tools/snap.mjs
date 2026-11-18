@@ -4,7 +4,7 @@ import puppeteer from 'puppeteer-core'; import fs from 'fs';
 const W = +(process.env.W || 1024), H = +(process.env.H || 576);
 const browser = await puppeteer.launch({ executablePath: '/usr/bin/google-chrome', headless: 'new', args: ['--no-sandbox', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage(); await page.setViewport({ width: W, height: H });
-page.on('pageerror', e => console.log('PE', e.message)); page.on('console', m => { if (m.type() === 'error') console.log('CE', m.text().slice(0, 200)); });
+page.on('pageerror', e => console.log('PE', e.message)); page.on('console', m => { if (m.type() === 'error' || m.type() === 'warn' || m.type() === 'warning') console.log('CE', m.text().slice(0, 200)); });
 await page.goto('http://localhost:4173/?webgl' + (process.env.Q || ''), { waitUntil: 'load' });
 await page.waitForFunction(() => window.__rw && window.__rw.ready, { timeout: 180000 });
 await page.evaluate(() => { const e = __rw.scene.getEngine(); e.stopRenderLoop(); __rw.fixedDt = 1 / 30; __rw.app.title = false; const t = document.getElementById('title'); if (t) t.style.display = 'none'; });

@@ -5,14 +5,16 @@ cut from the body by bone region and pushed out along normals, so every Drop 018
 Animations: Quaternius UAL1 (CC0) idle / walk / jog / sprint / jump / dance, in place.
 Run: blender -b --python build_avatar.py -- out.glb"""
 import bpy, bmesh, sys, math
-from mathutils import Vector
+from mathutils import Vector, Euler
 OUT = sys.argv[sys.argv.index('--') + 1]
 Q = "/workspace/reckless-world/research/assets/quaternius/"
 BASE = Q + "universal-base-characters/Universal Base Characters[Standard]/Base Characters/Godot - UE/Superhero_Male_FullBody.gltf"
 HAIR = Q + "universal-base-characters/Universal Base Characters[Standard]/Hairstyles/Rigged to Head Bone/glTF (Godot -Unreal)/" + (sys.argv[sys.argv.index('--') + 2] if len(sys.argv) > sys.argv.index('--') + 2 else "Hair_SimpleParted.gltf")
 UAL = Q + "universal-animation-library/Universal Animation Library[Standard]/Unreal-Godot/UAL1_Standard.glb"
-CLIPS = {'Idle_Loop': 'idle', 'Walk_Loop': 'walk', 'Jog_Fwd_Loop': 'jog', 'Sprint_Loop': 'sprint', 'Jump_Start': 'jumpStart', 'Jump_Loop': 'jumpLoop', 'Jump_Land': 'jumpLand', 'Dance_Loop': 'dance'}
-HEAD_S = 1.75
+CLIPS = {'Walk_Loop': 'walk', 'Jog_Fwd_Loop': 'jog', 'Sprint_Loop': 'sprint', 'Jump_Start': 'jumpStart', 'Jump_Loop': 'jumpLoop', 'Jump_Land': 'jumpLand', 'Dance_Loop': 'dance'}
+USE_QHAIR = False  # the app's short textured crop with a fade is built as a scalp shell below
+SMOOTH_IT = int(__import__('os').environ.get('SMIT', '0'))
+HEAD_S = 1.88
 LEG_F = 0.86     # app figure has shorter legs than the superhero base     # app renders: ~5.6 heads tall
 TARGET_H = 1.74   # metres, matches cars (~4.3 m) and lanes
 
@@ -23,7 +25,7 @@ for o in list(bpy.context.scene.objects):
 arm = [o for o in bpy.context.scene.objects if o.type == 'ARMATURE'][0]
 body = bpy.data.objects['SuperHero_Male']
 before = set(bpy.context.scene.objects)
-bpy.ops.import_scene.gltf(filepath=HAIR)
+if USE_QHAIR: bpy.ops.import_scene.gltf(filepath=HAIR)
 for o in set(bpy.context.scene.objects) - before:
     if o.type == 'ARMATURE' or (o.type == 'MESH' and len(o.data.vertices) < 60): bpy.data.objects.remove(o, do_unlink=True)
 for o in set(bpy.context.scene.objects) - before:
@@ -101,6 +103,87 @@ def bone_ws(n):
     b = arm.data.bones[n]; return b.head_local.copy(), b.tail_local.copy()
 z_neck = bone_ws('neck_01')[0].z; z_pelvis = bone_ws('pelvis')[0].z; z_sp2 = bone_ws('spine_02')[0].z; hh, ht = bone_ws('Head')
 
+# --- face: rounder, softer, younger (app crew render): shorter lower face, fuller cheeks and jaw, smaller nose, smoothed features ---
+toA = arm.matrix_world.inverted() @ body.matrix_world
+Wf = wmap(body); Pf = [toA @ v.co for v in body.data.vertices]
+fv = [i for i, d in enumerate(Wf) if dom(d) in ('Head', 'neck_01') and d.get('Head', 0) > 0.5]
+mn = Vector([min(Pf[i][k] for i in fv) for k in range(3)]); mx = Vector([max(Pf[i][k] for i in fv) for k in range(3)]); hc0 = (mn + mx) / 2; ex0 = (mx - mn) / 2
+def sm(a, b, x): t = max(0.0, min(1.0, (x - a) / (b - a))); return t * t * (3 - 2 * t)
+eyes = bpy.data.objects.get('Eyes'); ec = []
+if eyes:
+    toEy = arm.matrix_world.inverted() @ eyes.matrix_world; eps = [toEy @ v.co for v in eyes.data.vertices]
+    for side in (1, -1):
+        pts = [p for p in eps if p.x * side > 0]; ec.append(sum(pts, Vector()) / len(pts))
+newP = {}
+for i in fv:
+    p = Pf[i].copy(); n = Vector(((p.x - hc0.x) / ex0.x, (p.y - hc0.y) / ex0.y, (p.z - hc0.z) / ex0.z)); w = Wf[i].get('Head', 0)
+    if n.z < 0.15:  # lower face: lift the chin, fill the cheeks and jaw out
+        lift = sm(0.15, -1.0, n.z); p.z += (hc0.z + 0.15 * ex0.z - p.z) * 0.2 * lift
+        p.x = hc0.x + (p.x - hc0.x) * (1 + 0.17 * sm(0.15, -0.45, n.z) * sm(-1.05, -0.6, n.z))
+        if n.y < 0: p.y = hc0.y + (p.y - hc0.y) * (1 - 0.06 * lift)
+    if n.y < -0.7 and abs(n.x) < 0.3 and -0.45 < n.z < 0.15: p.y += (hc0.y - ex0.y * 0.7 - p.y) * 0.6 * sm(0.3, 0.0, abs(n.x))  # smaller nose
+    newP[i] = hc0 + (p - hc0) if w > 0 else Pf[i]
+bmf = bmesh.new(); bmf.from_mesh(body.data); bmf.verts.ensure_lookup_table()
+for i, p in newP.items(): bmf.verts[i].co = toA.inverted() @ p
+near_eye = lambda p: any((p - c).length < ex0.x * 0.42 for c in ec)
+soft = [bmf.verts[i] for i in fv if not near_eye(Pf[i]) and (Pf[i].z - hc0.z) / ex0.z < 0.35]
+for _ in range(SMOOTH_IT): bmesh.ops.smooth_laplacian_vert(bmf, verts=soft, lambda_factor=0.35, lambda_border=0.0, use_x=True, use_y=True, use_z=True, preserve_volume=True)
+bmf.to_mesh(body.data); bmf.free()
+
+# --- hair: short textured crop with a skin fade, as a scalp shell (planar-projected strand texture + fade vertex colours) ---
+import random
+def smooth(a, b, x): t = max(0.0, min(1.0, (x - a) / (b - a))); return t * t * (3 - 2 * t)
+toA = arm.matrix_world.inverted() @ body.matrix_world
+Wh = wmap(body); Ph = [toA @ v.co for v in body.data.vertices]
+hv = [i for i, d in enumerate(Wh) if dom(d) == 'Head']
+mn = Vector([min(Ph[i][k] for i in hv) for k in range(3)]); mx = Vector([max(Ph[i][k] for i in hv) for k in range(3)])
+hc = (mn + mx) / 2; ex = (mx - mn) / 2
+print('head bbox', [round(c, 3) for c in (mx - mn)], 'centre', [round(c, 3) for c in hc])
+def hn(p): q = p - hc; return Vector((q.x / ex.x, q.y / ex.y, q.z / ex.z))
+def scalp(n):
+    zth = 0.30 - max(0.0, min(1.0, (n.y + 0.45) / 1.1)) * 0.78   # hairline: high at the forehead, low at the nape
+    if abs(n.x) > 0.78 and n.z < 0.32 and n.y > -0.4: return False   # keep the ears clear
+    return n.z > zth
+HSEL = {i for i in hv if scalp(hn(Ph[i]))}
+o = body.copy(); o.data = body.data.copy(); o.name = 'Hair'; bpy.context.collection.objects.link(o)
+bm = bmesh.new(); bm.from_mesh(o.data); bm.verts.ensure_lookup_table()
+norms = [v.normal.copy() for v in bm.verts]
+random.seed(4)
+for v in bm.verts:
+    if v.index not in HSEL: continue
+    n = hn(Ph[v.index]); top = smooth(0.30, 0.80, n.z)      # crop: volume on top, faded short sides
+    edge = smooth(0.0, 0.14, n.z - (0.30 - max(0.0, min(1.0, (n.y + 0.45) / 1.1)) * 0.78))  # thin to nothing at the hairline
+    th = (0.0025 + 0.013 * top) * (0.25 + 0.75 * edge) + (0.010 * smooth(-0.2, -0.75, n.y) * smooth(0.25, 0.6, n.z))  # extra fringe volume at the front
+    d = norms[v.index] * th
+    if n.y < -0.35 and n.z > 0.25: d += Vector((0, -0.006, -0.004)) * top   # fringe pushed forward over the brow
+    v.co = v.co + (toA.inverted().to_3x3() @ d)
+bmesh.ops.delete(bm, geom=[v for v in bm.verts if v.index not in HSEL], context='VERTS')
+bm.to_mesh(o.data); bm.free()
+# planar UV from above for the strand texture; fade colour from skin-stubble (sides) to near-black (top)
+uvl = o.data.uv_layers.active.data
+P2 = [toA @ v.co for v in o.data.vertices]
+for poly in o.data.polygons:
+    for li, vi in zip(poly.loop_indices, poly.vertices):
+        n = hn(P2[vi]); uvl[li].uv = (0.5 + n.x * 0.5, 0.5 + n.y * 0.5 + n.z * 0.15)
+ca = o.data.color_attributes.new('Col', 'FLOAT_COLOR', 'POINT')
+for i, v in enumerate(o.data.vertices):
+    n = hn(P2[i]); f = smooth(0.0, 0.55, n.z + (0.25 if n.y < -0.3 else 0))
+    sk = (0.62, 0.55, 0.53); dk = (0.035, 0.03, 0.03)
+    ca.data[i].color = tuple(sk[k] * (1 - f) * 0.55 + dk[k] * (0.45 + 0.55 * f) for k in range(3)) + (1.0,)
+o.data.materials.clear(); o.data.materials.append(bpy.data.materials.new('M_hair'))
+print('hair shell', len(o.data.vertices))
+# brows: thicker and darker like the app's heavy straight brows
+eb = bpy.data.objects.get('Eyebrows')
+if eb:
+    toE = arm.matrix_world.inverted() @ eb.matrix_world; ps = [toE @ v.co for v in eb.data.vertices]
+    for side in (1, -1):
+        idx = [i for i, p in enumerate(ps) if p.x * side > 0]
+        if not idx: continue
+        c = sum((ps[i] for i in idx), Vector()) / len(idx)
+        for i in idx:
+            q = ps[i] - c; ps[i] = c + Vector((q.x * 1.0, q.y, q.z * 0.72)) + Vector((0, -0.0015, 0.0035))
+    for v, p in zip(eb.data.vertices, ps): v.co = toE.inverted() @ p
+
 # --- garments: shells cut from the body by bone region ---
 bm_src = body
 W = wmap(body)
@@ -146,7 +229,7 @@ def make(kind):
         if v.index not in sel: continue
         p = toA @ v.co; d = PUSH[kind]; b = dom(W[v.index]) or ''
         k = 1.0
-        if kind in ('tee', 'crop'): k = 1.4 if b.startswith('upperarm') else 1.2
+        if kind in ('tee', 'crop'): k = 1.55 if b.startswith('upperarm') else 1.27
         elif kind == 'long': k = 1.35 if b.startswith(('upperarm', 'lowerarm')) else 1.1
         elif kind == 'hoodie': k = 1.45 if b.startswith(('upperarm', 'lowerarm')) else (1.0 if b == 'Head' else 1.2)
         elif kind == 'jeans': k = (1.35 if b.startswith('thigh') else 1.95 if b.startswith('calf') else 1.12)
@@ -158,7 +241,8 @@ def make(kind):
         if k != 1.0 and b and b != 'Head':
             c = axis_pt(p, b) if not b.startswith(('spine', 'pelvis', 'clavicle', 'neck')) else Vector((0, axis_pt(p, b).y * 0 + (axis_pt(p, 'spine_02').y), p.z))
             if b.startswith(('spine', 'pelvis', 'clavicle', 'neck')): c = Vector((0.0, axis_pt(p, 'spine_02').y + 0.01, p.z))
-            if kind == 'jeans' and b.startswith('calf'): kk = 1 + (k - 1) * min(1.0, 0.55 + tparam(p, b)); q = c + (p - c) * kk
+            if kind == 'jeans' and b.startswith(('thigh', 'calf')):  # straight-leg baggy: near-constant radius from mid-thigh to the hem
+                r = (p - c).length; R = max(r * 1.12, 0.082 if b.startswith('thigh') else 0.079); q = c + (p - c) * (R / max(r, 1e-4))
             else: q = c + (p - c) * k
             v.co = toA.inverted() @ q + norms[v.index] * d
         else:
@@ -194,6 +278,35 @@ for a in list(bpy.data.actions):
     if base in CLIPS and CLIPS[base] not in [k.name for k in keep]:
         a.name = CLIPS[base]; a.use_fake_user = True; keep.append(a)
     else: bpy.data.actions.remove(a)
+# --- idle: the app's relaxed upright stance (straight legs, arms hanging ~10 deg out), gentle breathing ---
+bpy.context.view_layer.objects.active = arm; bpy.ops.object.mode_set(mode='POSE')
+arm.animation_data_create(); ia = bpy.data.actions.new('idle'); ia.use_fake_user = True; arm.animation_data.action = ia
+def aim(name, d):
+    bpy.context.view_layer.update(); pb = arm.pose.bones[name]; M = pb.matrix.copy()
+    cur = (M.to_3x3() @ Vector((0, 1, 0))).normalized(); R = cur.rotation_difference(d.normalized()).to_matrix().to_4x4()
+    N = R @ M; N.translation = M.translation; pb.matrix = N
+def stance(br):
+    for pb in arm.pose.bones: pb.rotation_mode = 'QUATERNION'; pb.matrix_basis.identity()
+    for sd in ('_l', '_r'):
+        sx = 1 if arm.data.bones['upperarm' + sd].head_local.x > 0 else -1
+        aim('upperarm' + sd, Vector((sx * (0.11 + br * 0.015), 0.03, -1)))
+        aim('lowerarm' + sd, Vector((sx * 0.08, -0.16, -1)))
+        aim('hand' + sd, Vector((sx * 0.02, -0.12, -1)))
+        aim('thigh' + sd, Vector((sx * 0.045, 0.0, -1))); aim('calf' + sd, Vector((sx * 0.03, 0.012, -1)))
+        for f in ('index', 'middle', 'ring', 'pinky'):
+            for j, ang in ((1, 18), (2, 24), (3, 14)):
+                bn = f'{f}_0{j}{sd}'
+                if bn in arm.pose.bones: pb = arm.pose.bones[bn]; pb.rotation_quaternion = Euler((math.radians(ang), 0, 0)).to_quaternion()
+    for bn, ang in (('spine_02', 1.2 * br), ('spine_03', 1.0 * br), ('neck_01', -0.8 * br)):
+        if bn in arm.pose.bones: arm.pose.bones[bn].rotation_quaternion = Euler((math.radians(ang), 0, 0)).to_quaternion()
+    bpy.context.view_layer.update()
+for fr, br in ((1, 0.0), (45, 1.0), (90, 0.0)):
+    stance(br)
+    for pb in arm.pose.bones:
+        pb.keyframe_insert('rotation_quaternion', frame=fr); pb.keyframe_insert('location', frame=fr)
+    if 'pelvis' in arm.pose.bones: pass
+bpy.ops.object.mode_set(mode='OBJECT'); arm.animation_data.action = None
+keep.append(ia)
 print('actions', [a.name for a in keep])
 arm.animation_data_create()
 for a in keep:
@@ -204,10 +317,11 @@ for o in list(bpy.context.scene.objects):  # drop helper spheres (42-vert Icosph
     if o.type == 'MESH' and (o.name.startswith('Icosphere') or len(o.data.vertices) < 60): bpy.data.objects.remove(o, do_unlink=True)
 for o in bpy.context.scene.objects:  # lean export: one UV set, no vertex colours
     if o.type != 'MESH': continue
-    while len(o.data.color_attributes): o.data.color_attributes.remove(o.data.color_attributes[0])
+    while o.name != 'Hair' and len(o.data.color_attributes): o.data.color_attributes.remove(o.data.color_attributes[0])
     while len(o.data.uv_layers) > 1: o.data.uv_layers.remove(o.data.uv_layers[-1])
 bpy.ops.object.select_all(action='SELECT')
 bpy.ops.export_scene.gltf(filepath=OUT, export_format='GLB', export_animations=True, export_animation_mode='NLA_TRACKS', export_frame_step=2,
                           export_image_format='NONE', export_materials='EXPORT', export_apply=False, export_skins=True, export_all_influences=False,
-                          export_texcoords=True, export_normals=True, export_yup=True, export_optimize_animation_size=True)
+                          export_texcoords=True, export_normals=True, export_vertex_color='ACTIVE', export_yup=True, export_optimize_animation_size=True)
 print('wrote', OUT)
+# Post-process (repo root game/):  npx @gltf-transform/cli@4 resample|prune|dedup|meshopt  out.glb -> public/models/avatar.glb.json

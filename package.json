@@ -23,6 +23,7 @@
   },
   "devDependencies": {
     "@babylonjs/loaders": "^7.54.3",
+    "meshoptimizer": "^0.22.0",
     "puppeteer-core": "^24.43.1",
     "vite": "^5.4.21"
   }
