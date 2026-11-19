@@ -149,7 +149,7 @@ async function start() {
       player = av; window.__rw.player = av; player.setFit(CREW.fit, CR.visibleFor); if (glow) for (const m of av.allMeshes()) glow.addExcludedMesh(m); DG.log('avatar3d loaded ' + kind); }).catch(e => console.warn('avatar3d', e)); };
   window.__rw.swapAvatar = swapAvatar; swapAvatar(CREW.base);
   const setBase = (b, fromApp = false) => { if (!['male', 'female'].includes(b)) return; if (!fromApp) CR.setLocalBase(b); CREW.baseFromApp = fromApp; if (b !== CREW.base) { CREW.base = b; swapAvatar(b); } };
-  const loadBase = async () => { if (!CREW.account || Q.get('base')) return null; const b = await CR.readAvatarBase(CREW.account); if (b) setBase(b, true); return b; };
+  const loadBase = async () => { if (!CREW.account || Q.get('base')) return null; const b = await CR.readAvatarBase(CREW.account); /* avatar-base endpoint: 'male'|'female' only when set in the app, null when unset (or on failure) -> local pick / first-launch picker. GET only. */ if (b) setBase(b, true); return b; };
   const loadCrew = async () => { if (!CREW.account) return; CREW.basePending = loadBase(); try { const r = await CR.readCrew(CREW.account); if (r) { CREW.xp = r.xp; if (r.fit.top || r.fit.outer || r.fit.legs) applyFit(r.fit); } } catch (e) { } }; loadCrew();
   const P = { x: ext.spawn.x, z: ext.spawn.z, heading: 0, speed: 0, dancing: false }; window.__rw.P = P; window.__rw.grid = () => city.grid;
   { const dx = ext.doorPos.x - P.x, dz = ext.doorPos.z - P.z; P.heading = Math.atan2(dx, dz); }

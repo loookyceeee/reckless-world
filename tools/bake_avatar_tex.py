@@ -157,14 +157,14 @@ if __name__ == '__main__':
     hw = smooth(zneck - 0.03, zneck + 0.03, Z)[..., None]
     vis_body = depth_buffer(['Body'])
     skin_only = fill(rgb, sk & (rgb.mean(-1) > 0.45), 2); face_lo = np.stack([ndi.median_filter(skin_only[..., c], size=25) for c in range(3)], -1); face_lo = ndi.gaussian_filter(face_lo, (10, 10, 0))
-    cH = bake('Body', 1024, head_front, face_lo, hm, vis_body, (0.32, 0.72)); # torso / arms / hands from the shirtless 'jeans' look so bare torsos carry the app's abs and arm shading
+    cH = bake('Body', 1024, head_front, face_lo, hm, vis_body, (0.32, 0.72) if FEM else (0.12, 0.5)); # torso / arms / hands from the shirtless 'jeans' look so bare torsos carry the app's abs and arm shading
     rgbJ, alphaJ = load('tee-jeans' if FEM else 'jeans'); gmJ = global_map(alphaJ, BODY + ['G_jeans', 'G_shoes'])
     skJ = skin_mask(rgbJ) & alphaJ; skJ[int(gmJ(0, 0.78)[1]):] = False; skJ = ndi.binary_erosion(skJ, iterations=2)
     cB = bake('Body', 1024, fill(rgbJ, skJ, 2), plate, gmJ, vis_body, (-0.15, 0.3))
     cBody = cH * hw + cB * (1 - hw)
     if FEM:  # under her hair: the back and top of the scalp is hair-dark, so any gap in the shell reads as hair, not skin
         Ab, mb_ = texels('Body', 1024); hcy = np.median(D['Eyes|co'][:, 1]) + 0.08; ezz = D['Eyes|co'][:, 2].mean()
-        dk_ = (Ab[..., 2] > ezz + 0.035) & (Ab[..., 1] > hcy) | (Ab[..., 2] > ezz + 0.1)
+        dk_ = (Ab[..., 2] > ezz + 0.035) & (Ab[..., 1] > hcy) | (Ab[..., 2] > ezz + 0.1) | (Ab[..., 2] > ezz - 0.07) & (Ab[..., 1] > hcy + 0.04)  # nape down to the hairline
         cBody[dk_ & mb_] = np.array([0.06, 0.05, 0.045])
     save(cBody, 'body')
     hairm = alpha & ~skin_mask(rgb) & (rgb.mean(-1) < 0.42)

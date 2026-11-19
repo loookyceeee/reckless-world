@@ -376,7 +376,7 @@ def make(kind):
         if v.index not in sel: continue
         p = toA @ v.co; d = PUSH[kind]; b = dom(W[v.index]) or ''
         k = 1.0
-        if kind in ('tee', 'crop'): k = 1.3 if b.startswith('upperarm') else 1.27  # no puff over the shoulder, flares to the hem  # sleeve flares toward the hem
+        if kind in ('tee', 'crop'): k = ((1.12 + 0.95 * tparam(p, b) ** 1.2) * (1.12 if FEM else 1.0)) if b.startswith('upperarm') else 1.27  # no puff over the shoulder, flares to the hem  # sleeve flares toward the hem
         elif kind == 'long': k = 1.35 if b.startswith(('upperarm', 'lowerarm')) else 1.1
         elif kind == 'hoodie': k = 1.45 if b.startswith(('upperarm', 'lowerarm')) else (1.0 if b == 'Head' else 1.2)
         elif kind == 'jeans': k = (1.35 if b.startswith('thigh') else 1.95 if b.startswith('calf') else 1.12)
@@ -390,7 +390,7 @@ def make(kind):
         if k != 1.0 and b and b != 'Head':
             c = axis_pt(p, b) if not b.startswith(('spine', 'pelvis', 'clavicle', 'neck')) else Vector((0, axis_pt(p, b).y * 0 + (axis_pt(p, 'spine_02').y), p.z))
             if b.startswith(('spine', 'pelvis', 'clavicle', 'neck')): c = Vector((0.0, axis_pt(p, 'spine_02').y + 0.01, p.z))
-            if kind in ('tee', 'crop') and b.startswith('upperarm'):  # straight boxy short sleeve: near-constant wide tube, tiny flare (no puff)
+            if False and kind in ('tee', 'crop') and b.startswith('upperarm'):  # (parked for the pipeline rebuild) straight boxy short sleeve: near-constant wide tube, tiny flare (no puff)
                 r = (p - c).length; tp_ = tparam(p, b); R = max(r * 1.1, (0.074 if FEM else 0.08) + 0.01 * tp_); q = c + (p - c) * (R / max(r, 1e-4))
             elif kind == 'jeans' and b.startswith(('thigh', 'calf')):  # straight-leg baggy: near-constant radius from mid-thigh to the hem
                 r = (p - c).length; R = max(r * 1.3, 0.104 if b.startswith('thigh') else 0.112 + 0.012 * tparam(p, b)); q = c + (p - c) * (R / max(r, 1e-4)); q.y = c.y + (q.y - c.y) * 1.2 + 0.012 * (tparam(p, b) if b.startswith('calf') else 0.5)  # deep, baggy, sits back over the heel
