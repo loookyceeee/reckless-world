@@ -30,11 +30,11 @@ export async function loadAvatar3D(scene, { name = 'player', base = import.meta.
   // so face, hair, tee print and stonewash denim match the app. The renders already hold soft studio shading, so the
   // material lights them gently: half-Lambert-like fill through emissive (wrap lighting), low specular, no glow (main.js).
   const TEX = base + (FEM ? 'models/tex_f/' : 'models/tex/');
-  const tex = (f, onErr) => { const t = new Texture(TEX + f + '.webp', scene, false, false, Texture.TRILINEAR_SAMPLINGMODE, null, () => onErr && onErr()); t.anisotropicFilteringLevel = 4; return t; };
+  const tex = (f, onErr, noMip = false) => { const t = new Texture(TEX + f + '.webp', scene, noMip, false, noMip ? Texture.BILINEAR_SAMPLINGMODE : Texture.TRILINEAR_SAMPLINGMODE, null, () => onErr && onErr()); t.anisotropicFilteringLevel = 4; return t; };
   const mat = (id, col, { rough = 0.75, t = null, fill = 0.42 } = {}) => { const m = new StandardMaterial('av3d-' + id, scene); m.diffuseColor = col.clone(); const sp = (1 - rough) * 0.3; m.specularColor = new Color3(sp, sp, sp); m.specularPower = 28; m.ambientColor = new Color3(0.3, 0.3, 0.32);
     if (t) { m.diffuseTexture = t; m.emissiveTexture = t; m.emissiveColor = new Color3(fill, fill, fill); m.diffuseColor = new Color3(0.78, 0.78, 0.78); } return m; };
-  const skinM = mat('skin', SKIN, { rough: 0.6, t: tex('body'), fill: 0.32 }); skinM.diffuseColor.set(0.82, 0.8, 0.8); // less fill, more key: arms read apart from the torso
-  const hairM = mat('hair', HAIR, { rough: 0.9, t: tex('hair'), fill: 0.5 }); hairM.diffuseColor.set(0.45, 0.45, 0.45); hairM.diffuseTexture.hasAlpha = true; hairM.transparencyMode = 1; hairM.alphaCutOff = 0.5; hairM.backFaceCulling = false; // alpha-tested fringe edge: no forehead band
+  const skinM = mat('skin', SKIN, { rough: 0.6, t: tex('body'), fill: 0.32 }); if (FEM) { skinM.diffuseColor.set(0.8, 0.68, 0.56); skinM.emissiveColor.set(0.27, 0.2, 0.15); } else skinM.diffuseColor.set(0.82, 0.8, 0.8); skinM.specularColor.set(0.05, 0.04, 0.035); // warm light skin like the sheets (was washed-out pale) // less fill, more key: arms read apart from the torso
+  const hairM = mat('hair', HAIR, { rough: 0.9, t: tex('hair', null, true), fill: 0.5 }); /* no mips: stretched nape UVs must not average the fade into stripes */ hairM.diffuseColor.set(0.45, 0.45, 0.45); /* opaque hair shell: the fade carries skin colour down to the hairline, so no alpha holes or nape slit */ hairM.backFaceCulling = false; // alpha-tested fringe edge: no forehead band
   const browM = mat('brow', HAIR, { rough: 0.8 });
   const eyeM = mat('eye', Color3.White(), { rough: 0.2, t: tex('eyes'), fill: 0.5 });
   // keep the loader's winding (glTF is right-handed): new materials must copy sideOrientation or every shell renders inside-out
@@ -43,6 +43,7 @@ export async function loadAvatar3D(scene, { name = 'player', base = import.meta.
   const curlM = mat('curls', HAIR, { rough: 0.7 }); curlM.diffuseColor = Color3.FromHexString('#1a1412'); curlM.specularColor = new Color3(0.12, 0.1, 0.09); curlM.specularPower = 18; curlM.emissiveColor = new Color3(0.03, 0.025, 0.022);
   const studM = mat('stud', Color3.FromHexString('#d8dce4'), { rough: 0.1 }); studM.specularColor = new Color3(1, 1, 1); studM.specularPower = 64; studM.emissiveColor = new Color3(0.35, 0.36, 0.4);
   set('Curls', curlM); set('Stud', studM);
+  const soleM = mat('soles', Color3.FromHexString('#1c1c1f'), { rough: 0.55 }); soleM.specularColor = new Color3(0.18, 0.18, 0.2); soleM.specularPower = 24; set('Soles', soleM);
   set('Body', skinM); set('Hair', hairM); set('Eyebrows', browM); set('Eyes', eyeM);
   (byName.Eyebrows || []).forEach(x => x.setEnabled(false)); // brows are painted into the projected face texture
   set('G_bra', mat('bra', Color3.FromHexString('#0e0e10'), { rough: 0.7 })); // female base layer: a black sports bra under every top, so bare-torso looks stay covered

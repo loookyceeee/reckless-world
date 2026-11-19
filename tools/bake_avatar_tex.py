@@ -157,11 +157,16 @@ if __name__ == '__main__':
     hw = smooth(zneck - 0.03, zneck + 0.03, Z)[..., None]
     vis_body = depth_buffer(['Body'])
     skin_only = fill(rgb, sk & (rgb.mean(-1) > 0.45), 2); face_lo = np.stack([ndi.median_filter(skin_only[..., c], size=25) for c in range(3)], -1); face_lo = ndi.gaussian_filter(face_lo, (10, 10, 0))
-    cH = bake('Body', 1024, head_front, face_lo, hm, vis_body, (0.12, 0.5)); # torso / arms / hands from the shirtless 'jeans' look so bare torsos carry the app's abs and arm shading
+    cH = bake('Body', 1024, head_front, face_lo, hm, vis_body, (0.32, 0.72) if FEM else (0.12, 0.5)); # torso / arms / hands from the shirtless 'jeans' look so bare torsos carry the app's abs and arm shading
     rgbJ, alphaJ = load('tee-jeans' if FEM else 'jeans'); gmJ = global_map(alphaJ, BODY + ['G_jeans', 'G_shoes'])
     skJ = skin_mask(rgbJ) & alphaJ; skJ[int(gmJ(0, 0.78)[1]):] = False; skJ = ndi.binary_erosion(skJ, iterations=2)
     cB = bake('Body', 1024, fill(rgbJ, skJ, 2), plate, gmJ, vis_body, (-0.15, 0.3))
-    save(cH * hw + cB * (1 - hw), 'body')
+    cBody = cH * hw + cB * (1 - hw)
+    if FEM:  # under her hair: the back and top of the scalp is hair-dark, so any gap in the shell reads as hair, not skin
+        Ab, mb_ = texels('Body', 1024); hcy = np.median(D['Eyes|co'][:, 1]) + 0.08; ezz = D['Eyes|co'][:, 2].mean()
+        dk_ = (Ab[..., 2] > ezz + 0.035) & (Ab[..., 1] > hcy) | (Ab[..., 2] > ezz + 0.1) | (Ab[..., 2] > ezz - 0.07) & (Ab[..., 1] > hcy + 0.04)  # nape down to the hairline
+        cBody[dk_ & mb_] = np.array([0.06, 0.05, 0.045])
+    save(cBody, 'body')
     hairm = alpha & ~skin_mask(rgb) & (rgb.mean(-1) < 0.42)
     hy = np.where(alpha)[0].min(); hairm[int(eyy) - 8:] = False
     hair_front = fill(rgb, hairm, 1); raw_head = fill(rgb, alpha, 1)
@@ -181,10 +186,10 @@ if __name__ == '__main__':
     ny_ = (Y_ - (yy.min() + yy.max()) / 2) / max(1e-4, (yy.max() - yy.min()) / 2)
     cl_ = 0.6 - 0.3 * smooth(-0.25, -0.75, ny_)
     rs = np.random.RandomState(5); nz_ = ndi.gaussian_filter(rs.rand(1024, 1024), 0.8); nz_ = (np.argsort(np.argsort(nz_.ravel())).reshape(nz_.shape) + 0.5) / nz_.size  # rank -> uniform
-    dens = 0.97 * smooth(0.1, 1.0, np.clip((f_ - 0.1) / np.maximum(cl_ - 0.1, 1e-3), 0, 1)) ** 2.0 * (1 - smooth(-0.5, -0.7, ny_))
+    dens = 0.92 * smooth(0.0, 1.0, np.clip((f_ - 0.1) / np.maximum(cl_ - 0.1, 1e-3), 0, 1)) ** 2.0 * (1 - smooth(-0.5, -0.7, ny_))
     over = f_ >= cl_ - 0.015
     # colour fade (reads at any distance, mips can't wash it out): skin -> stubble -> near-black; speckled alpha only at the bottom edge
-    al = np.where(over | (dens > 0.18), 1.0, (nz_ < dens / 0.18).astype(np.float32))
+    al = np.where(over | (f_ > 0.1), 1.0, 0.0).astype(np.float32)  # colour fade all the way down: skin-tone scalp -> dark stubble -> curls; only the very rim is cut
     g_ = 0.05 + 0.03 * rs.rand(1024, 1024); dark = np.dstack([g_ * 1.15, g_, g_ * 0.92])
     skinT = np.clip(skin_c * 1.12, 0, 1) * (0.94 + 0.06 * rs.rand(1024, 1024))[..., None]
     stub = np.clip(dens + (nz_ - 0.5) * 0.25, 0, 1)[..., None] ** 0.7
@@ -193,13 +198,23 @@ if __name__ == '__main__':
         st2 = ndi.gaussian_filter(rs.rand(1024, 1024), (0.6, 6)); st2 = (st2 - st2.mean()) / (st2.std() + 1e-6)
         g2 = np.clip(0.06 + 0.018 * st2, 0.02, 0.12); hcol = np.dstack([g2 * 1.2, g2, g2 * 0.9]); al = np.ones_like(al)
     dd_, (iy, ix) = ndi.distance_transform_edt(~m_, return_indices=True); al = al[iy, ix] * (dd_ <= 3); hcol = hcol[iy, ix]
-    if not FEM: lowf = (f_[iy, ix] < 0.26); al[lowf] = 0; hcol[lowf] = np.clip(skin_c * 1.12, 0, 1)  # bottom rim: always bare skin  # alpha never bleeds far: slivers at the nape stay clear
+    if not FEM: lowf = (f_[iy, ix] < 0.1); al[lowf] = 0  # alpha never bleeds far: slivers at the nape stay clear
     Image.fromarray((np.dstack([np.clip(hcol, 0, 1), al]) * 255).astype(np.uint8), 'RGBA').save(os.path.join(OUT, 'hair.webp'), quality=92, method=6)
     save(bake('Eyes', 128, rgb, rgb, hm, None, (-1, -0.5)), 'eyes')
     # shoes: below the jeans hem, not denim/skin
     blue = (rgb[..., 2] > rgb[..., 0] + 0.04) & alpha
     sh = alpha & ~blue & ~sk; sh[:int(gm(0, 0.12)[1])] = False
-    shoe_front = fill(rgb, sh, 2); save(bake('G_shoes', 256, shoe_front, shoe_front, gm, None, (-1, -0.5)), 'shoes')
+    shoe_front = fill(rgb, sh, 2); csh = bake('G_shoes', 512, shoe_front, shoe_front, gm, None, (-1, -0.5))
+    # trainer detail (sheet close-up): matte black upper, grey panel stitching, light-grey laces across the instep, rubber toe band
+    As, ms_ = texels('G_shoes', 512); X_, Y_, Z_, NZ_ = As[..., 0], As[..., 1], As[..., 2], As[..., 5]
+    csh = csh * 0.0 + np.array([0.07, 0.07, 0.075]); zmn = Z_[ms_].min(); ht_ = Z_ - zmn
+    for sx in (-1, 1):
+        sel_ = ms_ & (X_ * sx > 0); cxs_ = np.median(X_[sel_]); ys_ = Y_[sel_]; y0s, y1s = np.percentile(ys_, 3), np.percentile(ys_, 97)
+        inst = sel_ & (NZ_ > 0.45) & (np.abs(X_ - cxs_) < 0.022) & (Y_ < y0s + (y1s - y0s) * 0.62) & (Y_ > y0s + (y1s - y0s) * 0.22) & (ht_ > 0.05)
+        lace = inst & (np.mod((Y_ - y0s) / 0.011, 1.0) < 0.42); csh[lace] = np.array([0.72, 0.72, 0.74]); csh[inst & ~lace] = np.array([0.03, 0.03, 0.035])
+        stitch = sel_ & (np.abs(np.mod(ht_ / 0.028, 1.0) - 0.5) < 0.05) & (ht_ < 0.1); csh[stitch] = np.array([0.2, 0.2, 0.21])
+        toe = sel_ & (Y_ < y0s + (y1s - y0s) * 0.12) & (ht_ < 0.05); csh[toe] = np.array([0.13, 0.13, 0.135])
+    csh[~ms_] = 0.07; save(csh, 'shoes')
     json.dump({'global': vars(gm), 'head': vars(hm)}, open(DBG + '/maps.json', 'w'))
     # ---- every wardrobe garment from its own app render ----
     import re
