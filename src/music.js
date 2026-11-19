@@ -18,7 +18,7 @@ export function createMusic({ onState } = {}) {
       const SCW = window.SC && window.SC.Widget; if (!SCW) { failed = true; st(); return; }
       W = SCW(fr); const E = SCW.Events;
       W.bind(E.READY, () => { ready = true; W.getSounds(s => { count = (s || []).length; if (want && count > 1) W.skip(Math.floor(Math.random() * count)); }); W.setVolume(vol); if (want) W.play(); st(); });
-      W.bind(E.PLAY, () => { playing = true; W.getCurrentSound(s => { if (s) { title = s.title || ''; link = s.permalink_url || SC_PROFILE; } st(); }); });
+      W.bind(E.PLAY, () => { playing = true; W.getCurrentSound(s => { if (s) { title = cleanTitle(s.title || '', s.user && s.user.username); link = s.permalink_url || SC_PROFILE; } st(); }); });
       W.bind(E.PAUSE, () => { playing = false; st(); });
       W.bind(E.FINISH, () => { W.next(); });
       W.bind(E.ERROR, () => { if (++tries < 3) W.next(); else { failed = true; st(); } });
@@ -33,4 +33,11 @@ export function createMusic({ onState } = {}) {
     next() { if (W && ready) { W.next(); W.play(); } },
     setVolume(v) { const nv = Math.round(Math.max(0, Math.min(100, v))); if (Math.abs(nv - vol) < 2) return; vol = nv; if (W && ready) W.setVolume(vol); },
   };
+}
+
+// Luke: never show explicit track titles in game. Explicit titles become a clean label: artist + RECKLESS RADIO.
+const EXPLICIT = /(f+u+c+k|sh[i1]t|b[i1]tch|c+u+n+t|d[i1]ck|pussy|wh[o0]re|sl[u]t|n[i1]gg|cock|wank|tw[a@]t|bollock|motherf|\bass\b|arse|porn|sex|coke|\*{2,}|explicit)/i;
+export function cleanTitle(raw, artist) {
+  const t = String(raw || '').trim(); if (!t) return '';
+  return EXPLICIT.test(t) ? `${String(artist || 'Reckless Raves').trim()} · RECKLESS RADIO` : t;
 }
