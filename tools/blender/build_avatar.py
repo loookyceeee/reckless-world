@@ -557,6 +557,28 @@ for o in TEXM:
     bpy.ops.uv.smart_project(angle_limit=math.radians(60), island_margin=0.012, area_weight=0.0, scale_to_bounds=True)
     bpy.ops.object.mode_set(mode='OBJECT')
 arm.animation_data.action = ia; bpy.context.scene.frame_set(1); bpy.context.view_layer.update()
+# --- Pipeline chunk 1: Cycles ambient-occlusion bake (idle pose, starter fit as occluders) -> tex/ao_<part>.png (512)
+AO_DIR = os.environ.get('AO_DIR', '')
+if AO_DIR:
+    os.makedirs(AO_DIR, exist_ok=True); sc = bpy.context.scene; sc.render.engine = 'CYCLES'; sc.cycles.device = 'CPU'; sc.cycles.samples = 48
+    sc.render.bake.margin = 6; occ = {'Body', 'Hair', 'Curls', 'Eyes', 'G_tee', 'G_jeans', 'G_shoes', 'Soles'}
+    hid = [o for o in sc.objects if o.type == 'MESH' and o.name not in occ and not o.hide_render]
+    for o in hid: o.hide_render = True
+    for nm in ('Body', 'G_tee', 'G_jeans', 'G_shoes'):
+        o = sc.objects.get(nm)
+        if not o or not o.data.uv_layers: continue
+        img = bpy.data.images.new('ao_' + nm, 512, 512); bm = bpy.data.materials.new('bake_' + nm); bm.use_nodes = True
+        tn = bm.node_tree.nodes.new('ShaderNodeTexImage'); tn.image = img; bm.node_tree.nodes.active = tn
+        keep = [sl.material for sl in o.material_slots]
+        if not o.material_slots: o.data.materials.append(bm)
+        for sl in o.material_slots: sl.material = bm
+        bpy.ops.object.select_all(action='DESELECT'); bpy.context.view_layer.objects.active = o; o.select_set(True)
+        try:
+            bpy.ops.object.bake(type='AO', use_selected_to_active=False); img.filepath_raw = os.path.join(AO_DIR, 'ao_' + nm + '.png'); img.file_format = 'PNG'; img.save(); print('ao baked', nm)
+        except Exception as e: print('ao bake failed', nm, e)
+        for sl, m in zip(o.material_slots, keep): sl.material = m
+    for o in hid: o.hide_render = False
+    sc.render.engine = 'BLENDER_EEVEE_NEXT'
 dg = bpy.context.evaluated_depsgraph_get(); D = {}
 for o in TEXM:
     oe = o.evaluated_get(dg); me = oe.to_mesh(); me.calc_loop_triangles()

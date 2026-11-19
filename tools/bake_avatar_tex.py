@@ -146,6 +146,8 @@ if __name__ == '__main__':
     vis_all = depth_buffer(look_parts)
     sk = skin_mask(rgb) & alpha
     skin_c = np.median(rgb[sk], 0); print('skin', skin_c)
+    WARM = np.array([1.0, 1.0, 1.0]) if FEM else np.array([1.03, 0.96, 0.9])  # male: the app render's pinkish-grey skin -> the sheet's warm light skin
+    skin_c = np.clip(skin_c * WARM, 0, 1)
     # body skin: head region (face, ears, neck) projected with the head map; rest = arm skin with in-painting
     de_ = abs(er[1][0] - er[0][0]); scalp_ = np.zeros_like(alpha); scalp_[:int(eyy - 0.62 * de_)] = True  # above the brows: the app's hair
     head_front = fill(rgb, alpha & (skin_mask(rgb) | ((rgb.mean(-1) < 0.5) & ~scalp_)), 2)  # keep eyes/brows/lips (dark) on the face; scalp = skin under the fade
@@ -166,6 +168,7 @@ if __name__ == '__main__':
         Ab, mb_ = texels('Body', 1024); hcy = np.median(D['Eyes|co'][:, 1]) + 0.08; ezz = D['Eyes|co'][:, 2].mean()
         dk_ = (Ab[..., 2] > ezz + 0.035) & (Ab[..., 1] > hcy) | (Ab[..., 2] > ezz + 0.1) | (Ab[..., 2] > ezz - 0.07) & (Ab[..., 1] > hcy + 0.04)  # nape down to the hairline
         cBody[dk_ & mb_] = np.array([0.06, 0.05, 0.045])
+    if not FEM: cBody = np.clip(cBody * WARM, 0, 1)
     save(cBody, 'body')
     hairm = alpha & ~skin_mask(rgb) & (rgb.mean(-1) < 0.42)
     hy = np.where(alpha)[0].min(); hairm[int(eyy) - 8:] = False

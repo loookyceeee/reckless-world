@@ -1,3 +1,4 @@
+import { FresnelParameters } from '@babylonjs/core/Materials/fresnelParameters';
 // RECKLESS crew avatar, smooth rigged glTF (tools/blender/build_avatar.py): CC0 Quaternius base + UAL animations,
 // reshaped to the app's crew render proportions. Garments are skinned shells, swapped and tinted live from the wardrobe.
 import { SceneLoader } from '@babylonjs/core/Loading/sceneLoader';
@@ -58,6 +59,13 @@ export async function loadAvatar3D(scene, { name = 'player', base = import.meta.
     const t = gtex[g.id]; m.diffuseTexture = t; m.emissiveTexture = t;
     const c = Color3.FromHexString(g.col), L = 0.3 * c.r + 0.59 * c.g + 0.11 * c.b, f = L > 0.6 ? 0.26 : 0.4, d = L > 0.6 ? 0.6 : 0.78; // white garments: no blow-out
     m.emissiveColor = new Color3(f, f, f); m.diffuseColor = new Color3(d, d, d); };
+  // pipeline chunk 1 (male): Cycles-baked ambient occlusion per part + a texture-coloured fresnel rim (cheap, mobile-safe)
+  if (!FEM) {
+    const ao = (m, f, lvl = 1) => { const t = new Texture(TEX + 'ao_' + f + '.webp', scene, false, false, Texture.TRILINEAR_SAMPLINGMODE, null, () => { m.ambientTexture = null; }); t.level = lvl; m.ambientTexture = t; };
+    ao(skinM, 'Body'); ao(gm.tee, 'G_tee'); ao(gm.jeans, 'G_jeans'); ao(byName.G_shoes?.[0]?.material || skinM, 'G_shoes');
+    const rimF = () => { const f = new FresnelParameters(); f.leftColor = new Color3(1.55, 1.45, 1.35); f.rightColor = Color3.White(); f.power = 2.5; f.bias = 0; return f; };
+    for (const m of [skinM, ...Object.values(gm)]) m.emissiveFresnelParameters = rimF();
+  }
   // animation groups, blended by weight
   const AG = {}; for (const g of res.animationGroups) { g.stop(); AG[g.name] = g; }
   for (const k of ['idle', 'walk', 'jog', 'sprint', 'dance', 'jumpLoop', 'sit']) if (AG[k]) { AG[k].start(true, 1.0); AG[k].setWeightForAllAnimatables(k === 'idle' ? 1 : 0); }
@@ -88,11 +96,12 @@ export async function loadAvatar3D(scene, { name = 'player', base = import.meta.
   const lit = res.meshes.filter(m => m !== gltfRoot);
   const key = new PointLight(name + '-key', new Vector3(0, 2, 0), scene); key.diffuse = Color3.FromHexString('#ffd9b8'); key.specular = new Color3(0.05, 0.05, 0.05); key.intensity = 0.6; key.range = 9;
   const rim = new PointLight(name + '-rim', new Vector3(0, 2, 0), scene); rim.diffuse = Color3.FromHexString('#ffe6cc'); rim.specular = new Color3(0.03, 0.03, 0.03); rim.intensity = 0.32; rim.range = 9;
-  key.includedOnlyMeshes = lit; rim.includedOnlyMeshes = lit;
+  const fill = new PointLight(name + '-fill', new Vector3(0, 1.4, 0), scene); fill.diffuse = Color3.FromHexString('#b9c6ff'); fill.specular = Color3.Black(); fill.intensity = 0.22; fill.range = 9;
+  key.includedOnlyMeshes = lit; rim.includedOnlyMeshes = lit; fill.includedOnlyMeshes = lit;
   for (const m of new Set(lit.map(x => x.material).filter(Boolean))) m.maxSimultaneousLights = 8;
-  av.lights = [key, rim];
+  av.lights = [key, rim, fill];
   av.lightRig = (cam) => { const p = root.position, c = cam.position; let dx = c.x - p.x, dz = c.z - p.z; const L = Math.hypot(dx, dz) || 1; dx /= L; dz /= L;
-    key.position.set(p.x + dx * 2.2 - dz * 1.6, p.y + 2.3, p.z + dz * 2.2 + dx * 1.6); rim.position.set(p.x - dx * 2.0 + dz * 0.8, p.y + 2.0, p.z - dz * 2.0 - dx * 0.8); };
+    key.position.set(p.x + dx * 2.2 - dz * 1.6, p.y + 2.3, p.z + dz * 2.2 + dx * 1.6); rim.position.set(p.x - dx * 2.0 + dz * 0.8, p.y + 2.0, p.z - dz * 2.0 - dx * 0.8); fill.position.set(p.x + dx * 2.0 + dz * 1.8, p.y + 1.2, p.z + dz * 2.0 - dx * 1.8); };
   av.meshes = () => res.meshes.filter(m => m !== gltfRoot && m.isEnabled());
   av.allMeshes = () => res.meshes.filter(m => m !== gltfRoot);
   return av;
