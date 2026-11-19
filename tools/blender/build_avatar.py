@@ -16,7 +16,7 @@ CLIPS = {'Walk_Loop': 'walk', 'Jog_Fwd_Loop': 'jog', 'Sprint_Loop': 'sprint', 'J
 USE_QHAIR = False  # the app's short textured crop with a fade is built as a scalp shell below
 SMOOTH_IT = int(__import__('os').environ.get('SMIT', '0'))
 HEAD_S = 1.88
-HEAD_AX = (1.24, 1.07, 1.2)    # app render (front overlay, shots/pass8): head ~4.2 heads tall figure, taller oval skull
+HEAD_AX = (1.24, 1.14, 1.2)    # app render (front overlay, shots/pass8): head ~4.2 heads tall figure, taller oval skull
 LEG_F = 0.86     # app figure has shorter legs than the superhero base     # app renders: ~5.6 heads tall
 TARGET_H = 1.74   # metres, matches cars (~4.3 m) and lanes
 if FEM: HEAD_S, HEAD_AX, LEG_F, TARGET_H = 1.8, (1.18, 1.05, 1.2), 0.9, 1.66
@@ -63,9 +63,26 @@ for o in meshes:
     for v, d in zip(me.vertices, W):
         w = d.get('Head', 0.0) + 0.5 * d.get('neck_01', 0.0) * 0.0
         if o.name in ('Hair', 'Eyes', 'Eyebrows'): w = 1.0
+        if not FEM and o.name not in ('Hair', 'Eyes', 'Eyebrows') and (w > 0 or d.get('neck_01', 0) > 0):  # male: graded scale at the back of the neck (no ledge under the fade)
+            p0 = toA @ v.co; by_ = max(0.0, min(1.0, (p0.y - (pivot.y - 0.01)) / 0.05)); tz = max(0.0, min(1.0, (p0.z - (pivot.z - 0.05)) / 0.11)); wz = tz * tz * (3 - 2 * tz)
+            w = w * (1 - by_) + wz * by_
         if w <= 0: continue
         p = toA @ v.co; s = 1 + (HEAD_S - 1) * w; q = p - pivot
         v.co = toM @ (pivot + Vector((q.x * s * (1 + (HEAD_AX[0] - 1) * w), q.y * s * (1 + (HEAD_AX[1] - 1) * w), q.z * s * (1 + (HEAD_AX[2] - 1) * w))))
+
+# male: the 1.8x head scale leaves a ledge where Head weights fall off over the occiput/nape; relax that band so the
+# skull flows into the neck like the sheet's back views (no shelf under the fade)
+if False:  # (tried: relax the occiput band; did not remove the ledge)
+    for o in meshes:
+        if o.name not in ('SuperHero_Male', 'Body'): continue
+        W_ = wmap(o); tA_ = arm.matrix_world.inverted() @ o.matrix_world; band = {i for i, d in enumerate(W_) if 0.02 < d.get('Head', 0.0) < 0.98 and (tA_ @ o.data.vertices[i].co).y > pivot.y - 0.01}  # back half only (keep the jaw)
+        bm_ = bmesh.new(); bm_.from_mesh(o.data); bm_.verts.ensure_lookup_table()
+        ring = set(band)
+        for i in list(band):
+            for e in bm_.verts[i].link_edges: ring.add(e.other_vert(bm_.verts[i]).index)
+        vs = [bm_.verts[i] for i in ring]
+        for _ in range(10): bmesh.ops.smooth_vert(bm_, verts=vs, factor=0.5, use_axis_x=True, use_axis_y=True, use_axis_z=True)
+        bm_.to_mesh(o.data); bm_.free(); print('neck relax', o.name, len(vs))
 
 # --- slim the superhero build toward the app's lean figure (radial scale about each bone axis) ---
 SLIM = {'upperarm': 1.12, 'lowerarm': 1.04, 'spine_03': 1.28, 'spine_02': 1.28, 'spine_01': 1.26, 'pelvis': 1.05, 'clavicle': 0.95, 'thigh': 1.22, 'calf': 1.24, 'neck_01': 0.92}  # tuned on the front overlay vs the app body render
@@ -191,6 +208,7 @@ for v in bm.verts:
     n = hn(Ph[v.index]); top = smooth(0.30, 0.80, n.z)      # crop: volume on top, faded short sides
     edge = smooth(0.0, 0.14, n.z - (0.30 - max(0.0, min(1.0, (n.y + 0.45) / 1.1)) * 0.78))  # thin to nothing at the hairline
     th = (0.0025 + 0.022 * top * (1 - 0.45 * smooth(0.45, 0.95, abs(n.x)))) * (0.25 + 0.75 * edge) + 0.004 * smooth(0.6, 0.9, abs(n.x)) * smooth(0.05, 0.45, n.z) * edge + (0.010 * smooth(-0.2, -0.75, n.y) * smooth(0.25, 0.6, n.z))  # extra fringe volume at the front
+    if not FEM: th += 0.0012 * edge   # no body poke-through, no lip at the hairline
     if FEM: th = (0.004 + 0.006 * top) * (0.3 + 0.7 * edge)   # sleek, pulled back into the bun
     d = norms[v.index] * th
     if n.y < -0.35 and n.z > 0.25 and not FEM: d += Vector((0, -0.006, -0.004)) * top   # fringe pushed forward over the brow
@@ -337,7 +355,7 @@ def region(kind):
         if up:
             ok = b in TORSO or (b == 'neck_01' and p.z < z_neck + 0.03) or (b == 'pelvis' and p.z > z_pelvis + (-0.07 if kind in ('tee', 'long') else 0.02 if kind != 'hoodie' else -0.05))
             if b.startswith('thigh') and kind in ('tee', 'long'): ok = p.z > z_pelvis - 0.07
-            if b.startswith('upperarm'): ok = kind != 'tee' and kind != 'crop' or tparam(p, b) < 0.85
+            if b.startswith('upperarm'): ok = kind != 'tee' and kind != 'crop' or tparam(p, b) < (0.85 if FEM else 0.97)
             if b.startswith('lowerarm'): ok = kind in ('long', 'hoodie') and tparam(p, b) < 0.93
             if kind == 'crop' and ok and p.z < z_sp2 - 0.01: ok = False
             if kind == 'hoodie' and b == 'Head':
@@ -390,15 +408,15 @@ def make(kind):
         if k != 1.0 and b and b != 'Head':
             c = axis_pt(p, b) if not b.startswith(('spine', 'pelvis', 'clavicle', 'neck')) else Vector((0, axis_pt(p, b).y * 0 + (axis_pt(p, 'spine_02').y), p.z))
             if b.startswith(('spine', 'pelvis', 'clavicle', 'neck')): c = Vector((0.0, axis_pt(p, 'spine_02').y + 0.01, p.z))
-            if False and kind in ('tee', 'crop') and b.startswith('upperarm'):  # (parked for the pipeline rebuild) straight boxy short sleeve: near-constant wide tube, tiny flare (no puff)
-                r = (p - c).length; tp_ = tparam(p, b); R = max(r * 1.1, (0.074 if FEM else 0.08) + 0.01 * tp_); q = c + (p - c) * (R / max(r, 1e-4))
+            if not FEM and kind in ('tee', 'crop') and b.startswith('upperarm'):  # (parked for the pipeline rebuild) straight boxy short sleeve: near-constant wide tube, tiny flare (no puff)
+                r = (p - c).length; tp_ = tparam(p, b); R = max(r * 1.1, (0.074 + 0.01 * tp_) if FEM else (0.068 + 0.042 * tp_)); q = c + (p - c) * (R / max(r, 1e-4))
             elif kind == 'jeans' and b.startswith(('thigh', 'calf')):  # straight-leg baggy: near-constant radius from mid-thigh to the hem
-                r = (p - c).length; R = max(r * 1.3, 0.104 if b.startswith('thigh') else 0.112 + 0.012 * tparam(p, b)); q = c + (p - c) * (R / max(r, 1e-4)); q.y = c.y + (q.y - c.y) * 1.2 + 0.012 * (tparam(p, b) if b.startswith('calf') else 0.5)  # deep, baggy, sits back over the heel
+                r = (p - c).length; R = max(r * 1.3, (0.104 if FEM else 0.118) if b.startswith('thigh') else (0.112 if FEM else 0.128) + 0.012 * tparam(p, b)); q = c + (p - c) * (R / max(r, 1e-4)); q.y = c.y + (q.y - c.y) * 1.2 + 0.012 * (tparam(p, b) if b.startswith('calf') else 0.5)  # deep, baggy, sits back over the heel
                 if (q.x - p.x) * (1 if p.x > 0 else -1) < 0: q.x = p.x + (q.x - p.x) * (0.2 if b.startswith('thigh') else 0.55)   # inner leg hugs: legs split high like the app
             elif b.startswith(('spine', 'pelvis', 'clavicle', 'neck')):  # torso: loose in depth, barely wider (no shoulder pads)
                 kx = 1 + (k - 1) * (0.3 if kind in ('tee', 'crop', 'long', 'hoodie') else 0.4); dq = p - c
                 if kind in ('tee', 'long', 'crop') and p.z < z_neck - 0.1:  # boxy oversized fit: sides hang straight to the hem
-                    xm = TW.get(round(p.z, 2), 0.15); tgt = (0.28 if FEM else 0.25) * (abs(dq.x) / max(xm, 1e-3)); kb = min(1.6, tgt / max(abs(dq.x), 1e-3))
+                    xm = TW.get(round(p.z, 2), 0.15); tgt = (0.28 if FEM else 0.31) * (abs(dq.x) / max(xm, 1e-3)); kb = min(2.0, tgt / max(abs(dq.x), 1e-3))
                     fz = max(0.0, min(1.0, ((z_neck - 0.13) - p.z) / 0.08)); kx = max(kx, kx + (kb - kx) * fz)   # boxy below the chest, follows the shoulder slope above (no shoulder block)
                     k = 1.0; ext = (TFR if dq.y < 0 else TBK) * 0.97 * max(0.0, 1 - 0.7 * min(1.0, abs(dq.x) / max(xm, 1e-3)) ** 2); ny = dq.y * k
                     if abs(ny) < ext: ny = math.copysign(abs(ny) + (ext - abs(ny)) * fz, dq.y if dq.y != 0 else -1.0)
@@ -458,6 +476,15 @@ def make(kind):
 for k in ['briefs', 'shoes', 'tee', 'crop', 'long', 'hoodie', 'jeans', 'pants', 'cuffed', 'shorts'] + (['bra'] if FEM else []): make(k)
 # chunky lug soles (turnaround sheet close-up): a thick flat-bottomed sole under each trainer with lug blocks round the edge, skinned to the foot
 _sh = bpy.data.objects['G_shoes']; _Ws = wmap(_sh); _toS = arm.matrix_world.inverted() @ _sh.matrix_world
+if not FEM:  # sheet trainers are long and chunky: stretch each shoe ~15% heel-to-toe about its own centre
+    _M = _sh.data
+    for sd in ('_l', '_r'):
+        ids = [v.index for v, d in zip(_M.vertices, _Ws) if d and (dom(d) or '').endswith(sd) and (dom(d) or '').startswith(('foot', 'ball', 'calf'))]
+        if not ids: continue
+        ps = [_toS @ _M.vertices[i].co for i in ids]; cy0 = (min(p.y for p in ps) + max(p.y for p in ps)) / 2; zmin = min(p.z for p in ps)
+        for i, p in zip(ids, ps):
+            f = max(0.0, 1 - (p.z - zmin) / 0.12)  # only the foot part, fading out up the ankle
+            q = Vector((p.x, cy0 + (p.y - cy0) * (1 + 0.25 * f), p.z)); _M.vertices[i].co = _toS.inverted() @ q
 sb = bmesh.new()
 for sd in ('_l', '_r'):
     pts = [_toS @ v.co for v, d in zip(_sh.data.vertices, _Ws) if d and (dom(d) or '').endswith(sd) and (dom(d) or '').startswith(('foot', 'ball'))]
@@ -515,7 +542,7 @@ def stance(br):
     for pb in arm.pose.bones: pb.rotation_mode = 'QUATERNION'; pb.matrix_basis.identity()
     for sd in ('_l', '_r'):
         sx = 1 if arm.data.bones['upperarm' + sd].head_local.x > 0 else -1
-        aim('upperarm' + sd, Vector((sx * (0.43 + br * 0.015), 0.03, -1)))  # ~11 deg out: clear gap to the torso like the app render
+        aim('upperarm' + sd, Vector((sx * ((0.43 if FEM else 0.44) + br * 0.015), 0.03, -1)))  # ~11 deg out: clear gap to the torso like the app render
         aim('lowerarm' + sd, Vector((sx * 0.16, -0.1, -1)))
         aim('hand' + sd, Vector((sx * 0.12, -0.06, -1)))
         aim('thigh' + sd, Vector((sx * 0.045, 0.0, -1))); aim('calf' + sd, Vector((sx * 0.03, 0.012, -1)))

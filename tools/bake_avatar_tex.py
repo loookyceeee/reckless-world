@@ -202,7 +202,7 @@ if __name__ == '__main__':
         g2 = np.clip(0.06 + 0.018 * st2, 0.02, 0.12); hcol = np.dstack([g2 * 1.2, g2, g2 * 0.9]); al = np.ones_like(al)
     dd_, (iy, ix) = ndi.distance_transform_edt(~m_, return_indices=True); al = al[iy, ix] * (dd_ <= 3); hcol = hcol[iy, ix]
     if not FEM: lowf = (f_[iy, ix] < 0.1); al[lowf] = 0  # alpha never bleeds far: slivers at the nape stay clear
-    Image.fromarray((np.dstack([np.clip(hcol, 0, 1), al]) * 255).astype(np.uint8), 'RGBA').save(os.path.join(OUT, 'hair.webp'), quality=92, method=6)
+    Image.fromarray((np.dstack([np.clip(hcol, 0, 1), al]) * 255).astype(np.uint8), 'RGBA').save(os.path.join(OUT, 'hair.webp'), quality=92, method=6, exact=True)
     save(bake('Eyes', 128, rgb, rgb, hm, None, (-1, -0.5)), 'eyes')
     # shoes: below the jeans hem, not denim/skin
     blue = (rgb[..., 2] > rgb[..., 0] + 0.04) & alpha
