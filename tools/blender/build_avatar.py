@@ -761,9 +761,23 @@ if 'G_hoodie' in bpy.data.objects:
             if len(nb) == 2: _np[v] = v.co * 0.4 + (nb[0].co + nb[1].co) * 0.3
         for v, c in _np.items(): v.co = c
     _bm.to_mesh(_ho.data); _bm.free()
+# --- size budget (before both push-outs so the coarser shells still clear the skin): collapse-decimate the clothing shells and the male curl crop (only one top + one bottom show at a time;
+# the body/face keep full density for the projected face texture). Weights survive the collapse. AV_DEC=0 disables.
+if _os.environ.get('AV_DEC', '1') == '1':
+    for o in [o for o in bpy.context.scene.objects if o.type == 'MESH' and (o.name.startswith('G_') and o.name not in ('G_briefs', 'G_bra') or o.name == 'Curls' or (o.name in ('Eyebrows', 'Stud') and FEM))]:
+        n0 = len(o.data.polygons); md = o.modifiers.new('dec', 'DECIMATE'); md.ratio = (0.42 if FEM else 0.32) if o.name == 'Curls' else 0.5 if o.name in ('Eyebrows', 'Stud') else float(_os.environ.get('AV_DECG', '0.36' if FEM else '0.42')); md.use_collapse_triangulate = True
+        bpy.context.view_layer.objects.active = o; bpy.ops.object.modifier_apply(modifier=md.name); print('decimate', o.name, n0, '->', len(o.data.polygons))
+# re-skin every garment from the body surface it now sits on: the fields slide shell verts along the body (hip, armpit) but they kept
+# the weights of the body vertex they were copied from, so any pose but rest let the skin poke through. AV_RESKIN=0 disables.
+if _os.environ.get('AV_RESKIN', '1') == '1':
+    for _o in [o for o in bpy.data.objects if o.type == 'MESH' and o.name.startswith('G_')]:
+        _dt = _o.modifiers.new('rs', 'DATA_TRANSFER'); _dt.object = body; _dt.use_vert_data = True; _dt.data_types_verts = {'VGROUP_WEIGHTS'}; _dt.vert_mapping = 'POLYINTERP_NEAREST'
+        _dt.layers_vgroup_select_src = 'ALL'; _dt.layers_vgroup_select_dst = 'NAME'; bpy.context.view_layer.objects.active = _o
+        with bpy.context.temp_override(object=_o, active_object=_o): bpy.ops.object.modifier_move_to_index(modifier=_dt.name, index=0); bpy.ops.object.modifier_apply(modifier=_dt.name)
+    print('reskinned garments')
 # keep every garment outside the body after the silhouette fields (an inward pull must never let skin show through the cloth)
 from mathutils.bvhtree import BVHTree
-_bvh = BVHTree.FromObject(body, bpy.context.evaluated_depsgraph_get())
+_bvh = BVHTree.FromPolygons([v.co.copy() for v in body.data.vertices], [pl.vertices[:] for pl in body.data.polygons])  # rest-pose body (the evaluated one carried the stance pose)
 for _o in [o for o in bpy.data.objects if o.type == 'MESH' and o.name.startswith('G_')]:
     _mg = 0.0025 if _o.name in ('G_briefs', 'G_bra') else 0.006; _n = 0
     for _v in _o.data.vertices:
@@ -772,6 +786,24 @@ for _o in [o for o in bpy.data.objects if o.type == 'MESH' and o.name.startswith
         _sd = (_v.co - _loc).dot(_nrm)
         if _sd < _mg: _v.co = _v.co + _nrm * (_mg - _sd); _n += 1
     print('pushout', _o.name, _n)
+    # reverse: body verts poking between garment verts (sliding fields fold the shell) lift the covering face; rest pose
+    _ec = {}
+    for pl in _o.data.polygons:
+        for k_ in pl.edge_keys: _ec[k_] = _ec.get(k_, 0) + 1
+    _bnd = {i for k_, c_ in _ec.items() if c_ == 1 for i in k_}; _pl = [pl.vertices[:] for pl in _o.data.polygons]
+    for _it in range(int(_os.environ.get('AV_REVR', '0'))):
+        _gb = BVHTree.FromPolygons([v.co.copy() for v in _o.data.vertices], _pl); _push = {}; _m = 0
+        for bv_ in body.data.vertices:
+            _loc, _nrm, _fi, _dd = _gb.find_nearest(bv_.co, 0.04)
+            if _loc is None or _nrm.dot(bv_.normal) < 0.5 or any(i in _bnd for i in _pl[_fi]): continue
+            _sd = (bv_.co - _loc).dot(_nrm)
+            if _sd > -0.002:
+                _m += 1
+                for i in _pl[_fi]:
+                    if _push.get(i, (0, None))[0] < _sd + 0.006: _push[i] = (_sd + 0.006, _nrm.copy())
+        for i, (_a, _nr) in _push.items(): _o.data.vertices[i].co += _nr * min(_a, 0.015)
+        if _m: print('pushout rev', _o.name, _it, _m)
+        if not _m: break
 # ...and again in the idle stance (the pose the game shows most): skinning differences at elbows/hips can still let skin through
 def _pushout_posed(objs, mg_of):
     bpy.context.view_layer.objects.active = arm; bpy.ops.object.mode_set(mode='POSE'); _stance0()
@@ -831,12 +863,6 @@ def _pushout_posed(objs, mg_of):
             if not m_: break
     for pb in arm.pose.bones: pb.matrix_basis.identity()
     bpy.ops.object.mode_set(mode='OBJECT')
-# --- size budget (before the posed push-out so the coarser shells still clear the skin): collapse-decimate the clothing shells and the male curl crop (only one top + one bottom show at a time;
-# the body/face keep full density for the projected face texture). Weights survive the collapse. AV_DEC=0 disables.
-if _os.environ.get('AV_DEC', '1') == '1':
-    for o in [o for o in bpy.context.scene.objects if o.type == 'MESH' and (o.name.startswith('G_') and o.name not in ('G_briefs', 'G_bra') or o.name == 'Curls' or (o.name in ('Eyebrows', 'Stud') and FEM))]:
-        n0 = len(o.data.polygons); md = o.modifiers.new('dec', 'DECIMATE'); md.ratio = (0.42 if FEM else 0.32) if o.name == 'Curls' else 0.5 if o.name in ('Eyebrows', 'Stud') else float(_os.environ.get('AV_DECG', '0.36' if FEM else '0.42')); md.use_collapse_triangulate = True
-        bpy.context.view_layer.objects.active = o; bpy.ops.object.modifier_apply(modifier=md.name); print('decimate', o.name, n0, '->', len(o.data.polygons))
 _pushout_posed([o for o in bpy.data.objects if o.type == 'MESH' and o.name.startswith('G_')], lambda n: 0.0025 if n in ('G_briefs', 'G_bra') else 0.007)
 # --- female tee re-model (TEE2): a real boxy tee instead of the inflated body shell. Torso = lofted superellipse rings
 # (straight sides below the chest, following the shoulder slope above), sleeves = straight wide tubes along the upper arm;
