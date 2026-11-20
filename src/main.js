@@ -40,6 +40,7 @@ import { createAvatar, animateAvatar, OUTFITS, loadAnims, bakeCrowdVariants } fr
 import { buildGraph, buildTraffic, updateTraffic } from './traffic.js';
 import { createGps3D } from './gps3d.js';
 import { createDrive } from './drive.js';
+import { createCabs } from './cab.js';
 import { buildLandmarks, updateLandmarks } from './landmarks.js';
 import { createHUD, buildMinimapBase, loadMinimapImage, makeRouter } from './hud.js';
 import { VENUES, DISTRICTS, POSTER_SPOTS } from './venues.js';
@@ -193,7 +194,7 @@ async function start() {
   const FL = buildFlavour(scene, city, { low: LOW }); const WET = buildWetStreaks(scene, city.sf && city.sf.lamps, { low: LOW });
   // posters: snap each spot to the nearest wall
   const posterM = new StandardMaterial('poster', scene); posterM.emissiveTexture = signTex('RECKLESS', 512, 720); posterM.disableLighting = true;
-  { const c = posterM.emissiveTexture.getContext(); c.fillStyle = '#000'; c.fillRect(0, 0, 512, 720); const img = new Image(); img.src = import.meta.env.BASE_URL + 'img/logo.png'; await img.decode().catch(() => {}); c.drawImage(img, 56, 140, 400, 347); c.fillStyle = '#fff'; c.font = '800 54px Unbounded'; c.textAlign = 'center'; c.fillText('RECKLESS', 256, 580); c.font = '600 30px "DM Sans"'; c.fillText('BELFAST · THE TEMPLE', 256, 640); posterM.emissiveTexture.update(); }
+  { const c = posterM.emissiveTexture.getContext(); c.fillStyle = '#000'; c.fillRect(0, 0, 512, 720); const img = new Image(); img.src = import.meta.env.BASE_URL + 'img/logo.png'; await img.decode().catch(() => {}); c.drawImage(img, 66, 110, 380, 380); c.fillStyle = '#fff'; c.font = '800 54px Unbounded'; c.textAlign = 'center'; c.fillText('RECKLESS', 256, 580); c.font = '600 30px "DM Sans"'; c.fillText('BELFAST · THE TEMPLE', 256, 640); posterM.emissiveTexture.update(); }
   // real Reckless event posters (public/data/posters.json): upcoming first, rotated daily across the walls; past nights fill the rest
   const PL = await fetch(import.meta.env.BASE_URL + 'data/posters.json').then(r => r.json()).then(d => d.posters || []).catch(() => []);
   const nowMs = Date.now(), dayN = Math.floor(nowMs / 864e5);
@@ -207,6 +208,12 @@ async function start() {
   const posters = POSTER_SPOTS.map(sp => { let best = null, bd = 1e9; for (const s of city.grid.near(sp.x, sp.z, 40)) { const dx = s.x1 - s.x0, dz = s.z1 - s.z0, L2 = dx * dx + dz * dz; if (L2 < 4 || s.h === 30.5 || s.h < 3) continue; let t = ((sp.x - s.x0) * dx + (sp.z - s.z0) * dz) / L2; t = Math.max(0.2, Math.min(0.8, t)); const px = s.x0 + dx * t, pz = s.z0 + dz * t; const d = Math.hypot(px - sp.x, pz - sp.z); if (d < bd) { bd = d; const L = Math.sqrt(L2); let nx = dz / L, nz = -dx / L; if ((sp.x - px) * nx + (sp.z - pz) * nz < 0) { nx = -nx; nz = -nz; } best = { x: px, z: pz, nx, nz }; } } // face the street side the spot is on
     if (!best) return null; const m = toMesh('poster-' + sp.id, planeR(1.2, 1.6), scene, posterFor(posterSeq++)); m.position.set(best.x + best.nx * 0.05, 2.1, best.z + best.nz * 0.05); m.rotation.y = Math.atan2(-best.nx, -best.nz); m.parent = city.root; m.setEnabled(!!localStorage.getItem('rw.poster.' + sp.id));
     return { ...sp, name: sp.id.replace(/-/g, ' ').toUpperCase(), mesh: m, ix: best.x + best.nx * 1.4, iz: best.z + best.nz * 1.4 }; }).filter(Boolean);
+  // neon Reckless monogram over every venue door (assets_incoming/brand emissive glow; white only, never tinted)
+  { const nM = new StandardMaterial('neonLogo', scene); const tx = new Texture(import.meta.env.BASE_URL + 'img/logo_glow.png', scene, false, true); tx.hasAlpha = true; nM.emissiveTexture = tx; nM.opacityTexture = tx; nM.emissiveColor = new Color3(1, 1, 1); nM.disableLighting = true; nM.backFaceCulling = true;
+    const wallAt = (x, z) => { let best = null, bd = 9; for (const s of city.grid.near(x, z, 12)) { const dx = s.x1 - s.x0, dz = s.z1 - s.z0, L2 = dx * dx + dz * dz; if (L2 < 4 || s.h < 3) continue; let t = ((x - s.x0) * dx + (z - s.z0) * dz) / L2; t = Math.max(0.1, Math.min(0.9, t)); const px = s.x0 + dx * t, pz = s.z0 + dz * t, d = Math.hypot(px - x, pz - z); if (d < bd) { bd = d; const L = Math.sqrt(L2); let nx = dz / L, nz = -dx / L; if ((x - px) * nx + (z - pz) * nz < 0) { nx = -nx; nz = -nz; } best = { x: px, z: pz, nx, nz, h: s.h }; } } return best; };
+    const doors = [{ x: ext.doorPos.x, z: ext.doorPos.z, id: 'temple' }, ...(whDoor ? [{ x: whDoor.x, z: whDoor.z, id: 'warehousexl' }] : []), ...venueDoors.map(d => ({ x: d.x, z: d.z, id: d.v.id }))];
+    app.neon = doors.map(d => { const w = wallAt(d.x, d.z); if (!w) return null; const sz = 1.7, m = toMesh('neon-' + d.id, planeR(sz, sz), scene, nM); m.position.set(w.x + w.nx * 0.06, Math.min(w.h - 1.2, 4.6), w.z + w.nz * 0.06); m.rotation.y = Math.atan2(-w.nx, -w.nz); m.parent = city.root; m.isPickable = false; return m; }).filter(Boolean); }
+  const doPaste = async (ps, half) => { ps.mesh.setEnabled(true); ps.mesh.scaling.y = half ? 0.55 : 1; ps.mesh.position.y = half ? 1.66 : 2.1; localStorage.setItem('rw.poster.' + ps.id, '1'); markPasted(ps.id); buzz([20, 40, 20]); const ev = await EV.posterPlaced(ps.id); if (!(M && M.onPaste(ps, ev))) hud.toast(ev && ev.blocked ? 'POSTER UP · ' + ev.blocked : ev ? 'POSTER UP · TEST EVENT QUEUED' : 'POSTER UP'); };
   const PDAY = () => { try { const o = JSON.parse(localStorage.getItem('rw.pday') || '{}'); return o.day === EV.londonDay() ? o.ids || [] : []; } catch (e) { return []; } };
   const markPasted = (id) => { const ids = PDAY(); if (!ids.includes(id)) ids.push(id); localStorage.setItem('rw.pday', JSON.stringify({ day: EV.londonDay(), ids })); };
   const posterDone = (ps) => EV.postedToday(ps.id) || PDAY().includes(ps.id); // walls reset at midnight London time
@@ -220,7 +227,7 @@ async function start() {
   try { const meta = await (await fetch(import.meta.env.BASE_URL + 'data/minimap_meta.json')).json(); const im = await loadMinimapImage(import.meta.env.BASE_URL + 'data/' + meta.file, meta); if (im) mapBase = Object.assign(im, { bounds: mapBase.bounds, proc: mapBase }); } catch (e) { console.warn('minimap', e); }
   app.mapBase = mapBase;
   const hud = createHUD(app);
-  const RB = createRapid({ scene, traffic, hud, app, grid: city.grid }); window.__rw.RB = RB; window.__rw.traffic = traffic; const DRV = createDrive(traffic); window.__rw.DRV = DRV; const wrapA = (a) => { while (a > Math.PI) a -= 2 * Math.PI; while (a < -Math.PI) a += 2 * Math.PI; return a; };
+  const RB = createRapid({ scene, traffic, hud, app, grid: city.grid }); window.__rw.RB = RB; window.__rw.traffic = traffic; const DRV = createDrive(traffic); window.__rw.DRV = DRV; const CAB = createCabs({ scene, traffic, hud, app, city, player: { get root() { return player.root; } } }); window.__rw.CAB = CAB; const wrapA = (a) => { while (a > Math.PI) a -= 2 * Math.PI; while (a < -Math.PI) a += 2 * Math.PI; return a; };
   // GPS destination (GTA-style): defaults to the Temple door; venues or a tapped waypoint from the pause map
   let DEST = { x: ext.doorPos.x, z: ext.doorPos.z, label: 'THE TEMPLE', kind: 'venue', id: 'temple' };
   const venueDest = VENUES.filter(v => v.inSlice).map(v => v.id === 'temple' ? { ...v, x: ext.doorPos.x, z: ext.doorPos.z } : v.id === 'warehousexl' && whDoor ? { ...v, x: whDoor.x, z: whDoor.z } : (d => d ? { ...v, x: d.x, z: d.z } : v)(venueDoors.find(q => q.v.id === v.id)));
@@ -347,7 +354,7 @@ async function start() {
     const img = new Image(); img.src = data; await img.decode();
     const c = document.createElement('canvas'); c.width = 1360; c.height = 900; const g = c.getContext('2d');
     g.fillStyle = '#000'; g.fillRect(0, 0, c.width, c.height); g.drawImage(img, 40, 40, 1280, 720);
-    const logo = new Image(); logo.src = import.meta.env.BASE_URL + 'img/logo.png'; await logo.decode(); g.drawImage(logo, 40, 784, 96, 83);
+    const logo = new Image(); logo.src = import.meta.env.BASE_URL + 'img/logo.png'; await logo.decode(); g.drawImage(logo, 36, 772, 104, 104);
     g.fillStyle = '#fff'; g.font = '800 34px Unbounded'; g.fillText('RECKLESS WORLD', 156, 826); g.font = '600 22px "DM Sans"'; g.fillText((app.inside ? T.name : (state.street || 'BELFAST')) + ' · BELFAST', 158, 862);
     g.textAlign = 'right'; g.font = '600 18px "DM Sans"'; g.fillText('RECKLESSRAVES.CO.UK', 1320, 862);
     const a = document.createElement('a'); a.download = 'reckless-world.png'; a.href = c.toDataURL('image/png'); a.click(); hud.toast('PHOTO SAVED');
@@ -443,7 +450,9 @@ async function start() {
     const wantFov = 0.95 + (P.speed > 4.5 && !app.inside ? 0.09 : 0); cam.fov += (wantFov - cam.fov) * Math.min(1, dt * 3);
     if (app.title) { const f = flyover(window.__rwFly.at != null ? window.__rwFly.at : t - titleT0); cam.position.copyFrom(f.p); cam.setTarget(f.t); cam.fov = 0.9; camSnap = true; }
     if (window.__rw.camRel) { const o = window.__rw.camRel, h = P.heading + o[0], d = o[1]; cam.position.set(P.x + Math.sin(h) * d, o[2], P.z + Math.cos(h) * d); cam.setTarget(new Vector3(P.x, o[3], P.z)); }
+    if (CAB) CAB.tick(dt, P);
     if (RB.update(dt, P, cam, () => { C.yaw = P.heading; })) camSnap = true;
+    else if (CAB && CAB.update(dt, P, cam)) { camSnap = true; C.yaw = P.heading; }
     else if (window.__rw.camOverride) { const o = window.__rw.camOverride; cam.position.set(o[0], o[1], o[2]); cam.setTarget(new Vector3(o[3], o[4], o[5])); }
     // world updates
     if (COL) { COL.update(P, t, app.inside); COL.frameHint(cam); }
@@ -457,9 +466,10 @@ async function start() {
       else if (Math.hypot(P.x - ext.doorPos.x, P.z - ext.doorPos.z) < 3.2) interact = { label: `<b>E</b> ENTER THE TEMPLE`, act: enterTemple };
       else if (venueDoors.some(d => Math.hypot(P.x - d.x, P.z - d.z) < 3.2)) { const d = venueDoors.find(d => Math.hypot(P.x - d.x, P.z - d.z) < 3.2); interact = { label: `<b>E</b> ENTER ${d.v.name}${d.v.nostalgia ? ' · EST. · THE OLD PALM HOUSE' : ''}`, act: () => enterClub(d.v.id, d) }; }
       else if (Math.hypot(P.x - whDoor.x, P.z - whDoor.z) < 3.2) interact = { label: `<b>E</b> ENTER THE WARE-HOUSE XL`, act: () => enterClub('warehousexl', whDoor) };
+      else if (CAB && CAB.near(P)) interact = { label: '<b>E</b> GET IN THE CAB', act: () => CAB.menu(P, [...(DEST && DEST.kind === 'waypoint' ? [{ name: 'MY WAYPOINT', x: DEST.x, z: DEST.z }] : []), ...venueDest.map(v => ({ name: v.name, x: v.x, z: v.z }))]) };
       else if (!M?.busy?.() && DRV && DRV.near(P)) { const pc = DRV.near(P); interact = { label: `<b>E</b> GET IN`, act: () => { DRV._cd = C.dist; DRV.enter(pc, P, player); C.dist = 8.2; C.yaw = P.heading; C.pitch = 0.22; } }; }
       else if (RB.nearStop(P)) { const st = RB.nearStop(P); interact = { label: `<b>E</b> RAPID BUS · FAST TRAVEL`, act: () => RB.menu(st, P) }; }
-      else for (const ps of posters) if (Math.hypot(P.x - ps.ix, P.z - ps.iz) < 2.4) { const done = posterDone(ps); interact = { label: done ? 'POSTER UP ✓' : `<b>E</b> ${ps.mesh.isEnabled() ? 'PASTE A FRESH POSTER' : 'PASTE A RECKLESS POSTER'}`, act: async () => { if (done) return; ps.mesh.setEnabled(true); localStorage.setItem('rw.poster.' + ps.id, '1'); markPasted(ps.id); buzz([20, 40, 20]); const ev = await EV.posterPlaced(ps.id); if (!(M && M.onPaste(ps, ev))) hud.toast(ev && ev.blocked ? 'POSTER UP · ' + ev.blocked : ev ? 'POSTER UP · TEST EVENT QUEUED' : 'POSTER UP'); } }; break; }
+      else for (const ps of posters) if (Math.hypot(P.x - ps.ix, P.z - ps.iz) < 2.4) { const done = posterDone(ps); interact = { label: done ? 'POSTER UP ✓' : `<b>E</b> ${ps.mesh.isEnabled() ? 'PASTE A FRESH POSTER' : 'PASTE A RECKLESS POSTER'}`, act: () => { if (done) return; if (M && M.PR.state === 'running') { if (!M.PR.paste) M.beginPaste(ps, (half) => doPaste(ps, half)); return; } doPaste(ps, false); } }; break; }
     } else if (DANCE && DANCE.active()) interact = null;
     else if (SEAT) interact = { label: '<b>E</b> STAND UP', act: standUp };
     else if (P.z - T.exitPos.z < 1.2 && Math.abs(P.x - T.exitPos.x) < 2) interact = { label: `<b>E</b> EXIT TO ${T.exitLabel}`, act: exitTemple };
@@ -522,14 +532,14 @@ async function start() {
     if (id === 'wardrobe') return app.key('o');
     if (id === 'map') return app.key('m');
     if (id === 'poster') { if (interact && /POSTER/i.test(interact.label || '')) return interact.act(); return hud.toast('NO POSTER WALL IN RANGE'); }
-    if (id === 'cab') return hud.toast('BLACK CABS · COMING SOON');
+    if (id === 'cab') { if (DRV.on) return hud.toast('GET OUT OF THE CAR FIRST'); return CAB.hail(P); }
   } });
   const _key = app.key; app.key = (k) => { if (k === 'phone') { if (hud.isOpen()) hud.close(); return app.phone.toggle(); } return _key(k); };
   window.__rw.phone = app.phone; window.__rw.wheel = app.wheel;
   { const sx = ext.spawn.x - ext.doorPos.x, sz = ext.spawn.z - ext.doorPos.z, L = Math.hypot(sx, sz) || 1;
     const pickup = { x: ext.spawn.x - sz / L * 3, z: ext.spawn.z + sx / L * 3 };
     const drops = [{ id: 'warehousexl', name: VENUES[1].name, x: whDoor.x, z: whDoor.z }, ...venueDoors.filter(d => d.v.id !== 'locationx').map(d => ({ id: d.v.id, name: d.v.name, x: d.x, z: d.z }))];
-    M = createMissions({ hud, P, app, posters, isDone: posterDone, traffic, grid: () => city.grid, route, buzz, siren: () => AU.siren(), inside: () => !!app.inside,
+    M = createMissions({ hud, P, app, posters, isDone: posterDone, traffic, grid: () => city.grid, route, buzz, hideSpot: (p) => !!RB.nearStop(p) || venueDoors.some(d => Math.hypot(p.x - d.x, p.z - d.z) < 6), siren: () => AU.siren(), inside: () => !!app.inside,
       setDest: (d) => { DEST = d; routeT = 0; }, text: (m) => app.phone.text(m), pickup, drops,
       relocate: () => { hud.fade(true); setTimeout(() => { P.x = ext.spawn.x; P.z = ext.spawn.z; P.speed = 0; P.heading = ext.yaw + Math.PI; C.yaw = P.heading; camSnap = true; hud.fade(false); }, 450); } });
     app.phone.ctx.missions = M; window.__rw.M = M; }

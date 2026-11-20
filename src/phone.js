@@ -7,7 +7,7 @@ const TILES = [
 ];
 const WHEEL = [ // clockwise from north
   ['phone', 'PHONE', 'OPEN THE CREW PHONE'], ['radio', 'RADIO', 'NOW PLAYING · SKIP'], ['camera', 'CAMERA', 'PHOTO MODE'], ['dance', 'DANCE', 'TOGGLE DANCE'],
-  ['poster', 'POSTER', 'PASTE IF A WALL IS IN RANGE'], ['cab', 'HAIL CAB', 'COMING SOON'], ['wardrobe', 'WARDROBE', 'CHANGE YOUR FIT'], ['map', 'MAP', 'PAUSE MAP'],
+  ['poster', 'POSTER', 'PASTE IF A WALL IS IN RANGE'], ['cab', 'HAIL CAB', 'BLACK CAB TO ANY VENUE · FREE'], ['wardrobe', 'WARDROBE', 'CHANGE YOUR FIT'], ['map', 'MAP', 'PAUSE MAP'],
 ];
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const clock = () => new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/London' });

@@ -475,6 +475,91 @@ def make(kind):
     print('garment', kind, len(o.data.vertices))
     return o
 for k in ['briefs', 'shoes', 'tee', 'crop', 'long', 'hoodie', 'jeans', 'pants', 'cuffed', 'shorts'] + (['bra'] if FEM else []): make(k)
+# --- female tee re-model (TEE2): a real boxy tee instead of the inflated body shell. Torso = lofted superellipse rings
+# (straight sides below the chest, following the shoulder slope above), sleeves = straight wide tubes along the upper arm;
+# boolean union -> voxel remesh (clean manifold, no torn sleeves) -> pushed outside the body -> straight hem/sleeve/neck cuts ->
+# weights transferred from the body. Replaces G_tee; same name/material so the texture + AO pipeline is unchanged.
+if FEM and __import__("os").environ.get("TEE2", "1") == "1":
+    inv_ = toA.inverted()
+    zt_ = z_neck + 0.012; zh_ = z_pelvis - 0.06; zc_ = z_neck - 0.13; NA = 40
+    tors = [(p_, d_) for p_, d_ in zip(P, W) if (dom(d_) or '').startswith(('spine', 'pelvis', 'clavicle', 'neck'))]
+    def prof(z):  # body radial extent per angle in a 2 cm slice about (0,_cy)
+        rr = [0.0] * NA
+        for p_, d_ in tors:
+            if abs(p_.z - z) > 0.012: continue
+            dx, dy = p_.x, p_.y - _cy; a_ = math.atan2(dy, dx); k_ = int((a_ + math.pi) / (2 * math.pi) * NA) % NA; rr[k_] = max(rr[k_], math.hypot(dx, dy))
+        for _ in range(3):
+            for k_ in range(NA):
+                if rr[k_] == 0: rr[k_] = max(rr[(k_ - 1) % NA], rr[(k_ + 1) % NA]) * 0.98
+        return [max(rr[(k_ - 1) % NA], rr[k_], rr[(k_ + 1) % NA]) for k_ in range(NA)]
+    WB = max(TW.get(round(z_neck - 0.18 + 0.01 * i, 2), 0.0) for i in range(6)) * 1.06; WB = max(WB, 0.17)
+    def boxy(a_):
+        ca, sa = math.cos(a_), math.sin(a_); b_ = (TFR if sa < 0 else TBK) * 1.02 + 0.012; n_ = 3.2
+        return (abs(ca) ** n_ / WB ** n_ + abs(sa) ** n_ / b_ ** n_) ** (-1 / n_)
+    tb = bmesh.new(); rings = []; NZ = int((zt_ - zh_) / 0.02) + 1
+    for i in range(NZ + 1):
+        z = zh_ + (zt_ - zh_) * i / NZ; pr = prof(min(z, zt_ - 0.004)); fz = max(0.0, min(1.0, (zc_ + 0.03 - z) / 0.07)); ring = []
+        for k_ in range(NA):
+            a_ = -math.pi + (k_ + 0.5) * 2 * math.pi / NA; r_ = pr[k_] + 0.016
+            r_ = max(r_, boxy(a_)) * fz + max(r_, min(boxy(a_), r_ + 0.02)) * (1 - fz) if z < zc_ + 0.03 else r_
+            ring.append(tb.verts.new(inv_ @ Vector((math.cos(a_) * r_, _cy + math.sin(a_) * r_, z))))
+        rings.append(ring)
+    for i in range(len(rings) - 1):
+        for k_ in range(NA): tb.faces.new((rings[i][k_], rings[i][(k_ + 1) % NA], rings[i + 1][(k_ + 1) % NA], rings[i + 1][k_]))
+    tb.faces.new(rings[0][::-1]); tb.faces.new(rings[-1])
+    for sd in ('_l', '_r'):  # sleeves: straight wide tube from inside the shoulder to 68% down the upper arm
+        h_, t_ = bone_ws('upperarm' + sd); ax_ = (t_ - h_).normalized(); a0 = h_ - ax_ * 0.06; a1 = h_ + (t_ - h_) * 0.7
+        up_ = Vector((0, 0, 1)); u_ = ax_.cross(up_).normalized(); v_ = ax_.cross(u_).normalized(); NS = 20; cs = []
+        for j, (c_, R_) in enumerate(((a0, 0.075), (h_ + (t_ - h_) * 0.15, 0.082), (a1, 0.088))):
+            cs.append([tb.verts.new(inv_ @ (c_ + (u_ * math.cos(2 * math.pi * q / NS) + v_ * math.sin(2 * math.pi * q / NS) * 1.05) * R_)) for q in range(NS)])
+        for j in range(len(cs) - 1):
+            for q in range(NS): tb.faces.new((cs[j][q], cs[j][(q + 1) % NS], cs[j + 1][(q + 1) % NS], cs[j + 1][q]))
+        tb.faces.new(cs[0][::-1]); tb.faces.new(cs[-1])
+    bmesh.ops.recalc_face_normals(tb, faces=tb.faces[:])
+    me_ = bpy.data.meshes.new('tee2_raw'); tb.to_mesh(me_); tb.free()
+    tmp = bpy.data.objects.new('tee2_tmp', me_); bpy.context.collection.objects.link(tmp); tmp.matrix_world = body.matrix_world.copy()
+    rm = tmp.modifiers.new('rm', 'REMESH'); rm.mode = 'VOXEL'; rm.voxel_size = 0.0135; rm.use_smooth_shade = True
+    sw = tmp.modifiers.new('sw', 'SHRINKWRAP'); sw.target = body; sw.wrap_method = 'NEAREST_SURFACEPOINT'; sw.wrap_mode = 'OUTSIDE_SURFACE'; sw.offset = 0.011
+    cs_ = tmp.modifiers.new('cs', 'SMOOTH'); cs_.iterations = 4; cs_.factor = 0.5
+    sw2 = tmp.modifiers.new('sw2', 'SHRINKWRAP'); sw2.target = body; sw2.wrap_method = 'NEAREST_SURFACEPOINT'; sw2.wrap_mode = 'OUTSIDE_SURFACE'; sw2.offset = 0.009
+    dgt = bpy.context.evaluated_depsgraph_get(); me2 = bpy.data.meshes.new_from_object(tmp.evaluated_get(dgt)); bpy.data.objects.remove(tmp)
+    bm = bmesh.new(); bm.from_mesh(me2)
+    def cut2(pt, nrm, keep_fn=None):
+        co = inv_ @ pt; no = (inv_.to_3x3() @ nrm).normalized(); vs = [v for v in bm.verts if keep_fn is None or keep_fn(toA @ v.co)]; vset = set(vs)
+        es = [e for e in bm.edges if all(x in vset for x in e.verts)]; fs = [f for f in bm.faces if all(x in vset for x in f.verts)]
+        bmesh.ops.bisect_plane(bm, geom=vs + es + fs, plane_co=co, plane_no=no, clear_outer=True)
+    cut2(Vector((0, 0, z_pelvis - 0.035)), Vector((0, 0, -1)))
+    for sd in ('_l', '_r'):
+        h_, t_ = bone_ws('upperarm' + sd); pt = h_ + (t_ - h_) * 0.64; sg = 1 if h_.x > 0 else -1
+        cut2(pt, (t_ - h_).normalized(), lambda q, sg=sg, hx=h_.x: q.x * sg > abs(hx) * 0.9)
+    ny_ = bone_ws('neck_01')[0].y; RN = 0.066
+    dead = [f for f in bm.faces if (lambda c: math.hypot(c.x, (c.y - ny_) * 0.92) < RN and c.z > z_neck - 0.07)(toA @ f.calc_center_median())]
+    bmesh.ops.delete(bm, geom=dead, context='FACES_ONLY'); bmesh.ops.delete(bm, geom=[v for v in bm.verts if not v.link_faces], context='VERTS')
+    # drop tiny islands (remesh specks) and keep the biggest shell
+    bm.verts.ensure_lookup_table(); seen = set(); isl = []
+    for v0 in bm.verts:
+        if v0 in seen: continue
+        st_ = [v0]; cur = []; seen.add(v0)
+        while st_:
+            v = st_.pop(); cur.append(v)
+            for e in v.link_edges:
+                w_ = e.other_vert(v)
+                if w_ not in seen: seen.add(w_); st_.append(w_)
+        isl.append(cur)
+    isl.sort(key=len); 
+    for c in isl[:-1]: bmesh.ops.delete(bm, geom=c, context='VERTS')
+    bm.to_mesh(me2); bm.free()
+    old = bpy.data.objects['G_tee']; o = old.copy(); o.data = me2; bpy.context.collection.objects.link(o)
+    for vg in list(o.vertex_groups): pass
+    bpy.data.objects.remove(old); o.name = 'G_tee'; me2.materials.clear(); me2.materials.append(bpy.data.materials.get('M_tee'))
+    dt_ = o.modifiers.new('dt', 'DATA_TRANSFER'); dt_.object = body; dt_.use_vert_data = True; dt_.data_types_verts = {'VGROUP_WEIGHTS'}; dt_.vert_mapping = 'POLYINTERP_NEAREST'
+    dt_.layers_vgroup_select_src = 'ALL'; dt_.layers_vgroup_select_dst = 'NAME'
+    bpy.context.view_layer.objects.active = o
+    for m_ in list(o.modifiers):
+        if m_.type != 'DATA_TRANSFER': continue
+        with bpy.context.temp_override(object=o, active_object=o): bpy.ops.object.modifier_move_to_index(modifier=m_.name, index=0); bpy.ops.object.modifier_apply(modifier=m_.name)
+    for poly in o.data.polygons: poly.use_smooth = True
+    print('TEE2 built', len(o.data.vertices), 'verts')
 # chunky lug soles (turnaround sheet close-up): a thick flat-bottomed sole under each trainer with lug blocks round the edge, skinned to the foot
 _sh = bpy.data.objects['G_shoes']; _Ws = wmap(_sh); _toS = arm.matrix_world.inverted() @ _sh.matrix_world
 if not FEM:  # sheet trainers are long and chunky: stretch each shoe ~15% heel-to-toe about its own centre

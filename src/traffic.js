@@ -40,6 +40,9 @@ function policeTex(scene) {
 
 // RECKLESS bus livery decals (research/asset-refs/bus_colour.png): one 1024x512 atlas, one merged quad mesh per bus, 1 draw call.
 // Wordmark, BELFAST destination, R logo, roof stripes; number plates are left BLANK (no real-format plates, no operator marks).
+// official Reckless monogram (assets_incoming/brand, white on transparent): drawn into the livery/shelter atlases once it loads
+const LOGO = typeof Image !== 'undefined' ? new Image() : null; if (LOGO) LOGO.src = import.meta.env.BASE_URL + 'img/logo.png';
+const withLogo = (fn) => { if (!LOGO) return; if (LOGO.complete && LOGO.naturalWidth) fn(LOGO); else LOGO.addEventListener('load', () => fn(LOGO), { once: true }); };
 function busDecalTex(scene) {
   const W = 1024, H = 512, t = new DynamicTexture('busDecal', { width: W, height: H }, scene, true), c = t.getContext(); c.clearRect(0, 0, W, H);
   c.textAlign = 'center'; c.textBaseline = 'middle';
@@ -47,7 +50,7 @@ function busDecalTex(scene) {
   c.fillStyle = '#060608'; c.fillRect(0, 172, W, 168); c.fillStyle = '#ffae1a'; c.font = 'bold 112px "Courier New", monospace'; c.fillText('BELFAST', 512, 258); // row 1: destination (amber on black)
   const R = (x0, y0, s) => { c.save(); c.translate(x0, y0); c.fillStyle = '#fff'; c.font = 'italic 900 ' + (s * 0.95) + 'px "Arial Black", Arial, sans-serif'; c.fillText('R', 0, 4);
     c.strokeStyle = '#fff'; c.lineWidth = s * 0.07; c.beginPath(); c.moveTo(-s * 0.55, s * 0.36); c.quadraticCurveTo(0, s * 0.18, s * 0.6, -s * 0.3); c.stroke(); c.restore(); };
-  R(85, 425, 150);                                                                                                       // row 2: R logo (0..170)
+  withLogo((img) => { c.clearRect(0, 340, 172, 172); c.drawImage(img, 4, 344, 164, 164); t.update(); });                     // row 2: official monogram (0..170)
   c.fillStyle = '#fff'; for (const x of [210, 290]) { c.beginPath(); c.moveTo(x, 500); c.lineTo(x + 40, 500); c.lineTo(x + 100, 350); c.lineTo(x + 60, 350); c.fill(); } // roof stripes (180..400)
   c.fillStyle = '#f2f2ee'; c.fillRect(430, 380, 260, 80); c.fillStyle = '#f2c21a'; c.fillRect(740, 380, 260, 80);       // blank plates: front white, rear yellow
   t.hasAlpha = true; t.anisotropicFilteringLevel = 8; t.update(); return t;
@@ -293,10 +296,10 @@ export function buildTraffic(scene, city, { low = false, stops = [], signals = [
   const shT = new DynamicTexture('shelterAtlas', { width: 512, height: 512 }, scene, true); { const g = shT.getContext();
     const gr = g.createLinearGradient(0, 0, 0, 384); gr.addColorStop(0, '#12051f'); gr.addColorStop(0.55, '#5a1aa8'); gr.addColorStop(1, '#a43cff'); g.fillStyle = gr; g.fillRect(0, 0, 256, 384); // ad panel (0..256 x 0..384)
     g.fillStyle = '#0a0410'; for (let k = 0; k < 26; k++) { const x = k * 10 + (k % 3) * 3, h = 40 + (k * 37 % 50); g.beginPath(); g.arc(x, 384 - h, 9, 0, 6.28); g.fill(); g.fillRect(x - 8, 384 - h, 16, h); if (k % 4 === 0) { g.fillRect(x - 2, 384 - h - 46, 4, 40); } } // crowd, hands up
-    g.fillStyle = '#fff'; g.textAlign = 'center'; g.font = 'italic 900 150px "Arial Black", Arial'; g.fillText('R', 128, 170); g.strokeStyle = '#fff'; g.lineWidth = 10; g.beginPath(); g.moveTo(52, 190); g.quadraticCurveTo(128, 160, 210, 92); g.stroke();
+    g.fillStyle = '#fff'; g.textAlign = 'center'; withLogo((img) => { g.drawImage(img, 38, 30, 180, 180); g.drawImage(img, 317, 8, 150, 150); shT.update(); });
     g.font = 'italic 900 40px "Arial Black", Arial'; g.fillText('RECKLESS', 128, 252);
     g.fillStyle = '#26282e'; g.fillRect(0, 400, 512, 112); g.fillStyle = '#fff'; g.font = 'italic 900 64px "Arial Black", Arial'; g.fillText('RECKLESS', 256, 478); // roof fascia (y 400..512)
-    g.fillStyle = '#5b2a9e'; g.fillRect(272, 0, 240, 300); g.fillStyle = '#fff'; g.font = 'italic 900 120px "Arial Black", Arial'; g.fillText('R', 392, 130); g.font = '800 44px Arial'; g.fillText('Bus Stop', 392, 210); // stop flag (272..512 x 0..300)
+    g.fillStyle = '#5b2a9e'; g.fillRect(272, 0, 240, 300); g.fillStyle = '#fff'; g.font = '800 44px Arial'; g.fillText('Bus Stop', 392, 210); // stop flag (272..512 x 0..300)
     g.fillStyle = '#ffd27a'; g.fillRect(272, 320, 240, 60); shT.update(); } // under-roof light strip (272..512 x 320..380)
   const shLit = new StandardMaterial('shelterLit', scene); shLit.disableLighting = true; shLit.emissiveTexture = shT;
   const uvq = (w, h, u0, v0, u1, v1, o) => { const vd = xf(CreatePlaneVertexData({ width: w, height: h }), o); const U = []; for (let k = 0; k < vd.positions.length / 3; k++) { const a = vd.uvs[k * 2], b = vd.uvs[k * 2 + 1]; U.push(u0 + (u1 - u0) * a, 1 - (v0 + (v1 - v0) * (1 - b))); } vd.uvs = U; return vd; };
