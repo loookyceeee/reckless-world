@@ -227,7 +227,7 @@ async function start() {
   try { const meta = await (await fetch(import.meta.env.BASE_URL + 'data/minimap_meta.json')).json(); const im = await loadMinimapImage(import.meta.env.BASE_URL + 'data/' + meta.file, meta); if (im) mapBase = Object.assign(im, { bounds: mapBase.bounds, proc: mapBase }); } catch (e) { console.warn('minimap', e); }
   app.mapBase = mapBase;
   const hud = createHUD(app);
-  const RB = createRapid({ scene, traffic, hud, app, grid: city.grid }); window.__rw.RB = RB; window.__rw.traffic = traffic; const DRV = createDrive(traffic); window.__rw.DRV = DRV; const CAB = createCabs({ scene, traffic, hud, app, city, player: { get root() { return player.root; } } }); window.__rw.CAB = CAB; const wrapA = (a) => { while (a > Math.PI) a -= 2 * Math.PI; while (a < -Math.PI) a += 2 * Math.PI; return a; };
+  const RB = createRapid({ scene, traffic, hud, app, grid: city.grid }); window.__rw.RB = RB; window.__rw.traffic = traffic; const DRV = createDrive(traffic); window.__rw.DRV = DRV; traffic.drv = DRV; DRV.horn = () => { AU.horn(); traffic.honked = performance.now(); }; traffic.onHonk = () => AU.horn(0.5); const CAB = createCabs({ scene, traffic, hud, app, city, player: { get root() { return player.root; } } }); window.__rw.CAB = CAB; const wrapA = (a) => { while (a > Math.PI) a -= 2 * Math.PI; while (a < -Math.PI) a += 2 * Math.PI; return a; };
   // GPS destination (GTA-style): defaults to the Temple door; venues or a tapped waypoint from the pause map
   let DEST = { x: ext.doorPos.x, z: ext.doorPos.z, label: 'THE TEMPLE', kind: 'venue', id: 'temple' };
   const venueDest = VENUES.filter(v => v.inSlice).map(v => v.id === 'temple' ? { ...v, x: ext.doorPos.x, z: ext.doorPos.z } : v.id === 'warehousexl' && whDoor ? { ...v, x: whDoor.x, z: whDoor.z } : (d => d ? { ...v, x: d.x, z: d.z } : v)(venueDoors.find(q => q.v.id === v.id)));
@@ -291,7 +291,8 @@ async function start() {
   actBtn.addEventListener('pointerdown', (e) => { e.stopPropagation(); clearTimeout(actT); actT = setTimeout(() => { actT = 'wheel'; buzz(12); app.wheel && app.wheel.open(true); }, 450); });
   actBtn.addEventListener('pointerup', () => { if (actT === 'wheel') { actT = null; return; } clearTimeout(actT); actT = null; app.key('e'); });
   actBtn.addEventListener('pointercancel', () => { clearTimeout(actT); actT = null; });
-  hud.$('tJump').addEventListener('pointerdown', (e) => { e.stopPropagation(); P.jumpReq = 0.15; });
+  hud.$('tJump').addEventListener('pointerdown', (e) => { e.stopPropagation(); if (DRV && DRV.on) { app._tBrake = true; return; } P.jumpReq = 0.15; });
+  for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) hud.$('tJump').addEventListener(ev, () => { app._tBrake = false; });
   hud.$('tPhone').addEventListener('pointerdown', (e) => { e.stopPropagation(); app.key('phone'); });
   if (isTouch) document.body.classList.add('is-touch');
 
@@ -334,7 +335,8 @@ async function start() {
   addEventListener('pointerdown', () => { if (!app.title && !AU.on && !app._snd) { app._snd = 1; AU.unlock(); sndLbl(); } }, { once: false });
   app.key = (k) => {
     if (k === 'n') { AU.toggle(); sndLbl(); return; }
-    if (k === 'k') { MU.next(); return; }
+    if (k === 'k') { MU.next(); if (DRV && DRV.on) hud.toast('RADIO · NEXT TRACK'); return; }
+    if (k === 'h' && DRV && DRV.on) { AU.horn(); traffic.honked = performance.now(); return; }
     if (k === 'c') { if (hud.isOpen()) return hud.close(); hud.openCredits(`<button id="exp">EXPORT TEST EVENTS (${EV.queue().length})</button><button id="livebtn">RAVE MODE: ${app.live ? 'ON' : 'OFF'}</button>`);
       document.getElementById('exp').onclick = () => EV.exportQueue(); document.getElementById('livebtn').onclick = (e) => { app.live = !app.live; hud.setLive(app.live); e.target.textContent = 'RAVE MODE: ' + (app.live ? 'ON' : 'OFF'); }; return; }
     if (k === 'm') { if (hud.isOpen()) return hud.close(); return hud.openMap(mapCtx()); }
@@ -394,6 +396,8 @@ async function start() {
         else { C.yaw += rx * 2.6 * SENS * dt; C.pitch = Math.max(-0.30, Math.min(1.05, C.pitch + ry * 1.6 * SENS * dt)); }
         const dz2 = DANCE && DANCE.active(); if (dz2) { [[14, 0], [13, 1], [12, 2], [15, 3], [2, 0], [0, 1], [3, 2], [1, 3]].forEach(([i, l]) => { if (ed(i)) DANCE.pad(l); }); if (ed(9)) DANCE.stop(false); }
         else if (COL && COL.vfOn()) { if (ed(0) || ed(2)) photo(); if (ed(1)) COL.viewfinder(false); }
+        app._padDrv = DRV && DRV.on ? { th: (gp.buttons[7] ? gp.buttons[7].value : 0) - (gp.buttons[6] ? gp.buttons[6].value : 0), hb: b(0) } : null;
+        if (DRV && DRV.on) { if (ed(2)) app.key('e'); if (ed(3)) app.key('phone'); if (ed(9)) app.key('m'); if (ed(1)) { hud.close(); app.phone.close(); } if (ed(10) || ed(13)) app.key('k'); if (ed(12)) DRV.horn && DRV.horn(); }
         else { if (ed(0)) { if (SEAT) standUp(); else P.jumpReq = 0.15; } if (ed(2)) app.key('e'); if (ed(3)) app.key('phone'); if (ed(9)) app.key('m'); if (ed(1)) { hud.close(); app.phone.close(); } }
         padRun = b(5) || b(7); if (b(11) && !C.lb) camSnap = true; C.lb = b(11) || K.has('KeyB');
         if (ed(4)) app.wheel.open(true); if (!b(4) && padPrev[4] && app.wheel.isOpen) app.wheel.release(true);
@@ -401,7 +405,7 @@ async function start() {
     if (window.__rw.auto) { iz = window.__rw.auto.iz || 0; ix = window.__rw.auto.ix || 0; }
     if (SEAT && Math.hypot(ix, iz) > 0.3) standUp();
     if (app.lockMove || (DANCE && DANCE.active())) { ix = 0; iz = 0; }
-    if (DRV && DRV.on) { DRV.update(dt, app.paused ? 0 : ix, app.paused ? 0 : iz, K.has('Space'), P, city.grid); ix = 0; iz = 0; C.yaw += wrapA(P.heading - C.yaw) * Math.min(1, dt * (Math.abs(DRV.speed) > 1 ? 2.6 : 0.6)); }
+    if (DRV && DRV.on) { const pd = app._padDrv; if (pd && Math.abs(pd.th) > 0.05) iz = Math.max(-1, Math.min(1, pd.th + (iz - (padY ? -padY : 0)))); DRV.update(dt, app.paused ? 0 : ix, app.paused ? 0 : iz, K.has('Space') || !!app._tBrake || !!(pd && pd.hb), P, city.grid); AU.engine(Math.abs(DRV.speed) / 17, true); ix = 0; iz = 0; C.yaw += wrapA(P.heading - C.yaw) * Math.min(1, dt * (Math.abs(DRV.speed) > 1 ? 2.6 : 0.6)); }
     const mag = Math.min(1, Math.hypot(ix, iz)); const kb0 = K.has('KeyW') || K.has('KeyS') || K.has('KeyA') || K.has('KeyD') || K.has('ArrowUp') || K.has('ArrowDown') || K.has('ArrowLeft') || K.has('ArrowRight'); const kb = kb0 && !(padX || padY);
     // gait (research/game-design.md 2.1): walk 1.6 / jog 3.2 / sprint 6.0 m/s; keyboard jogs, Shift sprints; stick < 0.55 walks, full push (or RUN) sprints
     if (stick.x || stick.y) { if (mag > 0.97) fullPushT += dt; else fullPushT = 0; } else fullPushT = 0;
@@ -467,7 +471,7 @@ async function start() {
       else if (venueDoors.some(d => Math.hypot(P.x - d.x, P.z - d.z) < 3.2)) { const d = venueDoors.find(d => Math.hypot(P.x - d.x, P.z - d.z) < 3.2); interact = { label: `<b>E</b> ENTER ${d.v.name}${d.v.nostalgia ? ' · EST. · THE OLD PALM HOUSE' : ''}`, act: () => enterClub(d.v.id, d) }; }
       else if (Math.hypot(P.x - whDoor.x, P.z - whDoor.z) < 3.2) interact = { label: `<b>E</b> ENTER THE WARE-HOUSE XL`, act: () => enterClub('warehousexl', whDoor) };
       else if (CAB && CAB.near(P)) interact = { label: '<b>E</b> GET IN THE CAB', act: () => CAB.menu(P, [...(DEST && DEST.kind === 'waypoint' ? [{ name: 'MY WAYPOINT', x: DEST.x, z: DEST.z }] : []), ...venueDest.map(v => ({ name: v.name, x: v.x, z: v.z }))]) };
-      else if (!M?.busy?.() && DRV && DRV.near(P)) { const pc = DRV.near(P); interact = { label: `<b>E</b> GET IN`, act: () => { DRV._cd = C.dist; DRV.enter(pc, P, player); C.dist = 8.2; C.yaw = P.heading; C.pitch = 0.22; } }; }
+      else if (!M?.busy?.() && DRV && DRV.near(P)) { const pc = DRV.near(P); interact = { label: `<b>E</b> GET IN`, act: () => { DRV._cd = C.dist; DRV.enter(pc, P, player); C.dist = 8.2; C.yaw = P.heading; C.pitch = 0.22; if (!app._drvTip) { app._drvTip = 1; hud.note({ kicker: 'CAR RADIO ON · RECKLESS SOUNDCLOUD', title: 'DRIVING', body: isTouch ? 'Stick steers and drives · JUMP handbrake · E get out (slow down first).' : app._pad ? 'RT drive · LT brake / reverse · A handbrake · d-pad up horn · L3 next track · X get out.' : 'W/S drive and brake · A/D steer · Space handbrake · H horn · K next track · E get out.' }); } } }; }
       else if (RB.nearStop(P)) { const st = RB.nearStop(P); interact = { label: `<b>E</b> RAPID BUS · FAST TRAVEL`, act: () => RB.menu(st, P) }; }
       else for (const ps of posters) if (Math.hypot(P.x - ps.ix, P.z - ps.iz) < 2.4) { const done = posterDone(ps); interact = { label: done ? 'POSTER UP ✓' : `<b>E</b> ${ps.mesh.isEnabled() ? 'PASTE A FRESH POSTER' : 'PASTE A RECKLESS POSTER'}`, act: () => { if (done) return; if (M && M.PR.state === 'running') { if (!M.PR.paste) M.beginPaste(ps, (half) => doPaste(ps, half)); return; } doPaste(ps, false); } }; break; }
     } else if (DANCE && DANCE.active()) interact = null;
@@ -480,7 +484,7 @@ async function start() {
     hud.prompt(interact ? interact.label : ''); if (isTouch) { const ia = !!interact; if (ia && !app._ia) buzz(12); app._ia = ia; hud.$('tAct').classList.toggle('on', ia); }
     // HUD
     GPS3.update(state.route, DEST, P, performance.now() / 1000, app.inside || app.title); slowT -= dt; if (slowT <= 0) { slowT = 0.5; if (COL) app.blips.collectibles = COL.blips(); if (app.inside) EV.raveTick().then(ev => { if (!ev) return; if (ev.blocked) hud.note({ kicker: 'CREW', title: '10 MINUTES IN', body: ev.blocked }); else hud.stamp({ title: 'VISIT LOGGED', sub: T.name + ' · 10 MINUTES IN', lines: ['RAVE VISIT · TEST EVENT QUEUED', 'CREW ADDS XP AFTER LAUNCH'] }); }); state.street = app.inside ? T.name : nearestStreet(); state.district = app.inside ? (T.club ? T.sub + (T.mode === 'day' ? ' · HOUSE LIGHTS' : ' · RAVE') : (T.mode === 'day' ? 'NAVE · DAYLIGHT' : 'NAVE · RAVE')) : nearestDistrict();
-      { const dd = Math.hypot(P.x - ext.doorPos.x, P.z - ext.doorPos.z); AU.update({ inside: app.inside, dist: dd }); MU.setVolume(app.inside ? 90 : 22 + Math.max(0, 1 - dd / 90) * 30); }
+      { const dd = Math.hypot(P.x - ext.doorPos.x, P.z - ext.doorPos.z); AU.update({ inside: app.inside, dist: dd }); MU.setVolume(app.inside ? 90 : DRV && DRV.on ? 70 : 22 + Math.max(0, 1 - dd / 90) * 30); if (!(DRV && DRV.on)) AU.engine(0, false); }
       routeT -= 0.5; if (routeT <= 0 && !app.inside) { routeT = 1.5; if (DEST && DEST.kind === 'waypoint' && Math.hypot(DEST.x - P.x, DEST.z - P.z) < 14) { DEST = null; hud.toast('WAYPOINT REACHED'); } state.route = DEST ? route(P.x, P.z, DEST.x, DEST.z) : null; } if (app.inside) state.route = null; state.dest = DEST;
       const tv = VENUES[0]; state.objective = (M && M.objective()) || (app.inside ? '' : `▲ THE TEMPLE <b>${Math.round(Math.hypot(P.x - ext.doorPos.x, P.z - ext.doorPos.z))}M</b>`); }
     if (!app.title && !isTouch) { const idle = Math.abs(P.speed) < 0.05 && !hud.isOpen() && !app.phone.isOpen; app.idleT = idle ? (app.idleT || 0) + dt : 0;

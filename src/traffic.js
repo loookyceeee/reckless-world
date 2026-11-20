@@ -363,7 +363,12 @@ export function updateTraffic(T, dt, player, t) {
     // stop for the player if they are in front of the car
     const cx = c.node.position.x, cz = c.node.position.z; const dx = player.x - cx, dz = player.z - cz;
     const ahead = dx * ux + dz * uz, lat = Math.abs(-dx * uz + dz * ux);
-    let target = c.max; if (ahead > 0 && ahead < 8.5 + HALF(c) && lat < 2.2) target = 0;
+    // the player's car (stage 9): AI looks further ahead, brakes harder, and leans on the horn if it is blocked for a while;
+    // cars ahead of a honking player pull over a touch and creep on
+    const drv = T.drv && T.drv.on, look = drv ? 11 + Math.abs(T.drv.speed) * 0.6 : 8.5, lw = drv ? 2.6 : 2.2;
+    let target = c.max; if (ahead > 0 && ahead < look + HALF(c) && lat < lw) { target = drv ? Math.max(0, (ahead - HALF(c) - 3.2) * 0.8) : 0; if (drv && c.speed < 0.6) { c.blk = (c.blk || 0) + dt; if (c.blk > 2.4 && (!c.hk || t - c.hk > 7) && Math.hypot(dx, dz) < 20) { c.hk = t; T.onHonk && T.onHonk(c); } } } else c.blk = 0;
+    if (drv && T.honked && performance.now() - T.honked < 2500 && ahead < 0 && -ahead < 14 && lat < 2.4) { c.yield = 1.4; }
+    if (c.yield) { c.yield = Math.max(0, c.yield - dt * 0.4); }
     for (const o of T.cars) { if (o === c) continue; const ox = o.node.position.x - cx, oz = o.node.position.z - cz; const ah = ox * ux + oz * uz; const hl = HALF(c) + HALF(o); if (ah > 0 && ah < hl + 4.5 && Math.abs(-ox * uz + oz * ux) < 1.6) { target = Math.min(target, Math.max(0, (ah - hl - 0.8) * 1.5)); } }
     // corner slowdown
     if (c.len - c.s < 8) target = Math.min(target, c.max * 0.55);
@@ -381,7 +386,7 @@ export function updateTraffic(T, dt, player, t) {
     }
     const qa = G.pos.get(c.a), qb = G.pos.get(c.b); const vx = (qb[0] - qa[0]) / c.len, vz = (qb[1] - qa[1]) / c.len; const f = c.s;
     // drive on the left: offset to the left of travel direction
-    const x = qa[0] + vx * f + (-vz) * c.offset, z = qa[1] + vz * f + vx * c.offset;
+    const off = c.offset + (c.yield ? Math.min(1, c.yield) * 0.9 : 0); const x = qa[0] + vx * f + (-vz) * off, z = qa[1] + vz * f + vx * off;
     const h = Math.atan2(vx, vz); let dh = h - c.heading; while (dh > Math.PI) dh -= 2 * Math.PI; while (dh < -Math.PI) dh += 2 * Math.PI;
     c.heading += dh * Math.min(1, dt * 6);
     c.node.position.x += (x - c.node.position.x) * Math.min(1, dt * 8); c.node.position.z += (z - c.node.position.z) * Math.min(1, dt * 8);
@@ -393,13 +398,14 @@ export function updateTraffic(T, dt, player, t) {
     if (best !== T.qCur) { T.qCur = best; T.qPool.forEach((a, i) => { const p = best && best.pts[i]; a.root.setEnabled(!!p); if (p) { a.root.position.set(p[0], 0, p[1]); a.root.rotation.y = p[2]; } }); }
     if (best && bd < 60) T.qPool.forEach((a, i) => { if (best.pts[i]) animateAvatar(a, dt, { speed: 0 }); }); }
   for (const p of T.peds) {
-    p.s += p.speed * dt;
+    let pk = 1; if (T.drv && T.drv.on && Math.abs(T.drv.speed) > 4) { const q = p.av.root.position, dd = Math.hypot(q.x - player.x, q.z - player.z); if (dd < 9) pk = 2.4; }
+    p.s += p.speed * pk * dt;
     while (p.s >= p.len) { p.s -= p.len; const nb = (PG.adj.get(p.b) || []).filter(n => n !== p.a); const next = nb.length ? nb[Math.floor(T.R() * nb.length)] : p.a; T.setPedEdge(p, p.b, next); }
     const qa = PG.pos.get(p.a), qb = PG.pos.get(p.b); const vx = (qb[0] - qa[0]) / p.len, vz = (qb[1] - qa[1]) / p.len;
     p.av.root.position.set(qa[0] + vx * p.s + (-vz) * p.off, 0, qa[1] + vz * p.s + vx * p.off);
     p.av.root.rotation.y = Math.atan2(vx, vz);
     const d = Math.hypot(p.av.root.position.x - player.x, p.av.root.position.z - player.z);
     if (d > 140) T.placePed(p, player);
-    if (d < 70) animateAvatar(p.av, dt, { speed: p.speed });
+    if (d < 70) animateAvatar(p.av, dt, { speed: p.speed * pk });
   }
 }

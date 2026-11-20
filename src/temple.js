@@ -17,6 +17,7 @@ import { hex, rng, box, cyl, sphere, rbox, xf, color, merge, toMesh, plane, poin
 import { beamTex } from './city.js';
 
 const SAND = hex('#a18b74'), SAND_L = hex('#b7a48b'), SAND_D = hex('#7f6b58'), SAND_R = hex('#977058'), SLATE = hex('#3d4250');
+const BRICK = hex('#9a4a32'), BRICK_D = hex('#7c3a28'), TIMBER = hex('#2a1e17'), BOARD = hex('#17110d');
 const IRON = hex('#1d1f24'), WOOD = hex('#6b4a33'), PLY = hex('#c8a77a'), STEEL = hex('#9aa0a8'), ALU = hex('#c9ced6'), CASE = hex('#26272b');
 const stoneTint = (c, R) => { const k = 0.9 + R() * 0.2; return new Color3(c.r * k, c.g * k, c.b * k); };
 
@@ -64,22 +65,22 @@ export function buildTempleExterior(scene, building, grid) {
   // which side faces Carlisle Circus? put the tower there.
   const circ = [-370 - cx, 277 - cz]; const side = (circ[0] * px[0] + circ[1] * px[1]) > 0 ? 1 : -1;
   const R = rng(5); const S = [], G = [], D = [];
-  const hz = Lz / 2, nw = Math.min(12, Wx * 0.5), aw = (Wx - nw) / 2, wallH = 12.5, ridge = 20.5, aisleH = 7;
+  const hz = Lz / 2, nw = Math.min(12, Wx * 0.5), aw = (Wx - nw) / 2, wallH = 13.1, ridge = 23.2, aisleH = 7.4; // OSNI LiDAR eaves/ridge
   // nave + gable roof
-  S.push(color(xf(box(nw, wallH, Lz), { t: [0, wallH / 2, 0] }), SAND));
+  S.push(color(xf(box(nw, wallH, Lz), { t: [0, wallH / 2, 0] }), BRICK));
   const roofW = nw / 2 + 0.6, rl = Math.hypot(roofW, ridge - wallH);
   for (const sd of [-1, 1]) S.push(color(xf(box(rl, 0.4, Lz + 0.6), { r: [0, 0, -sd * Math.atan2(ridge - wallH, roofW)], t: [sd * roofW / 2, (wallH + ridge) / 2, 0] }), SLATE));
   // gable triangles (both ends)
-  for (const ez of [-hz, hz]) { const tri = wallWithHoles([[-nw / 2, wallH], [nw / 2, wallH], [0, ridge]], [], 0.6); S.push(color(xf(tri, { t: [0, 0, ez - 0.3] }), SAND)); }
+  for (const ez of [-hz, hz]) { const tri = wallWithHoles([[-nw / 2, wallH], [nw / 2, wallH], [0, ridge]], [], 0.6); S.push(color(xf(tri, { t: [0, 0, ez - 0.3] }), BRICK)); }
   // aisles, lean-to roofs, buttresses + aisle lancets
   const bays = 6, bayL = (Lz - 4) / bays;
   for (const sd of [-1, 1]) {
     const x = sd * (nw / 2 + aw / 2);
-    S.push(color(xf(box(aw, aisleH, Lz - 2), { t: [x, aisleH / 2, 0.5] }), SAND_L));
+    S.push(color(xf(box(aw, aisleH, Lz - 2), { t: [x, aisleH / 2, 0.5] }), BRICK));
     const sl = Math.hypot(aw, 3); S.push(color(xf(box(sl + 0.4, 0.35, Lz - 1.6), { r: [0, 0, sd * Math.atan2(3, aw)], t: [x, aisleH + 1.5, 0.5] }), SLATE));
     for (let b = 0; b <= bays; b++) {
       const z = -hz + 2 + b * bayL;
-      S.push(color(xf(box(1.1, aisleH + 0.6, 1.0), { t: [sd * (Wx / 2 + 0.3), (aisleH + 0.6) / 2, z] }), SAND_D));
+      S.push(color(xf(box(1.1, aisleH + 0.6, 1.0), { t: [sd * (Wx / 2 + 0.3), (aisleH + 0.6) / 2, z] }), BRICK_D));
       S.push(color(xf(box(0.8, 1.6, 0.8), { r: [0, 0, sd * 0.5], t: [sd * (Wx / 2 + 0.15), aisleH + 1.0, z] }), SAND_D));
       if (b < bays) { // tall aisle lancet + clerestory pair
         const wz = z + bayL / 2;
@@ -91,7 +92,7 @@ export function buildTempleExterior(scene, building, grid) {
   // entrance gable: 5-lancet group, corner pinnacle turrets, pointed door
   const fz = -hz - 0.04;
   [[-3.6, 6, 9.5], [-1.8, 5.5, 11], [0, 5.2, 12.5], [1.8, 5.5, 11], [3.6, 6, 9.5]].forEach(([x, b, s]) => G.push(glassPane(x, b, s, 1.3, fz, Math.PI)));
-  G.push(xf(wallWithHoles(Array.from({ length: 24 }, (_, i) => [Math.cos(i / 24 * 6.283) * 1.5, 16 + Math.sin(i / 24 * 6.283) * 1.5]), [], 0.02), { t: [0, 0, fz] }));
+  G.push(xf(wallWithHoles(Array.from({ length: 24 }, (_, i) => [Math.cos(i / 24 * 6.283) * 1.5, 18 + Math.sin(i / 24 * 6.283) * 1.5]), [], 0.02), { t: [0, 0, fz] }));
   for (const x of [-nw / 2, nw / 2]) {
     S.push(color(xf(cyl(ridge - 1, 0.75, 0.9, 8), { t: [x, (ridge - 1) / 2, -hz] }), SAND_D));
     S.push(color(xf(cyl(4, 0, 0.8, 8), { t: [x, ridge + 1, -hz] }), SAND_D));
@@ -101,8 +102,8 @@ export function buildTempleExterior(scene, building, grid) {
   S.push(color(xf(archRib(pointedArch(0, 2.8, 3.2, 10).pts, 0.35, 0.5), { t: [0, 0, fz - 0.2] }), SAND_L));
   for (const x of [-1.6, 1.6]) S.push(color(xf(box(0.4, 2.8, 0.5), { t: [x, 1.4, fz - 0.2] }), SAND_L));
   // corner tower on the Carlisle Circus side
-  const tx = side * (Wx / 2 - 2.5), tzz = -hz + 2.5, th = 26;
-  S.push(color(xf(box(6, th, 6), { t: [tx, th / 2, tzz] }), SAND));
+  const tx = side * (Wx / 2 - 2.5), tzz = -hz + 2.5, th = 30;
+  S.push(color(xf(box(6, th, 6), { t: [tx, th / 2, tzz] }), BRICK));
   S.push(color(xf(box(6.6, 0.8, 6.6), { t: [tx, th, tzz] }), SAND_D));
   for (const a of [-2.8, 2.8]) for (const b of [-2.8, 2.8]) S.push(color(xf(cyl(4.5, 0, 0.5, 8), { t: [tx + a, th + 2.6, tzz + b] }), SAND_D));
   for (const f of [[0, -3.02, Math.PI], [side * 3.02, 0, side * Math.PI / 2]]) for (const o of [-1, 1]) G.push(glassPane(o, th - 7, th - 4, 1.1, 0, f[2], [tx + f[0], 0, tzz + f[1]]));
@@ -144,12 +145,14 @@ export const INTERIOR_ORIGIN = OFF;
 
 function floorTex(scene) {
   const N = 1024; const t = new DynamicTexture('templeFloor', N, scene, true); const c = t.getContext(); const R = rng(11);
-  c.fillStyle = '#8c8a86'; c.fillRect(0, 0, N, N);
-  for (let i = 0; i < 260; i++) { c.fillStyle = `rgba(${R() < 0.5 ? '40,38,36' : '230,225,215'},${0.03 + R() * 0.06})`; c.beginPath(); c.ellipse(R() * N, R() * N, 20 + R() * 90, 10 + R() * 60, R() * 3, 0, 7); c.fill(); }
-  c.strokeStyle = 'rgba(40,40,40,0.35)'; c.lineWidth = 2; for (let i = 0; i < 40; i++) { c.beginPath(); let x = R() * N, y = R() * N; c.moveTo(x, y); for (let k = 0; k < 5; k++) { x += (R() - 0.5) * 80; y += (R() - 0.5) * 80; c.lineTo(x, y); } c.stroke(); }
-  // taped lines (stage markings)
-  c.fillStyle = 'rgba(235,230,215,0.8)'; c.fillRect(N * 0.30, 0, 6, N); c.fillRect(N * 0.70, 0, 6, N);
-  c.fillStyle = 'rgba(220,190,60,0.85)'; c.fillRect(0, N * 0.86, N, 8); c.fillRect(N * 0.12, N * 0.2, 180, 6);
+  // grey-blue stone flags in staggered courses, lighter patched slabs down the centre aisle (texture spans 19.2 x 46 m)
+  c.fillStyle = '#4d535a'; c.fillRect(0, 0, N, N);
+  const fw = N / 21, fh = N / 38;
+  for (let r = 0; r < 38; r++) { const off = (r % 2) * fw * 0.5; for (let k = -1; k < 22; k++) { const x = k * fw + off, y = r * fh, mid = Math.abs(x + fw / 2 - N / 2) < N * 0.09;
+    const v = (mid && R() < 0.35 ? 18 : 0) + (R() - 0.5) * 18; const b = [104 + v, 112 + v, 120 + v].map(q => Math.round(Math.max(40, Math.min(200, q))));
+    c.fillStyle = `rgb(${b[0]},${b[1]},${b[2]})`; c.fillRect(x + 1.5, y + 1.5, fw - 3, fh - 3);
+    if (R() < 0.25) { c.fillStyle = `rgba(30,32,36,${0.08 + R() * 0.1})`; c.beginPath(); c.ellipse(x + R() * fw, y + R() * fh, 4 + R() * 12, 3 + R() * 6, R() * 3, 0, 7); c.fill(); } } }
+  c.strokeStyle = 'rgba(25,27,30,0.35)'; c.lineWidth = 1; for (let i = 0; i < 30; i++) { c.beginPath(); let x = R() * N, y = R() * N; c.moveTo(x, y); for (let k = 0; k < 3; k++) { x += (R() - 0.5) * 30; y += (R() - 0.5) * 30; c.lineTo(x, y); } c.stroke(); }
   t.update(); t.wrapU = t.wrapV = Texture.CLAMP_ADDRESSMODE; return t;
 }
 function signTex(scene, txt, fg, bg, w = 256, h = 96, font = 'bold 60px "DM Sans", Arial') {
@@ -204,20 +207,20 @@ export function buildTempleInterior(scene, { glow, low = false, makeDancer, bake
   }
   // ---- aisle lean-to roofs (timber) ----
   for (const sd of [-1, 1]) { const sl = Math.hypot(AW - NW, 3.5);
-    for (let z = 0.5; z < LZ; z += 1.6) Wd.push(color(xf(box(sl, 0.18, 0.12), { r: [0, 0, sd * Math.atan2(3.5, AW - NW)], t: [sd * (NW + AW) / 2, 9.4, z] }), WOOD));
-    Wd.push(color(xf(box(sl, 0.06, LZ), { r: [0, 0, sd * Math.atan2(3.5, AW - NW)], t: [sd * (NW + AW) / 2, 9.65, LZ / 2] }), hex('#4a3a2c'))); }
-  // ---- open, partly broken timber roof ----
+    for (let z = 0.5; z < LZ; z += 1.6) Wd.push(color(xf(box(sl, 0.18, 0.12), { r: [0, 0, sd * Math.atan2(3.5, AW - NW)], t: [sd * (NW + AW) / 2, 9.4, z] }), TIMBER));
+    Wd.push(color(xf(box(sl, 0.06, LZ), { r: [0, 0, sd * Math.atan2(3.5, AW - NW)], t: [sd * (NW + AW) / 2, 9.65, LZ / 2] }), BOARD)); }
+  // ---- dark open timber roof (near-black rafters + purlins, a few lost boards) ----
   const half = NW + 0.5, rh = ridge - clerTop, rl = Math.hypot(half, rh), ang = Math.atan2(rh, half);
   const gaps = [];
   for (let z = 1; z < LZ; z += 2.2) {
-    for (const sd of [-1, 1]) Wd.push(color(xf(box(rl, 0.32, 0.22), { r: [0, 0, -sd * ang], t: [sd * half / 2, (clerTop + ridge) / 2, z] }), WOOD));
-    Wd.push(color(xf(box(2 * half * 0.6, 0.25, 0.2), { t: [0, clerTop + rh * 0.4, z] }), WOOD)); // collar tie
+    for (const sd of [-1, 1]) Wd.push(color(xf(box(rl, 0.32, 0.22), { r: [0, 0, -sd * ang], t: [sd * half / 2, (clerTop + ridge) / 2, z] }), TIMBER));
+    Wd.push(color(xf(box(2 * half * 0.6, 0.25, 0.2), { t: [0, clerTop + rh * 0.4, z] }), TIMBER)); // collar tie
   }
-  for (const sd of [-1, 1]) for (let k = 0; k < 4; k++) { const f = (k + 0.5) / 4; Wd.push(color(xf(box(0.2, 0.2, LZ), { t: [sd * half * (1 - f), clerTop + rh * f, LZ / 2] }), WOOD)); }
+  for (const sd of [-1, 1]) for (let k = 0; k < 4; k++) { const f = (k + 0.5) / 4; Wd.push(color(xf(box(0.2, 0.2, LZ), { t: [sd * half * (1 - f), clerTop + rh * f, LZ / 2] }), TIMBER)); }
   // boarding panels with holes (broken roof)
   for (const sd of [-1, 1]) for (let z = 0; z < LZ; z += 4) for (let k = 0; k < 3; k++) {
-    if (R() < 0.22) { gaps.push([sd * half * (1 - (k + 0.5) / 3), clerTop + rh * (k + 0.5) / 3, z + 2]); continue; }
-    const f = (k + 0.5) / 3; Wd.push(color(xf(box(rl / 3, 0.08, 4), { r: [0, 0, -sd * ang], t: [sd * half * (1 - f), clerTop + rh * f + 0.25, z + 2] }), hex('#3b2e24')));
+    if (R() < 0.05) { gaps.push([sd * half * (1 - (k + 0.5) / 3), clerTop + rh * (k + 0.5) / 3, z + 2]); continue; }
+    const f = (k + 0.5) / 3; Wd.push(color(xf(box(rl / 3, 0.08, 4), { r: [0, 0, -sd * ang], t: [sd * half * (1 - f), clerTop + rh * f + 0.25, z + 2] }), BOARD));
   }
   if (!gaps.length) gaps.push([2, 18, 20]);
   // ---- altar end: chancel arch, 5 lancets, carved arcade frieze, stepped platform ----
@@ -308,6 +311,10 @@ export function buildTempleInterior(scene, { glow, low = false, makeDancer, bake
   const exitSign = toMesh('exitSign', xf(plane(1.4, 0.5), { t: [0, 4.6, 0.25] }), scene, exitM); exitSign.parent = root;
   exitSign.scaling.x = -1;
   const doorM = mat(scene, 'exitDoor', { e: hex('#3a5a46'), d: hex('#2b3a30') });
+  { const fdM = mat(scene, 'tFireDoor', { e: hex('#2a271f') }); const fdG = [];
+    for (const z of [19.2, 31.2]) { fdG.push(color(xf(box(0.08, 2.3, 1.7), { t: [AW - 0.05, 1.15, z] }), hex('#e6dcc0')), color(xf(box(0.1, 0.06, 1.5), { t: [AW - 0.1, 1.05, z] }), hex('#8a8f96')), color(xf(box(0.1, 2.4, 0.08), { t: [AW - 0.04, 1.2, z] }), hex('#cfc4a8')));
+      const sg = toMesh('fireExit' + z, xf(plane(0.9, 0.32), { r: [0, Math.PI / 2, 0], t: [AW - 0.1, 2.6, z] }), scene, exitM); sg.parent = root; }
+    const fd = toMesh('tFireDoors', merge(fdG), scene, fdM); fd.parent = root; }
   const exitDoor = toMesh('exitDoor', xf(wallWithHoles(lancet(0, 0, 3.6, 3.0, 8), [], 0.1), { t: [0, 0, -0.6] }), scene, doorM); exitDoor.parent = root;
   // brand banner (B&W Reckless) hung from the chancel arch
   const banM = mat(scene, 'banner', { unlit: true, two: true }); banM.emissiveTexture = new Texture(import.meta.env.BASE_URL + 'img/logo.png', scene); banM.emissiveTexture.hasAlpha = true; banM.opacityTexture = banM.emissiveTexture; banM.diffuseColor = Color3.Black();

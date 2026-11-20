@@ -37,6 +37,12 @@ export function createAudio() {
     // short original two-tone (not a real emergency-service sample): 4 alternating triangle notes, ~1.3 s
     siren() { if (!ctx || !on) return; const t = ctx.currentTime, o = ctx.createOscillator(), g = ctx.createGain(); o.type = 'triangle'; o.connect(g).connect(master);
       for (let i = 0; i < 4; i++) o.frequency.setValueAtTime(i % 2 ? 590 : 780, t + i * 0.32); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.05, t + 0.03); g.gain.setValueAtTime(0.05, t + 1.22); g.gain.linearRampToValueAtTime(0, t + 1.3); o.start(t); o.stop(t + 1.35); },
+    // car: original two-note horn (no samples) and a low engine drone that rises with speed; both through the master gain
+    horn(v = 1) { if (!ctx || !on) return; const t = ctx.currentTime; for (const f of [415, 523]) { const o = ctx.createOscillator(), g = ctx.createGain(), fl = ctx.createBiquadFilter(); o.type = 'square'; o.frequency.value = f * (v < 1 ? 0.84 : 1); fl.type = 'lowpass'; fl.frequency.value = 1800; o.connect(fl).connect(g).connect(master);
+      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.035 * v, t + 0.02); g.gain.setValueAtTime(0.035 * v, t + 0.38); g.gain.linearRampToValueAtTime(0, t + 0.45); o.start(t); o.stop(t + 0.5); } },
+    engine(x, run) { if (!ctx) return; if (!api._eng) { if (!run) return; const o = ctx.createOscillator(), o2 = ctx.createOscillator(), f = ctx.createBiquadFilter(), g = ctx.createGain(); o.type = 'sawtooth'; o2.type = 'square'; f.type = 'lowpass'; f.frequency.value = 380; g.gain.value = 0;
+        o.connect(f); o2.connect(f); f.connect(g).connect(master); o.start(); o2.start(); api._eng = { o, o2, f, g }; }
+      const E = api._eng, t = ctx.currentTime, r = Math.min(1, x); E.o.frequency.setTargetAtTime(38 + r * 70, t, 0.12); E.o2.frequency.setTargetAtTime(19 + r * 35, t, 0.12); E.f.frequency.setTargetAtTime(300 + r * 900, t, 0.2); E.g.gain.setTargetAtTime(run && on ? 0.03 + r * 0.03 : 0, t, 0.15); },
     // inside: full-band beat; outside: muffled by distance to the Temple door
     set beatOff(v) { beatOff = v; },
     set force(v) { force = v; }, // dance minigame: the synth 140 BPM bed plays full whatever else is on
