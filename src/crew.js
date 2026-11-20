@@ -43,6 +43,9 @@ export const WARDROBE = [
   W('rcklstv-jersey', 'RCKLSTV JERSEY', 'top', 15, 'icon-jersey', 'jersey', 'jersey', '#d9d7d8', 'long'),
   W('mesh-jersey', 'MESH JERSEY', 'top', 15, 'icon-mesh', 'mesh', 'mesh', '#282729', 'tee'),
 ];
+/** v5 cut variants: pieces whose v5 silhouette differs from their kind's shared 3D mesh get their own fitted mesh (build_avatar.py). */
+export const M3 = { 'manager-shorts': 'shortsL', 'rawdawg-shorts': 'shortsL', 'artillery': 'pantsW', 'rcklstv-jersey': 'jersey', 'distress-shirt': 'teeD', 'see-me-crop': 'crop' };
+export const meshKind = (g) => (g && (M3[g.id] || g.kind)) || null;
 export const EMPTY_FIT = { top: null, outer: null, legs: null };
 export const gearById = (id) => (id && WARDROBE.find(p => p.id === id)) || null;
 /** Drop 018 product photo for a wardrobe piece (from the app's shop assets, 256 px webp). */

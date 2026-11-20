@@ -239,6 +239,7 @@ if __name__ == '__main__':
             if not os.path.exists(L + look + '.png'): print('no look', look); continue
             rgb, alpha = load(look); v5mask = None
         kind = 'crop' if iid == 'see-me-crop' else kind
+        kind = {'manager-shorts': 'shortsL', 'rawdawg-shorts': 'shortsL', 'artillery': 'pantsW', 'rcklstv-jersey': 'jersey', 'distress-shirt': 'teeD'}.get(iid, kind)  # v5 cut variants (crew.js M3)
         gname = 'G_' + kind
         parts = BODY + [gname, 'G_shoes'] + (['G_briefs'] if slot != 'legs' else [])
         gm = global_map(alpha, parts); vis = depth_buffer(parts)
@@ -256,9 +257,10 @@ if __name__ == '__main__':
         cls = v5mask if v5mask is not None else classify(rgb, alpha, core, skr)
         gmask = cls & box
         lab, nl = ndi.label(gmask); cc = np.bincount(lab[core & gmask].ravel(), minlength=nl + 1); cc[0] = 0
+        if nl and cc.sum() == 0: cc = np.bincount(lab.ravel(), minlength=nl + 1); cc[0] = 0   # core patch missed the garment (e.g. a logo hole): fall back to component size
         if nl: gmask = np.isin(lab, np.where(cc > 0.02 * cc.sum())[0])
         if slot == 'legs': gmask[int(gm(0, 0.1)[1]):] = False  # shoes
-        else: gmask[:int(gm(0, z1 + 0.02)[1])] = False
+        else: gmask[:max(0, int(gm(0, z1 + 0.02)[1]))] = False   # clamp: a hood-up top reaches the image top (negative index wiped the mask)
         gmask = ndi.binary_opening(gmask, iterations=1); fh = ndi.binary_fill_holes(gmask)  # keep logos/prints inside the garment
         if kind == 'hoodie': fh[:int(gm(0, eo[:, 2].mean() - 0.14)[1])] = gmask[:int(gm(0, eo[:, 2].mean() - 0.14)[1])]  # not the face inside the hood
         gmask = fh

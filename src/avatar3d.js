@@ -15,7 +15,8 @@ import { Color3 } from '@babylonjs/core/Maths/math.color';
 import { Vector3 } from '@babylonjs/core/Maths/math.vector';
 import { PointLight } from '@babylonjs/core/Lights/pointLight';
 
-const KINDS = ['tee', 'crop', 'long', 'hoodie', 'jeans', 'pants', 'cuffed', 'shorts'];
+const KINDS = ['tee', 'crop', 'long', 'hoodie', 'jeans', 'pants', 'cuffed', 'shorts', 'shortsL', 'pantsW', 'jersey', 'teeD'];
+const M3 = { 'manager-shorts': 'shortsL', 'rawdawg-shorts': 'shortsL', 'artillery': 'pantsW', 'rcklstv-jersey': 'jersey', 'distress-shirt': 'teeD', 'see-me-crop': 'crop' }; // v5 cut variants (crew.js M3)
 const SKIN = Color3.FromHexString('#ead3cb'), HAIR = Color3.FromHexString('#141214');
 
 export async function loadAvatar3D(scene, { name = 'player', base = import.meta.env.BASE_URL, kind = 'male' } = {}) {
@@ -74,9 +75,12 @@ export async function loadAvatar3D(scene, { name = 'player', base = import.meta.
   av.setFit = (f, vis) => { av.fit = f; av._vis = vis; const V = vis(f.top, f.outer, f.legs), up = V.upper, lo = V.lower;
     for (const k of KINDS) (byName['G_' + k] || []).forEach(x => x.setEnabled(false));
     const show = (g, kind) => { if (!g) return; (byName['G_' + kind] || []).forEach(x => x.setEnabled(true)); wear(kind, g); };
-    if (up) show(up, up.id === 'see-me-crop' ? 'crop' : up.kind);
-    if (lo) show(lo, lo.kind);
+    const mk = (g) => (byName['G_' + (M3[g.id] || g.kind)] ? (M3[g.id] || g.kind) : g.kind);   // older glbs without a variant fall back to the shared kind
+    if (up) show(up, mk(up));
+    if (lo) show(lo, mk(lo));
     (byName.G_briefs || []).forEach(x => x.setEnabled(!lo || lo.kind === 'shorts'));
+    const hood = !!up && mk(up) === 'hoodie';   // v5: seasoned hoodie / rawdwg zip are worn hood-up -> hair tucked inside
+    for (const n of ['Hair', 'Curls']) (byName[n] || []).forEach(x => x.setEnabled(!hood));
   };
   // speed (m/s) -> gait weights; playback rate matched to stride so feet don't skate
   const GAIT = [['idle', 0], ['walk', 1.6], ['jog', 3.2], ['sprint', 6.0]];

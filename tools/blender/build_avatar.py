@@ -5,7 +5,7 @@ cut from the body by bone region and pushed out along normals, so every Drop 018
 Animations: Quaternius UAL1 (CC0) idle / walk / jog / sprint / jump / dance, in place.
 Run: blender -b --python build_avatar.py -- out.glb"""
 import bpy, bmesh, sys, math
-from mathutils import Vector, Euler
+from mathutils import Vector, Euler, Matrix
 OUT = sys.argv[sys.argv.index('--') + 1]
 Q = "/workspace/reckless-world/research/assets/quaternius/"
 FEM = __import__("os").environ.get("AVB", "male") == "female"   # female crew base (research/avatar_female_*_ref.png)
@@ -185,6 +185,206 @@ soft = [bmf.verts[i] for i in fv if not near_eye(Pf[i]) and (Pf[i].z - hc0.z) / 
 for _ in range(SMOOTH_IT): bmesh.ops.smooth_laplacian_vert(bmf, verts=soft, lambda_factor=0.35, lambda_border=0.0, use_x=True, use_y=True, use_z=True, preserve_volume=True)
 bmf.to_mesh(body.data); bmf.free()
 
+# --- v5 proportions (APP DEV v5 crew art, approved 2026-11-20): a final, parameterised reshape on top of the sheet-tuned build,
+# fitted by silhouette IoU against the v5 base/outfit layers (see /tmp/s5 tools: dump.py + score.py). Params from env V5P (JSON).
+import json as _json, os as _os
+_V5D = {'male': dict(HS=1.0, HX=1.0, HZ=1.0, AL=1.0, LL=1.0, TX=1.0, SHX=0.0, SHZ=0.0, NK=1.0, HAND=1.0, ua=1.0, la=1.0, th=1.0, ca=1.0, kn=1.0, ARM_A=0.44, GLU=1.0, GLL=1.0, SHOE=1.0),
+        'female': dict(HS=1.0, HX=1.0, HZ=1.0, AL=1.0, LL=1.0, TX=1.0, SHX=0.0, SHZ=0.0, NK=1.0, HAND=1.0, ua=1.0, la=1.0, th=1.0, ca=1.0, kn=1.0, ARM_A=0.43, GLU=1.0, GLL=1.0, SHOE=1.0)}
+_PF = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), 'v5_params.json')
+V5P = dict(_V5D['female' if FEM else 'male'])
+if _os.path.exists(_PF): V5P.update(_json.load(open(_PF)).get('female' if FEM else 'male', {}))
+if _os.environ.get('V5P'): V5P.update(_json.loads(_os.environ['V5P']))
+print('V5P', V5P)
+def _desc(root):
+    return {b.name for b in arm.data.bones if b.name == root or any(q.name == root for q in b.parent_recursive)}
+_HEADB = _desc('Head'); _ARMB = {sd: _desc('upperarm' + sd) for sd in ('_l', '_r')}; _HANDB = {sd: _desc('hand' + sd) for sd in ('_l', '_r')}
+_LEGB = {sd: _desc('thigh' + sd) for sd in ('_l', '_r')}
+_bh = {b.name: (b.head_local.copy(), b.tail_local.copy()) for b in arm.data.bones}
+_piv = _bh['Head'][0]; _SJ = {sd: _bh['upperarm' + sd][0] for sd in ('_l', '_r')}; _HJ = {sd: _bh['thigh' + sd][0] for sd in ('_l', '_r')}
+_HW = {sd: _bh['hand' + sd][0] for sd in ('_l', '_r')}
+_z0 = min((arm.matrix_world.inverted() @ body.matrix_world @ v.co).z for v in body.data.vertices)
+_drop = (_HJ['_l'].z - _z0) * (1 - V5P['LL'])
+_RAD = (('upperarm', 'ua'), ('lowerarm', 'la'), ('thigh', 'th'), ('calf', 'ca'))
+def _axis(p, bn):
+    h, t = _bh[bn]; a = t - h; u = max(0.0, min(1.0, (p - h).dot(a) / a.length_squared)); return h + a * u, u
+def _rad(p, bn):
+    for pre, key in _RAD:
+        if bn.startswith(pre):
+            c, u = _axis(p, bn); k = V5P[key]
+            if pre == 'calf': k = V5P['kn'] + (V5P['ca'] - V5P['kn']) * min(1.0, u / 0.35)  # knee -> calf blend
+            if pre == 'thigh': k = V5P['th'] + (V5P['kn'] - V5P['th']) * max(0.0, (u - 0.6) / 0.4)
+            return c + (p - c) * k
+    return p
+def _T(p, bn, is_bone=False):
+    """new rest position of point p carried by bone bn"""
+    q = p.copy()
+    for sd in ('_l', '_r'):
+        if bn in _ARMB[sd]:
+            if not is_bone: q = _rad(q, bn)
+            if bn in _HANDB[sd]: q = _HW[sd] + (q - _HW[sd]) * V5P['HAND']
+            s_ = _SJ[sd]; sg = 1 if s_.x > 0 else -1
+            q = s_ + (q - s_) * V5P['AL']; q.x = q.x * V5P['TX'] if False else q.x
+            q = q + Vector((sg * (V5P['SHX'] + abs(s_.x) * (V5P['TX'] - 1)), 0, V5P['SHZ']))
+            return q - Vector((0, 0, _drop))
+        if bn in _LEGB[sd]:
+            if not is_bone: q = _rad(q, bn)
+            h_ = _HJ[sd]; q = h_ + (q - h_) * V5P['LL']; q.x = h_.x * V5P['TX'] ** 0.5 + (q.x - h_.x)
+            return q
+    if bn in _HEADB:
+        d_ = q - _piv; s_ = V5P['HS']; q = _piv + Vector((d_.x * s_ * V5P['HX'], d_.y * s_ * V5P['HX'], d_.z * s_ * V5P['HZ']))
+        return q - Vector((0, 0, _drop))
+    if bn.startswith(('spine', 'pelvis', 'clavicle')):
+        q.x *= V5P['TX']
+        if bn.startswith('clavicle'): sg = 1 if q.x > 0 else -1; f = min(1.0, abs(q.x) / max(1e-4, abs(_SJ['_l'].x))); q += Vector((sg * V5P['SHX'] * f, 0, V5P['SHZ'] * f))
+    if bn.startswith('neck'):
+        c_, _u = _axis(q, bn); q = Vector((c_.x + (q.x - c_.x) * V5P['NK'], c_.y + (q.y - c_.y) * V5P['NK'], q.z))
+    return q - Vector((0, 0, _drop))
+for o in [o for o in bpy.context.scene.objects if o.type == 'MESH']:
+    Wm = wmap(o); toA2 = arm.matrix_world.inverted() @ o.matrix_world; inv = toA2.inverted()
+    for v, d in zip(o.data.vertices, Wm):
+        p = toA2 @ v.co
+        if not d: v.co = inv @ (p - Vector((0, 0, _drop))); continue
+        tw = sum(d.values()); acc = Vector((0, 0, 0))
+        for bn, w in d.items(): acc += _T(p, bn) * w
+        v.co = inv @ (acc / tw)
+bpy.context.view_layer.objects.active = arm; bpy.ops.object.mode_set(mode='EDIT')
+for eb in arm.data.edit_bones:
+    if eb.name == 'root': continue
+    h0, t0 = _bh[eb.name]; eb.head = _T(h0, eb.name, True); eb.tail = _T(t0, eb.name, True)
+bpy.ops.object.mode_set(mode='OBJECT')
+z_neck = bone_ws('neck_01')[0].z; z_pelvis = bone_ws('pelvis')[0].z; z_sp2 = bone_ws('spine_02')[0].z; hh, ht = bone_ws('Head')
+
+
+# --- v5 silhouette fields: per-row segment maps (ours -> v5 front silhouette, idle frame 1) computed by /tmp/s5/field.py from a
+# previous build; displacements are found in the posed idle stance and carried back to the rest pose through the skinning matrices.
+def _aim(name, d):
+    bpy.context.view_layer.update(); pb = arm.pose.bones[name]; M = pb.matrix.copy()
+    cur = (M.to_3x3() @ Vector((0, 1, 0))).normalized(); R = cur.rotation_difference(d.normalized()).to_matrix().to_4x4()
+    N = R @ M; N.translation = M.translation; pb.matrix = N
+def _stance0():
+    for pb in arm.pose.bones: pb.rotation_mode = 'QUATERNION'; pb.matrix_basis.identity()
+    for sd in ('_l', '_r'):
+        sx = 1 if arm.data.bones['upperarm' + sd].head_local.x > 0 else -1
+        _aim('upperarm' + sd, Vector((sx * V5P['ARM_A'], 0.03, -1))); _aim('lowerarm' + sd, Vector((sx * 0.16, -0.1, -1))); _aim('hand' + sd, Vector((sx * 0.12, -0.06, -1)))
+        _aim('thigh' + sd, Vector((sx * 0.045, 0.0, -1))); _aim('calf' + sd, Vector((sx * 0.03, 0.012, -1)))
+        for f in ('index', 'middle', 'ring', 'pinky'):
+            for j, ang in ((1, 7), (2, 11), (3, 6)):
+                bn = f'{f}_0{j}{sd}'
+                if bn in arm.pose.bones: arm.pose.bones[bn].rotation_quaternion = Euler((math.radians(ang), 0, 0)).to_quaternion()
+    for bn, ang in (('spine_02', 0.0), ('spine_03', -3.0), ('neck_01', -5.0), ('Head', 3.0)):
+        if bn in arm.pose.bones: arm.pose.bones[bn].rotation_quaternion = Euler((math.radians(ang), 0, 0)).to_quaternion()
+    bpy.context.view_layer.update()
+def apply_field(objs, path, ref_obj, depth_torso=0.5, maxk=(0.55, 1.9), snap=False, maxpx=1e9):
+    if not path or not _os.path.exists(path): return
+    F = _json.load(open(path)); rows = F['rows']; H_ = F['H']; W_ = F.get('W', 300)
+    prev_mode = bpy.context.object.mode if bpy.context.object else 'OBJECT'
+    bpy.context.view_layer.objects.active = arm; bpy.ops.object.mode_set(mode='POSE'); _stance0()
+    SK = {pb.name: (pb.matrix @ pb.bone.matrix_local.inverted()) for pb in arm.pose.bones}
+    def posed(p, d):
+        tw = sum(d.values()) or 1.0; M3 = None; acc = Vector((0, 0, 0))
+        for bn, w in d.items():
+            m = SK.get(bn)
+            if m is None: continue
+            acc += (m @ p) * w
+        return acc / tw
+    def skin3(d):
+        tw = sum(d.values()) or 1.0; import mathutils; M = mathutils.Matrix(((0, 0, 0), (0, 0, 0), (0, 0, 0)))
+        for bn, w in d.items():
+            m = SK.get(bn)
+            if m is None: continue
+            M = M + m.to_3x3() * (w / tw)
+        return M
+    # posed Body z-range -> scale into the reference dump's world units
+    Wr = wmap(ref_obj); tr = arm.matrix_world.inverted() @ ref_obj.matrix_world
+    zs = [posed(tr @ v.co, d).z for v, d in zip(ref_obj.data.vertices, Wr) if d]
+    kz = (F['bz1'] - F['bz0']) / max(1e-6, max(zs) - min(zs)); zoff = F['bz0'] - min(zs) * kz
+    S0, z0, t, s_, off = F['S0'], F['z0'], F['t'], F['s'], F['off']
+    def rowmap(yn):
+        yi = int(round(yn))
+        for dd in range(0, 8):
+            for y in (yi - dd, yi + dd):
+                if 0 <= y < H_ and rows[y]: return rows[y]
+        return None
+    nmoved = 0; global _DBG; _DBG = []
+    for o in objs:
+        Wm = wmap(o); toA2 = arm.matrix_world.inverted() @ o.matrix_world; inv = toA2.inverted()
+        disp = {}; proj = {}
+        for i, (v, d) in enumerate(zip(o.data.vertices, Wm)):
+            if not d: continue
+            pr = toA2 @ v.co; pp = posed(pr, d); xw, zw = pp.x * kz, pp.z * kz + zoff
+            X = 500 + xw * S0; Y = 1350 - (zw - z0) * S0; xn = X * s_ + off; yn = 10 + (Y - t) * s_
+            if F.get('snapall') and _os.environ.get('V5DBG'): _DBG.append((xn, yn))
+            proj[i] = (xn, yn, d)
+            rm = None if F.get('snapall') else rowmap(yn)
+            if not rm:
+                # rows where arm and torso merge in ours but not in v5: snap stray garment verts onto the nearest v5 silhouette edge
+                vs_ = F.get('v5s', [None] * H_)[min(H_ - 1, max(0, int(round(yn))))] if (snap or F.get('snapall')) else None
+                if not vs_ or any(c - 1 <= xn <= e + 1 for c, e in vs_): continue
+                cands = [q for c, e in vs_ for q in (c + 1.5, e - 1.5)]
+                if F.get('snapall'): cands = [q for q in cands if (q - xn) * ((W_ / 2) - xn) > 0] or cands   # pull toward the body centre (garment hangs off the torso, not onto the arm)
+                tx = min(cands, key=lambda q: abs(q - xn))
+                if abs(tx - xn) > (22 if F.get("snapall") else min(maxpx, 18)): continue
+                disp[i] = Vector(((tx - xn) / (s_ * S0) / kz, 0.0, 0.0)), skin3(d); continue
+            best = None
+            for a, b, c, e in rm:
+                dist = 0 if a - 2 <= xn <= b + 2 else min(abs(xn - a), abs(xn - b))
+                if best is None or dist < best[0]: best = (dist, a, b, c, e)
+            if best[0] > 6: continue
+            _, a, b, c, e = best; k = max(maxk[0], min(maxk[1], (e - c) / max(1.0, b - a)))
+            xn2 = c + (xn - a) * k; xn2 = xn + max(-maxpx, min(maxpx, xn2 - xn)); dxw = (xn2 - xn) / (s_ * S0) / kz
+            bn = dom(d) or ''; ca = None
+            if bn and bn in SK and not bn.startswith(('spine', 'pelvis', 'clavicle', 'neck', 'Head')):
+                h_, t_ = _bh_now[bn]; hp = SK[bn] @ h_; tp = SK[bn] @ t_; ax_ = tp - hp; u = max(0.0, min(1.0, (pp - hp).dot(ax_) / max(1e-9, ax_.length_squared))); cy = (hp + ax_ * u).y; kd = k
+            else:
+                cy = pp.y if bn == 'Head' else (SK['spine_02'] @ _bh_now['spine_02'][0]).y; kd = k ** depth_torso if bn != 'Head' else k
+            dyw = (cy + (pp.y - cy) * kd) - pp.y
+            disp[i] = Vector((dxw, dyw, 0.0)), skin3(d)
+        if F.get('snapall'):  # faces whose centre falls outside v5 (webs bridging torso and arm): pull their verts toward the centre
+            V5S = F.get('v5s'); fd = {}
+            for poly in o.data.polygons:
+                vi = [j for j in poly.vertices if j in proj]
+                if len(vi) < 3: continue
+                cxn = sum(proj[j][0] for j in vi) / len(vi); cyn = sum(proj[j][1] for j in vi) / len(vi)
+                vs_ = V5S[min(H_ - 1, max(0, int(round(cyn))))]
+                if not vs_ or any(c - 1 <= cxn <= e + 1 for c, e in vs_): continue
+                cands = [q for c, e in vs_ for q in (c + 1.5, e - 1.5) if (q - cxn) * ((W_ / 2) - cxn) > 0]
+                if not cands: continue
+                tx = min(cands, key=lambda q: abs(q - cxn))
+                if abs(tx - cxn) > 22: continue
+                for j in vi:
+                    if abs(tx - cxn) > abs(fd.get(j, 0.0)): fd[j] = tx - cxn
+            for j, dx_ in fd.items():
+                if j not in disp or abs(dx_) > abs(disp[j][0].x * (s_ * S0) * kz): disp[j] = Vector((dx_ / (s_ * S0) / kz, 0.0, 0.0)), skin3(proj[j][2])
+        # smooth the posed displacement over the mesh (no seams between rows/segments)
+        bmz = bmesh.new(); bmz.from_mesh(o.data); bmz.verts.ensure_lookup_table()
+        dv = {i: dd[0] for i, dd in disp.items()}
+        for _ in range(3):
+            nd = {}
+            for i in dv:
+                nb = [dv[e.other_vert(bmz.verts[i]).index] for e in bmz.verts[i].link_edges if e.other_vert(bmz.verts[i]).index in dv]
+                nd[i] = (dv[i] * 2 + sum(nb, Vector())) / (2 + len(nb)) if nb else dv[i]
+            dv = nd
+        bmz.free()
+        for i, dp in dv.items():
+            M3 = disp[i][1]
+            try: dr = M3.inverted() @ dp
+            except Exception: continue
+            v = o.data.vertices[i]; v.co = inv @ ((toA2 @ v.co) + dr); nmoved += 1
+    for pb in arm.pose.bones: pb.matrix_basis.identity()
+    bpy.ops.object.mode_set(mode='OBJECT'); print('field applied', path, nmoved)
+    if _DBG: _json.dump(_DBG, open(_os.environ['V5DBG'], 'w'))
+_bh_now = {b.name: (b.head_local.copy(), b.tail_local.copy()) for b in arm.data.bones}
+FLD = _os.environ.get('V5FIELDS', '')
+if not FLD and _os.environ.get('V5FIELDS') is None:  # default: the committed v5 silhouette-fit fields for this gender (tools/blender/v5_fields/<g>.json.gz)
+    _fz = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), 'v5_fields', ('female' if FEM else 'male') + '.json.gz')
+    if _os.path.exists(_fz):
+        import gzip as _gz, tempfile as _tf
+        FLD = _tf.mkdtemp(prefix='v5f_')
+        for _n, _F in _json.loads(_gz.open(_fz, 'rt').read()).items(): _json.dump(_F, open(_os.path.join(FLD, _n), 'w'))
+print('V5 fields', FLD or 'none')
+import glob as _glob
+for _fp in (sorted(_glob.glob(FLD + '/body*.json')) if FLD else []): apply_field([o for o in bpy.context.scene.objects if o.type == 'MESH' and o.name in (body.name, 'Eyes', 'Eyebrows')], _fp, body)
+
 # --- hair: short textured crop with a skin fade, as a scalp shell (planar-projected strand texture + fade vertex colours) ---
 import random
 def smooth(a, b, x): t = max(0.0, min(1.0, (x - a) / (b - a))); return t * t * (3 - 2 * t)
@@ -311,15 +511,39 @@ if FEM:  # replace the curls with a high top bun + loose face strands, and the s
                 if prev:
                     for j in range(6): bb.faces.new((prev[j], prev[(j + 1) % 6], ring[(j + 1) % 6], ring[j]))
                 prev = ring
+    # v5: braided sections swept from the front hairline back over the scalp into the bun (two twisted rope strands each)
+    HV_ = [(Ph[i] - hc) for i in hv]; HVn_ = [q.normalized() for q in HV_]
+    def surf(dv):
+        dv = dv.normalized(); best = 0.0
+        for q, qn in zip(HV_, HVn_):
+            if qn.dot(dv) > 0.985: best = max(best, q.dot(dv))
+        return best
+    for xo in (-0.55, -0.18, 0.18, 0.55):
+        d0 = Vector((xo * 0.9, -0.78, 0.5)); d1 = Vector((xo * 0.25, 0.25, 1.0)); NP = 34; path = []
+        for i in range(NP):
+            t = i / (NP - 1); dv = (d0 * (1 - t) + d1 * t).normalized(); r_ = surf(dv) or ex.z
+            path.append(hc + dv * (r_ + 0.012))
+        for st in (0, 1):
+            prev = None
+            for i, c in enumerate(path):
+                tg = (path[min(NP - 1, i + 1)] - path[max(0, i - 1)]).normalized(); nr = (c - hc).normalized(); bn_ = tg.cross(nr).normalized()
+                ph = i / (NP - 1) * 6.283 * 5 + st * math.pi; cc = c + (bn_ * math.cos(ph) + nr * 0.5 * math.sin(ph)) * 0.0085
+                rr_ = 0.0088 * (1 - 0.3 * (i / (NP - 1))); ring = []
+                for j in range(6):
+                    w = j / 6 * 6.283; ring.append(bb.verts.new(TI @ (cc + (bn_ * math.cos(w) + nr * math.sin(w)) * rr_)))
+                if prev:
+                    for j in range(6): bb.faces.new((prev[j], prev[(j + 1) % 6], ring[(j + 1) % 6], ring[j]))
+                prev = ring
     skinned('Curls', bb, 'M_curls')
     hb = bmesh.new()
     for sd in (-1, 1):
         lb = (max if sd > 0 else min)((Ph[i] for i in hv if -0.42 < hn(Ph[i]).z < -0.12 and hn(Ph[i]).y > -0.3), key=lambda q: q.x)
-        cen = lb + Vector((sd * 0.004, -0.002, -0.026)); segU, segV, R1, R2 = 32, 6, 0.024, 0.0028; vs = []
+        cen = lb + Vector((sd * 0.004, -0.002, -0.026)); segU, segV, R1, R2 = 32, 6, 0.029, 0.003; vs = []
         for i in range(segU):
             u = i / segU * 6.283
             for j in range(segV):
-                w = j / segV * 6.283; vs.append(hb.verts.new(TI @ (cen + Vector((sd * R2 * math.cos(w) * 1.0, (R1 + R2 * math.sin(w)) * math.sin(u), (R1 + R2 * math.sin(w)) * math.cos(u))))))
+                w = j / segV * 6.283; lq = Vector((sd * R2 * math.cos(w) * 1.0, (R1 + R2 * math.sin(w)) * math.sin(u), (R1 + R2 * math.sin(w)) * math.cos(u)))
+                vs.append(hb.verts.new(TI @ (cen + Matrix.Rotation(-sd * 0.75, 3, 'Z') @ lq)))  # turned ~43 deg toward camera: reads as a ring from the front (v5)
         for i in range(segU):
             for j in range(segV):
                 a0 = vs[i * segV + j]; a1 = vs[((i + 1) % segU) * segV + j]; a2 = vs[((i + 1) % segU) * segV + (j + 1) % segV]; a3 = vs[i * segV + (j + 1) % segV]
@@ -361,15 +585,15 @@ def region(kind):
             if kind == 'crop' and ok and p.z < z_sp2 - 0.01: ok = False
             if kind == 'hoodie' and b == 'Head':
                 hc = (hh + ht) / 2; q = p - hc
-                ok = q.y > 0.05 and q.z < -0.04   # hood down: only a bunched hood behind the nape, never over the skull
-            if kind == 'bra': ok = (b in TORSO or b.startswith('clavicle')) and z_neck - 0.27 < p.z < z_neck - 0.05 and (p.z < z_neck - 0.13 or abs(p.x) > 0.055) and not b.startswith('upperarm')  # black sports bra: base layer under bare-torso looks
+                ok = not (q.y < -0.01 and q.z < 0.07 and abs(q.x) < 0.085)   # v5: hood UP (seasoned hoodie / rawdwg zip) - whole head except the face opening
+            if kind == 'bra': ok = (b in TORSO or b.startswith('clavicle')) and z_neck - 0.29 < p.z < z_neck - 0.04 and (p.z < z_neck - 0.12 or abs(p.x) > 0.05) and not b.startswith('upperarm')  # black sports bra: base layer under bare-torso looks
             if ok: sel.add(i)
         else:
             ok = False
-            if b == 'pelvis': ok = p.z < z_pelvis + (0.05 if kind == 'briefs' else 0.07 if kind in ('jeans', 'pants', 'cuffed') else 0.06)
-            if b.startswith('thigh'): ok = kind != 'briefs' or tparam(p, b) < 0.3
-            if kind == 'shorts' and b.startswith('thigh'): ok = tparam(p, b) < 0.62
-            if b.startswith('calf'): ok = kind in ('jeans', 'pants', 'cuffed') and tparam(p, b) < (1.0 if kind == 'jeans' else 0.9)
+            if b == 'pelvis': ok = p.z < z_pelvis + ((0.075 if FEM else 0.05) if kind == 'briefs' else 0.07 if kind in ('jeans', 'pants', 'cuffed') else 0.06)
+            if b.startswith('thigh'): ok = kind != 'briefs' or tparam(p, b) < (0.44 if FEM else 0.3)  # v5 base: her black bike shorts reach mid-thigh, his boxer briefs the upper thigh
+            if kind == 'shorts' and b.startswith('thigh'): ok = tparam(p, b) < (0.97 if VAR == 'L' else 0.62)  # VAR L: v5 knee-length manager / rawdwg shorts
+            if b.startswith('calf'): ok = (kind in ('jeans', 'pants', 'cuffed') and tparam(p, b) < (1.0 if kind == 'jeans' else 0.9)) or (kind == 'shorts' and VAR == 'L' and tparam(p, b) < 0.3)
             if kind == 'shoes': ok = b.startswith('foot') or b.startswith('ball') or (b.startswith('calf') and tparam(p, b) > 0.9)
             if ok: sel.add(i)
     return sel
@@ -399,25 +623,27 @@ def make(kind):
         elif kind == 'long': k = 1.35 if b.startswith(('upperarm', 'lowerarm')) else 1.1
         elif kind == 'hoodie': k = 1.45 if b.startswith(('upperarm', 'lowerarm')) else (1.0 if b == 'Head' else 1.2)
         elif kind == 'jeans': k = (1.35 if b.startswith('thigh') else 1.95 if b.startswith('calf') else 1.12)
-        elif kind == 'pants': k = (1.3 if b.startswith('thigh') else 1.6 if b.startswith('calf') else 1.1)
+        elif kind == 'pants': k = (1.3 if b.startswith('thigh') else (1.45 + 1.15 * tparam(p, b) ** 1.5 if VAR == 'W' else 1.6) if b.startswith('calf') else 1.1)  # VAR W: v5 artillery cargos flare wide to the hem
         elif kind == 'cuffed': k = (1.3 if b.startswith('thigh') else 1.45 if b.startswith('calf') else 1.1)
-        elif kind == 'shorts': k = 1.4 if b.startswith('thigh') else 1.12
+        elif kind == 'shorts': k = (1.4 + (0.25 * tparam(p, b) if VAR == 'L' else 0)) if b.startswith('thigh') else 1.75 if b.startswith('calf') else 1.12
         elif kind in ('briefs', 'bra'): k = 1.04
-        elif kind == 'shoes': k = 1.6 if FEM else 1.72
+        elif kind == 'shoes': k = 1 + ((1.6 if FEM else 1.72) - 1) * V5P['SHOE']
+        if kind in ('tee', 'crop', 'long', 'hoodie') and kind != 'shoes': k = 1 + (k - 1) * V5P['GLU']; d = d * V5P['GLU'] ** 0.5
+        if kind in ('jeans', 'pants', 'cuffed', 'shorts'): k = 1 + (k - 1) * V5P['GLL']; d = d * V5P['GLL'] ** 0.5
         if kind in ('jeans', 'pants', 'cuffed', 'shorts') and p.z > z_pelvis - 0.03:  # waistband tucks under any top
             f = max(0.0, min(1.0, (p.z - (z_pelvis - 0.03)) / 0.04)); k = k + (1.02 - k) * f; d = d + (0.005 - d) * f
         if k != 1.0 and b and b != 'Head':
             c = axis_pt(p, b) if not b.startswith(('spine', 'pelvis', 'clavicle', 'neck')) else Vector((0, axis_pt(p, b).y * 0 + (axis_pt(p, 'spine_02').y), p.z))
             if b.startswith(('spine', 'pelvis', 'clavicle', 'neck')): c = Vector((0.0, axis_pt(p, 'spine_02').y + 0.01, p.z))
             if kind in ('tee', 'crop') and b.startswith('upperarm'):  # (parked for the pipeline rebuild) straight boxy short sleeve: near-constant wide tube, tiny flare (no puff)
-                r = (p - c).length; tp_ = tparam(p, b); R = max(r * 1.1, (0.07 + 0.038 * tp_) if FEM else (0.068 + 0.042 * tp_)); bl_ = max(0.0, min(1.0, tp_ / 0.22)); R = r * 1.1 + (R - r * 1.1) * bl_ * bl_ * (3 - 2 * bl_); q = c + (p - c) * (R / max(r, 1e-4))  # blend in from the shoulder (no spikes at the joint)
+                r = (p - c).length; tp_ = tparam(p, b); R = max(r * 1.1, ((0.07 + 0.038 * tp_) if FEM else (0.068 + 0.042 * tp_)) * V5P['GLU']); bl_ = max(0.0, min(1.0, tp_ / 0.22)); R = r * 1.1 + (R - r * 1.1) * bl_ * bl_ * (3 - 2 * bl_); q = c + (p - c) * (R / max(r, 1e-4))  # blend in from the shoulder (no spikes at the joint)
             elif kind == 'jeans' and b.startswith(('thigh', 'calf')):  # straight-leg baggy: near-constant radius from mid-thigh to the hem
-                r = (p - c).length; R = max(r * 1.3, (0.114 if FEM else 0.118) if b.startswith('thigh') else (0.124 if FEM else 0.128) + 0.012 * tparam(p, b)); q = c + (p - c) * (R / max(r, 1e-4)); q.y = c.y + (q.y - c.y) * 1.2 + 0.012 * (tparam(p, b) if b.startswith('calf') else 0.5)  # deep, baggy, sits back over the heel
+                r = (p - c).length; R = max(r * 1.3, ((0.114 if FEM else 0.118) if b.startswith('thigh') else (0.124 if FEM else 0.128) + 0.012 * tparam(p, b)) * V5P['GLL']); q = c + (p - c) * (R / max(r, 1e-4)); q.y = c.y + (q.y - c.y) * 1.2 + 0.012 * (tparam(p, b) if b.startswith('calf') else 0.5)  # deep, baggy, sits back over the heel
                 if (q.x - p.x) * (1 if p.x > 0 else -1) < 0: q.x = p.x + (q.x - p.x) * (0.2 if b.startswith('thigh') else 0.55)   # inner leg hugs: legs split high like the app
             elif b.startswith(('spine', 'pelvis', 'clavicle', 'neck')):  # torso: loose in depth, barely wider (no shoulder pads)
                 kx = 1 + (k - 1) * (0.3 if kind in ('tee', 'crop', 'long', 'hoodie') else 0.4); dq = p - c
                 if kind in ('tee', 'long', 'crop') and p.z < z_neck - 0.1:  # boxy oversized fit: sides hang straight to the hem
-                    xm = TW.get(round(p.z, 2), 0.15); tgt = (0.31 if FEM else 0.31) * (abs(dq.x) / max(xm, 1e-3)); kb = min(2.0, tgt / max(abs(dq.x), 1e-3))
+                    xm = TW.get(round(p.z, 2), 0.15); tgt = 0.31 * V5P['GLU'] * (abs(dq.x) / max(xm, 1e-3)); kb = min(2.0, tgt / max(abs(dq.x), 1e-3))
                     fz = max(0.0, min(1.0, ((z_neck - 0.13) - p.z) / 0.08)); kx = max(kx, kx + (kb - kx) * fz)   # boxy below the chest, follows the shoulder slope above (no shoulder block)
                     k = 1.0; ext = (TFR if dq.y < 0 else TBK) * 0.97 * max(0.0, 1 - 0.7 * min(1.0, abs(dq.x) / max(xm, 1e-3)) ** 2); ny = dq.y * k
                     if abs(ny) < ext: ny = math.copysign(abs(ny) + (ext - abs(ny)) * fz, dq.y if dq.y != 0 else -1.0)
@@ -428,7 +654,7 @@ def make(kind):
                 if kind in ('pants', 'cuffed', 'shorts') and b.startswith(('thigh', 'calf')) and (q.x - p.x) * (1 if p.x > 0 else -1) < 0: q.x = p.x + (q.x - p.x) * 0.25
             v.co = toA.inverted() @ q + norms[v.index] * d
         else:
-            if kind == 'hoodie' and b == 'Head': d = 0.04
+            if kind == 'hoodie' and b == 'Head': d = 0.045
             v.co = v.co + norms[v.index] * d
     bmesh.ops.delete(bm, geom=kill, context='VERTS')
     if kind in ('tee', 'crop', 'long', 'hoodie'):  # drape: relax the shell so the base's muscle relief doesn't print through
@@ -474,7 +700,15 @@ def make(kind):
     for poly in o.data.polygons: poly.use_smooth = True
     print('garment', kind, len(o.data.vertices))
     return o
+VAR = ''
 for k in ['briefs', 'shoes', 'tee', 'crop', 'long', 'hoodie', 'jeans', 'pants', 'cuffed', 'shorts'] + (['bra'] if FEM else []): make(k)
+# v5 silhouette variants: same garment code, different cut (wardrobe pieces pick them via crew.js `m3`)
+for k, vv, nm in (('shorts', 'L', 'shortsL'), ('pants', 'W', 'pantsW'), ('long', '', 'jersey'), ('tee', '', 'teeD')):
+    VAR = vv; o_ = make(k); o_.name = 'G_' + nm; o_.data.materials.clear(); m_ = bpy.data.materials.new('M_' + nm); o_.data.materials.append(m_)
+VAR = ''
+if FLD:
+    for _k in ['tee', 'crop', 'long', 'hoodie', 'jeans', 'pants', 'cuffed', 'shorts', 'shoes', 'shortsL', 'pantsW', 'jersey', 'teeD']:
+        for _fp in sorted(_glob.glob(FLD + '/' + _k + '[0-9]*.json')): apply_field([bpy.data.objects['G_' + _k]], _fp, body, snap=_os.environ.get('V5SNAP', '1') == '1', maxpx=float(_os.environ.get('V5MAXPX', '9')))
 # --- female tee re-model (TEE2): a real boxy tee instead of the inflated body shell. Torso = lofted superellipse rings
 # (straight sides below the chest, following the shoulder slope above), sleeves = straight wide tubes along the upper arm;
 # boolean union -> voxel remesh (clean manifold, no torn sleeves) -> pushed outside the body -> straight hem/sleeve/neck cuts ->
@@ -628,7 +862,7 @@ def stance(br):
     for pb in arm.pose.bones: pb.rotation_mode = 'QUATERNION'; pb.matrix_basis.identity()
     for sd in ('_l', '_r'):
         sx = 1 if arm.data.bones['upperarm' + sd].head_local.x > 0 else -1
-        aim('upperarm' + sd, Vector((sx * ((0.43 if FEM else 0.44) + br * 0.015), 0.03, -1)))  # ~11 deg out: clear gap to the torso like the app render
+        aim('upperarm' + sd, Vector((sx * (V5P['ARM_A'] + br * 0.015), 0.03, -1)))  # ~11 deg out: clear gap to the torso like the app render
         aim('lowerarm' + sd, Vector((sx * 0.16, -0.1, -1)))
         aim('hand' + sd, Vector((sx * 0.12, -0.06, -1)))
         aim('thigh' + sd, Vector((sx * 0.045, 0.0, -1))); aim('calf' + sd, Vector((sx * 0.03, 0.012, -1)))
@@ -685,11 +919,16 @@ if AO_DIR:
         keep = [sl.material for sl in o.material_slots]
         if not o.material_slots: o.data.materials.append(bm)
         for sl in o.material_slots: sl.material = bm
+        gh = [sc.objects.get(x) for x in ('G_tee', 'G_jeans')] if nm == 'Body' else []  # bare-skin AO: garments must not darken the body under them (v5 base is shirtless)
+        for g_ in gh:
+            if g_: g_.hide_render = True
         bpy.ops.object.select_all(action='DESELECT'); bpy.context.view_layer.objects.active = o; o.select_set(True)
         try:
             bpy.ops.object.bake(type='AO', use_selected_to_active=False); img.filepath_raw = os.path.join(AO_DIR, 'ao_' + nm + '.png'); img.file_format = 'PNG'; img.save(); print('ao baked', nm)
         except Exception as e: print('ao bake failed', nm, e)
         for sl, m in zip(o.material_slots, keep): sl.material = m
+        for g_ in gh:
+            if g_: g_.hide_render = False
     for o in hid: o.hide_render = False
     sc.render.engine = 'BLENDER_EEVEE_NEXT'
 dg = bpy.context.evaluated_depsgraph_get(); D = {}
