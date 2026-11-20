@@ -21,7 +21,7 @@ House rules: zero spend · the game never awards XP and never PUTs · `test:true
 - [x] Glider fast travel (glider.js, stops on the minimap).
 - [~] Buses: the purple RECKLESS bendy bus from asset-refs (black glass band, white swoosh, RECKLESS wordmark, BELFAST destination, R logo, purple wheel spats, grey concertina, blank plates). In the tree, not yet gated or live.
 - [~] Realistically proportioned cars with proper wheels: procedural cars with wheel2 tyres and rims. Some kinds still look toy-like; LODs are basic.
-- [~] Armoured patrol wagons (wagon_ref + asset-refs): yellow/blue Battenburg and POLICE text, no crest or plates. Still needs the asset-refs details: caged roof lights, grille cage, mesh skirts, white steel wheels, rear double doors, two-row Battenburg.
+- [~] Armoured patrol wagons (wagon_ref + asset-refs): yellow/blue Battenburg, POLICE text, no crest or plates; caged grille, roof AC grilles, now white steel wheels, hanging mesh skirts and caged lamp pods (40656ab+1). TODO: caged blue roof beacons, LOD.
 - [~] Street kit from asset-refs: DONE (b-streetkit): sheet-style Reckless shelter at every fast-travel stop (dark frame, lit RECKLESS fascia + light strip, glass, red bench, lit R/crowd ad panel, purple R stop flag, R bin, bollards; one shared atlas), plus ~1,050 baked R bins, red benches, utility boxes, planters, bike racks and cones beside lamps on the pavement (per-cell baked, no extra draw calls). Existing trees/lamps/bollards/railings kept. TODO: drains, barriers, signs, LODs.
 
 ## HUD, map and UI

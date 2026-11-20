@@ -306,8 +306,23 @@ def wagon():
             for gz in range(3): box(m, (xc + fx * 0.342, yb + 0.22, zc - 0.18 + gz * 0.18), (0.006, 0.24, 0.13), 'trim')
     for sd in (-1, 1): box(m, (sd * 0.72, YCT + 0.03, 0.98), (0.2, 0.06, 0.2), 'trim')
     # --- small, chunky black steel wheels, narrow track
+    # --- sheet v2: white steel wheels, hanging black mesh skirts between the arches, caged lamp pods
     for z in (FA, RA):
-        for x in (-XW, XW): wheel2(m, x, WR, z, WR, TW, rim='trim', spokes=6, dish=0.07, hub='black')
+        for x in (-XW, XW): wheel2(m, x, WR, z, WR, TW, rim='white', spokes=6, dish=0.07, hub='black')
+    for sd in (-1, 1):
+        for a, b in zip(zs, zs[1:]):
+            zm = (a + b) / 2
+            if lo(zm) > 0 or zm < ZR + 0.08 or zm > ZF - 0.2: continue
+            hw = (BW if zm < ZB else CW) / 2
+            box(m, (sd * (hw + 0.045), 0.215, zm), (0.012, 0.17, b - a + 0.002), 'grille')                  # mesh flap
+            box(m, (sd * (hw + 0.05), 0.135, zm), (0.02, 0.02, b - a + 0.002), 'trim')                     # bottom rail
+        zk = ZR + 0.1
+        while zk < ZF - 0.2:
+            if lo(zk) == 0: box(m, (sd * (((BW if zk < ZB else CW) / 2) + 0.053), 0.215, zk), (0.012, 0.17, 0.016), 'trim')
+            zk += 0.09
+    for sd in (-1, 1):
+        for k in range(3): box(m, (sd * 0.76 - 0.1 + k * 0.1, 0.88, ZF + 0.12), (0.018, 0.32, 0.018), 'trim')   # lamp cage bars
+        box(m, (sd * 0.76, 0.88, ZF + 0.12), (0.32, 0.018, 0.018), 'trim')
     return m
 
 def pestate():
