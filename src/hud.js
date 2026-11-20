@@ -250,25 +250,27 @@ export function createHUD(app) {
     openWardrobe(C, st) { // C = crew module, st = { fit, xp|null, account, apply(fit), signIn(email), signOut(), email, setEmail }
       const lvl = C.playerLevel(st.xp);
       const rows = [...C.WARDROBE].sort((a, b) => a.level - b.level).map(p => { const locked = p.level > lvl, on = !locked && st.fit[p.slot] === p.id;
-        return `<button class="cw ${on ? 'sel' : ''} ${locked ? 'lock' : ''}" data-id="${p.id}" ${locked ? 'disabled' : ''}><img src="${C.shopImg(p.id)}" onerror="this.onerror=null;this.src='${C.img(p.icon)}'" alt="${p.name}" loading="lazy"/><span><b>${p.name}</b><small>${p.slot.toUpperCase()} · ${locked ? 'LOCKED · UNLOCKS AT LVL ' + p.level : 'LVL ' + p.level}</small></span></button>`; }).join('');
+        return `<button class="cw ${on ? 'sel' : ''} ${locked ? 'lock' : ''}" data-id="${p.id}" ${locked ? 'disabled' : ''}><img src="${C.iconFor(p.id)}" onerror="this.onerror=null;this.src='${C.iconFallback(p.id)}'" alt="${p.name}" loading="lazy"/><span><b>${p.name}</b><small>${p.slot.toUpperCase()} · ${locked ? 'LOCKED · UNLOCKS AT LVL ' + p.level : 'LVL ' + p.level}</small></span></button>`; }).join('');
       const acct = st.account ? `<p class="fine">SIGNED IN AS ${st.account.email.toUpperCase()} · ${st.xp == null ? 'CREW NOT LOADED' : 'LVL ' + lvl + ' · FIT FROM THE APP'} <button id="crewOut">SIGN OUT</button></p>`
         : `<h3>SIGN IN <small>(SAME CREW ACCOUNT AS THE APP · LOADS YOUR EQUIPPED FIT)</small></h3><div class="row"><input id="email" type="email" placeholder="you@example.com" value="${st.email || ''}"/><button id="crewIn">SIGN IN</button></div>`;
       open(`<h2>WARDROBE</h2><p class="sub">CLOTHING DROP 018 · ${st.account ? 'YOUR CREW FIT · LVL ' + lvl : 'SIGNED OUT · LVL 1 PIECES ONLY · SIGN IN TO WEAR WHAT YOUR CREW RANK UNLOCKS'}</p>
-      <div class="crewfig"><img id="crewLook" src="${C.lookFor(st.fit.top, st.fit.outer, st.fit.legs)}" alt="CREW AVATAR"/></div>
+      <div class="crewfig"><img id="crewLook" alt="CREW AVATAR"/></div>
       <h3>CREW BASE <small>${st.baseFromApp ? '(SET IN THE APP FOR YOUR ACCOUNT)' : '(SAME WARDROBE ON BOTH)'}</small></h3><div class="basesel">${['male', 'female'].map(b => `<button data-b="${b}" class="${st.base === b ? 'sel' : ''}"${st.baseFromApp ? ' disabled' : ''}>${b.toUpperCase()}</button>`).join('')}</div>
       <div class="cwlist">${rows}</div>${acct}
       <p class="fine">CREW GAME RULES (SET BY RECKLESS CREW, AWARDED BY THE CREW SERVER, NEVER BY THE GAME): DIGITAL RAVE ${C.CREW_RULES.GAME.rave.xp} XP FOR A 10-MIN STAY, MAX ${C.CREW_RULES.GAME.rave.max_per_london_day}/DAY AND ${C.CREW_RULES.GAME.rave.max_per_iso_week}/WEEK · POSTER ${C.CREW_RULES.GAME.poster.xp} XP ONCE PER SPOT, MAX ${C.CREW_RULES.GAME.poster.max_per_london_day}/DAY · CAP ${C.CREW_RULES.GAME.weekly_cap_xp} XP/WEEK.${C.CREW_RULES.status === 'proposed' ? ' (PROPOSED RULES, NOT LIVE YET)' : ''}</p><p class="fine">NO XP OR CODES ARE AWARDED IN THE GAME. CHANGES HERE STAY ON THIS DEVICE AND NEVER WRITE TO YOUR CREW. VISITS ARE QUEUED AS TEST EVENTS ONLY.</p>`, 'wardov');
       overlay.querySelectorAll('.cw').forEach(b => b.onclick = () => { const p = C.gearById(b.dataset.id); st.fit = C.toggle(st.fit, p); st.apply(st.fit);
         overlay.querySelectorAll('.cw').forEach(x => x.classList.toggle('sel', st.fit[C.gearById(x.dataset.id).slot] === x.dataset.id));
-        overlay.querySelector('#crewLook').src = C.lookFor(st.fit.top, st.fit.outer, st.fit.legs); });
+        look(); });
+      let lk = 0; const look = () => { const n = ++lk; C.composeLook(st.base, st.fit).then(u => { const im = overlay.querySelector('#crewLook'); if (im && n === lk && u) im.src = u; }); }; look();
       const bi = overlay.querySelector('#crewIn'); if (bi) bi.onclick = async () => { const e = overlay.querySelector('#email').value.trim().toLowerCase(); st.setEmail(e); bi.textContent = '…'; try { await st.signIn(e); } catch (err) { api.toast('THAT EMAIL DOES NOT LOOK RIGHT'); bi.textContent = 'SIGN IN'; } };
       const bo = overlay.querySelector('#crewOut'); if (bo) bo.onclick = () => st.signOut();
-      overlay.querySelectorAll('.basesel button').forEach(b => b.onclick = () => { if (st.baseFromApp || !st.setBase) return; st.base = b.dataset.b; st.setBase(st.base); overlay.querySelectorAll('.basesel button').forEach(x => x.classList.toggle('sel', x.dataset.b === st.base)); });
+      overlay.querySelectorAll('.basesel button').forEach(b => b.onclick = () => { if (st.baseFromApp || !st.setBase) return; st.base = b.dataset.b; st.setBase(st.base); overlay.querySelectorAll('.basesel button').forEach(x => x.classList.toggle('sel', x.dataset.b === st.base)); look(); });
     },
     // first launch: pick the crew base (MALE / FEMALE); remembered, changeable from the phone's WARDROBE
-    chooseBase(onPick) {
+    chooseBase(onPick, C, fit) {
       open(`<h2>WHO ARE YOU?</h2><p class="sub">PICK YOUR CREW BASE · SAME WARDROBE, CHANGE IT ANY TIME IN THE PHONE'S WARDROBE</p>
-      <div class="basesel big"><button data-b="male">MALE</button><button data-b="female">FEMALE</button></div>`, 'basepick');
+      <div class="basesel big"><button data-b="male"><img class="bpimg" data-b="male" alt=""/>MALE</button><button data-b="female"><img class="bpimg" data-b="female" alt=""/>FEMALE</button></div>`, 'basepick');
+      if (C) overlay.querySelectorAll('.bpimg').forEach(im => C.composeLook(im.dataset.b, fit || C.DEFAULT_FIT).then(u => { if (u) im.src = u; }));
       const c = overlay.querySelector('.close'); if (c) c.remove();
       overlay.querySelectorAll('.basesel button').forEach(b => b.onclick = () => { close(); onPick(b.dataset.b); });
     },

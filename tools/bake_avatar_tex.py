@@ -11,6 +11,11 @@ L = '/workspace/reckless-world/avatar-refs/canonical-looks/'
 FEM = os.environ.get('AVB', 'male') == 'female'  # female base: face/skin/hair/shoes from her turnaround sheet's front view (tools/ref/female_front.png)
 OUT = os.path.join(os.path.dirname(__file__), '..', 'public', 'models', 'tex_f' if FEM else 'tex'); os.makedirs(OUT, exist_ok=True)
 DBG = '/workspace/reckless-world/.scratch/bake'; os.makedirs(DBG, exist_ok=True)
+V5 = os.environ.get('V5', '1') != '0'  # APP DEV v5 crew art is the colour/silhouette reference (Luke approved 2026-11-20)
+V5F = {'skate-tee': 'upper-tee', 'rckls-tee': 'upper-rckls-tee', 'see-me-shorts': 'lower-see-shorts', 'deject-sleeve': 'upper-deject', 'barrel-jeans': 'lower-jeans', 'moltin-tee': 'upper-moltin', 'stripped-tee': 'upper-stripped',
+  'seasoned-pants': 'lower-seasoned-pants', 'seasoned-hoodie': 'upper-hoodie', 'isometric-tee': 'upper-isometric', 'artillery': 'lower-artillery', 'ultra-tee': 'upper-ultra', 'stan-bottoms': 'lower-stan-bottoms', 'rawdwg-zip': 'upper-zip',
+  'pinner-tee': 'upper-pinner', 'rawdawg-shorts': 'lower-raw-shorts', 'distress-shirt': 'upper-distress', 'manager-shorts': 'lower-manager-shorts', 'manager-zip': 'upper-manager', 'see-me-crop': 'upper-crop', 'stan-hoodie': 'upper-stan-hoodie',
+  'rcklstv-jersey': 'upper-jersey', 'mesh-jersey': 'upper-mesh'}
 D = np.load(os.environ.get('AV_DUMP', '/tmp/av_dump_f.npz' if FEM else '/tmp/av_dump.npz'))
 def part(n): return D[n + '|co'], D[n + '|n'], D[n + '|uv'], D[n + '|tri']
 
@@ -226,9 +231,15 @@ if __name__ == '__main__':
     only = sys.argv[1:]
     for iid, slot, look, kind in items:
         if only and iid not in only: continue
-        if not os.path.exists(L + look + '.png'): print('no look', look); continue
+        V5D = '/workspace/rr-' + ('female' if FEM else 'male') + '-v5/'
+        if V5 and V5F.get(iid):  # v5: per-gender garment-only RGBA over the fixed base -> exact garment mask, no colour classification
+            bi = np.array(Image.open(V5D + 'base.png').convert('RGBA')).astype(np.float32) / 255.0; gi = np.array(Image.open(V5D + 'garments/' + V5F[iid] + '.png').convert('RGBA')).astype(np.float32) / 255.0
+            ga = gi[..., 3:4]; rgb = gi[..., :3] * ga + bi[..., :3] * (1 - ga); alpha = (bi[..., 3] > 0.5) | (ga[..., 0] > 0.5); v5mask = ga[..., 0] > 0.5
+        else:
+            if not os.path.exists(L + look + '.png'): print('no look', look); continue
+            rgb, alpha = load(look); v5mask = None
         kind = 'crop' if iid == 'see-me-crop' else kind
-        rgb, alpha = load(look); gname = 'G_' + kind
+        gname = 'G_' + kind
         parts = BODY + [gname, 'G_shoes'] + (['G_briefs'] if slot != 'legs' else [])
         gm = global_map(alpha, parts); vis = depth_buffer(parts)
         x0, x1, z0, z1 = figure_bbox([gname]); px0, py0 = gm(x0, z1); px1, py1 = gm(x1, z0)
@@ -242,7 +253,7 @@ if __name__ == '__main__':
         else:
             cx, cy = gm(0, 1.05); core[int(cy) - 40:int(cy) + 40, int(cx) - 40:int(cx) + 40] = True
         eo = D['Eyes|co']; ex, ey = gm(0, eo[:, 2].mean()); skr = np.zeros_like(alpha); skr[int(ey) + 6:int(ey) + 45, int(ex) - 28:int(ex) + 28] = True
-        cls = classify(rgb, alpha, core, skr)
+        cls = v5mask if v5mask is not None else classify(rgb, alpha, core, skr)
         gmask = cls & box
         lab, nl = ndi.label(gmask); cc = np.bincount(lab[core & gmask].ravel(), minlength=nl + 1); cc[0] = 0
         if nl: gmask = np.isin(lab, np.where(cc > 0.02 * cc.sum())[0])

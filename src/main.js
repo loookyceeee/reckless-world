@@ -116,7 +116,7 @@ async function start() {
   await document.fonts.ready;
   await loadAnims(import.meta.env.BASE_URL + 'data/anims.json').catch(e => console.warn('anims', e));
 
-  const crewCfgP = CR.loadCrewConfig(); // loyalty's ranks/unlocks/starter fit, fetched while the city builds
+  const crewCfgP = CR.loadCrewConfig(); CR.loadAvatarManifest(); window.__rw.crewArt = () => CR.avatarArtSource(); // loyalty's ranks/unlocks/starter fit, fetched while the city builds
   const city = await buildCity(scene, { low: LOW }); bar(55);
   const SKY = buildSky(scene, { low: LOW }); scene.__env = SKY.env;
   applyWet(scene, SKY.env, { roads: [0.5, 0.02, 0.04, 2.5], puddle: [1.0, 0.4, 0.3, 1.6], markings: [0.3, 0.02], pavement: [0.12, 0.0, 0.02, 3.5] });
@@ -524,6 +524,7 @@ async function start() {
     radio: () => ({ ...muS, link: SC_PROFILE }), skip: () => MU.next(),
     rave: () => ({ inside: !!app.inside, lights: T.mode, venue: app.inside ? T.name : 'THE TEMPLE', venues: venueDest.map(v => ({ id: v.id, name: v.name, sub: v.sub })), dwell: app.inside ? EV.dwell() : 0, need: EV.MIN_DWELL }),
     posters: () => posters.map(p => ({ name: spotName(p.id), done: posterDone(p), x: p.ix, z: p.iz })),
+    crewLook: () => CR.composeLook(CREW.base, CREW.fit),
     crew: () => CREW.account ? { rank: 'CREW LEVEL ' + CR.playerLevel(CREW.xp), line: 'Signed in. Your crew rank unlocks wardrobe pieces.' } : { rank: 'SIGNED OUT', line: 'Sign in with your crew email to wear unlocked pieces.' },
     onAct: (a) => { if (a === 'lights') { app.key('l'); return true; } return false; },
     sens: { get: () => SENS, set: (v) => { SENS = v; localStorage.setItem('rw.sens', String(v)); } },
@@ -561,7 +562,7 @@ async function start() {
     const temple = pad ? [['X', 'DANCE'], ['Y', 'PHONE · LIGHTS']] : [['F', 'DANCE'], ['L', 'LIGHTS'], ['TAB', 'PHONE']];
     hud.keys(ctxt === 'temple' ? temple : base, 6500); };
   app.keyHints = keyHints;
-  const startGame = () => { if (!app.title) return; if (!CR.getLocalBase() && !Q.get('base') && !Q.has('nobase')) (CREW.basePending || Promise.resolve(null)).then(b => { if (!b) setTimeout(() => hud.chooseBase((k) => setBase(k)), 400); }); setTimeout(showHints, 1800); setTimeout(() => keyHints(), localStorage.getItem('rw.hints') ? 2500 : 9500); setTimeout(posterText, 9000); const ti = document.getElementById('title'); ti.classList.add('gone'); app.title = false; camSnap = true; hud.hud.classList.remove('titlehide'); removeEventListener('keydown', anyKey); setTimeout(() => hud.note({ kicker: 'RECKLESS', title: 'TONIGHT AT THE TEMPLE', body: 'Doors open at 8 Carlisle Circus. Follow the red line, or ' + (isTouch ? 'open MAP on the phone' : 'press M') + ' to pick a venue.', hold: 7 }), 1200); if (!Q.has('mute')) { AU.unlock(); sndLbl(); } };
+  const startGame = () => { if (!app.title) return; if (!CR.getLocalBase() && !Q.get('base') && !Q.has('nobase')) (CREW.basePending || Promise.resolve(null)).then(b => { if (!b) setTimeout(() => hud.chooseBase((k) => setBase(k), CR, CREW.fit), 400); }); setTimeout(showHints, 1800); setTimeout(() => keyHints(), localStorage.getItem('rw.hints') ? 2500 : 9500); setTimeout(posterText, 9000); const ti = document.getElementById('title'); ti.classList.add('gone'); app.title = false; camSnap = true; hud.hud.classList.remove('titlehide'); removeEventListener('keydown', anyKey); setTimeout(() => hud.note({ kicker: 'RECKLESS', title: 'TONIGHT AT THE TEMPLE', body: 'Doors open at 8 Carlisle Circus. Follow the red line, or ' + (isTouch ? 'open MAP on the phone' : 'press M') + ' to pick a venue.', hold: 7 }), 1200); if (!Q.has('mute')) { AU.unlock(); sndLbl(); } };
   const anyKey = (e) => { if (app.title) startGame(); }; addEventListener('keydown', anyKey);
   document.getElementById('play').onclick = startGame; document.getElementById('title').addEventListener('pointerdown', (e) => { if (document.getElementById('title').classList.contains('ready')) startGame(); });
   if (isTouch) document.getElementById('play').textContent = 'TAP TO ENTER';

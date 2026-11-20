@@ -41,7 +41,7 @@ export function createPhone(ctx) {
       return frame('RADIO', `<div class="phcard"><small>RECKLESS FM · NOW PLAYING</small><b>${esc(r.playing && r.title ? r.title.toUpperCase() : (r.failed ? 'RECKLESS BEAT (OFFLINE)' : 'TURN THE SOUND ON'))}</b><span>Reckless Raves on SoundCloud</span></div>
       <div class="phrowb"><button class="phbtn" data-act="sound">${esc(ctx.sound.label())}</button><button class="phbtn" data-act="skip">SKIP ›</button></div>
       <a class="phlink" href="${esc(r.link)}" target="_blank" rel="noopener">OPEN ON SOUNDCLOUD ↗</a>`); },
-    crew: () => frame('CREW', `<div class="phcard"><small>CREW</small><b>${esc(ctx.crew().rank)}</b><span>${esc(ctx.crew().line)}</span></div>
+    crew: () => frame('CREW', `<div class="phlook"><img data-look="1" alt="YOUR CREW LOOK"/></div><div class="phcard"><small>CREW</small><b>${esc(ctx.crew().rank)}</b><span>${esc(ctx.crew().line)}</span></div>
       <button class="phbtn" data-act="crewOpen">SIGN IN / WARDROBE</button><p class="phfine">XP IS AWARDED BY CREW LOYALTY, NOT BY THIS GAME.</p>`),
     settings: () => { const q = ctx.quality.get();
       return frame('SETTINGS', `<div class="phcard"><small>QUALITY</small><div class="phrowb">${['low', 'med', 'high'].map(n => `<button class="phbtn${q === n ? ' on' : ''}" data-q="${n}">${n.toUpperCase()}</button>`).join('')}</div></div>
@@ -62,7 +62,7 @@ export function createPhone(ctx) {
     msgs: () => frame('MSGS', msgs.length ? `<div class="phlist">${msgs.map((m, i) => `<button class="phmsg" data-msg="${i}"><small>${esc(m.from)} · ${esc(m.t)}</small><b>${esc(m.title)}</b><span>${esc(m.body)}</span>${m.act ? '<i>TAP TO START ›</i>' : m.dest ? '<i>TAP TO SET GPS ›</i>' : ''}</button>`).join('')}</div>` : '<p class="phfine">No messages.</p>'),
   };
   let lastHtml = '';
-  const render = () => { const h = (views[view] || views.home)(); if (h === lastHtml) return; lastHtml = h; el.innerHTML = h; if (view === 'cards' && ctx.cardArt) el.querySelectorAll('img[data-card]').forEach(im => { im.src = ctx.cardArt(+im.dataset.card); }); }; // only touch the DOM on change, so taps aren't lost
+  const render = () => { const h = (views[view] || views.home)(); if (h === lastHtml) return; lastHtml = h; el.innerHTML = h; if (view === 'crew' && ctx.crewLook) { const im = el.querySelector('img[data-look]'); ctx.crewLook().then(u => { if (u && im.isConnected) im.src = u; }); } if (view === 'cards' && ctx.cardArt) el.querySelectorAll('img[data-card]').forEach(im => { im.src = ctx.cardArt(+im.dataset.card); }); }; // only touch the DOM on change, so taps aren't lost
   const go = (v) => {
     if (v === 'map') { api.close(); return ctx.open.map(); }
     if (v === 'wardrobe') { api.close(); return ctx.open.wardrobe(); }
