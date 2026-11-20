@@ -765,7 +765,7 @@ if 'G_hoodie' in bpy.data.objects:
 # the body/face keep full density for the projected face texture). Weights survive the collapse. AV_DEC=0 disables.
 if _os.environ.get('AV_DEC', '1') == '1':
     for o in [o for o in bpy.context.scene.objects if o.type == 'MESH' and (o.name.startswith('G_') and o.name not in ('G_briefs', 'G_bra') or o.name == 'Curls' or (o.name in ('Eyebrows', 'Stud') and FEM))]:
-        n0 = len(o.data.polygons); md = o.modifiers.new('dec', 'DECIMATE'); md.ratio = (0.36 if FEM else 0.32) if o.name == 'Curls' else 0.5 if o.name in ('Eyebrows', 'Stud') else float(_os.environ.get('AV_DECG', '0.36' if FEM else '0.42')); md.use_collapse_triangulate = True
+        n0 = len(o.data.polygons); md = o.modifiers.new('dec', 'DECIMATE'); md.ratio = (0.36 if FEM else 0.32) if o.name == 'Curls' else 0.5 if o.name in ('Eyebrows', 'Stud') else float(_os.environ.get('AV_DECG', '0.33' if FEM else '0.42')); md.use_collapse_triangulate = True
         bpy.context.view_layer.objects.active = o; bpy.ops.object.modifier_apply(modifier=md.name); print('decimate', o.name, n0, '->', len(o.data.polygons))
 # re-skin every garment from the body surface it now sits on: the fields slide shell verts along the body (hip, armpit) but they kept
 # the weights of the body vertex they were copied from, so any pose but rest let the skin poke through. AV_RESKIN=0 disables.
