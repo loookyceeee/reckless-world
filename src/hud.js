@@ -164,6 +164,11 @@ export function createHUD(app) {
         mg.fillStyle = v.inSlice ? '#000' : '#fff'; mg.fillText(v.pin, R + x, R + y + 0.5);
         if (!edge || !v.inSlice) { mg.fillStyle = '#fff'; mg.font = '600 7px "DM Sans", sans-serif'; const lbl = v.inSlice ? v.name : v.nostalgia ? v.name + ' · EST.' : v.name + ' · COMING SOON'; if (!edge) mg.fillText(lbl, R + x, R + y + 15); mg.font = '700 9px Unbounded, sans-serif'; }
       }
+      // destination marker: red diamond, clamped to the rim with a pointer when it's off the radar (GTA-style)
+      if (st.dest && !st.inside) { const dx = (st.dest.x - st.x) * zoom, dy = -(st.dest.z - st.z) * zoom; let x = dx * cs - dy * sn, y = dx * sn + dy * cs; const d = Math.hypot(x, y), lim = R - 14;
+        const edge = d > lim; if (edge) { x *= lim / d; y *= lim / d; } const r = edge ? 7 : 6, pul = 1 + 0.15 * Math.sin(performance.now() / 180);
+        mg.save(); mg.translate(R + x, R + y); if (edge) { mg.rotate(Math.atan2(y, x)); mg.fillStyle = '#ff2a3c'; mg.beginPath(); mg.moveTo(r + 7, 0); mg.lineTo(r, -4); mg.lineTo(r, 4); mg.closePath(); mg.fill(); mg.rotate(-Math.atan2(y, x)); }
+        mg.scale(pul, pul); mg.fillStyle = '#ff2a3c'; mg.strokeStyle = '#fff'; mg.lineWidth = 2; mg.beginPath(); mg.moveTo(0, -r); mg.lineTo(r, 0); mg.lineTo(0, r); mg.lineTo(-r, 0); mg.closePath(); mg.fill(); mg.stroke(); mg.restore(); }
       // north marker
       const nx = sn * (R - 9), ny = -cs * (R - 9);
       mg.fillStyle = '#fff'; mg.beginPath(); mg.arc(R + nx, R + ny, 8, 0, 7); mg.fill(); mg.fillStyle = '#000'; mg.font = '800 9px Unbounded, sans-serif'; mg.fillText('N', R + nx, R + ny + 0.5);

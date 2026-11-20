@@ -25,7 +25,7 @@ House rules: zero spend · the game never awards XP and never PUTs · `test:true
 - [~] Street kit from asset-refs: DONE (b-streetkit): sheet-style Reckless shelter at every fast-travel stop (dark frame, lit RECKLESS fascia + light strip, glass, red bench, lit R/crowd ad panel, purple R stop flag, R bin, bollards; one shared atlas), plus ~1,050 baked R bins, red benches, utility boxes, planters, bike racks and cones beside lamps on the pavement (per-cell baked, no extra draw calls). Existing trees/lamps/bollards/railings kept. TODO: drains, barriers, signs, LODs.
 
 ## HUD, map and UI
-- [~] Much better interactive HUD map with player markers: the pause map has filters, stop/poster/collectible blips and patrol cones. It still needs a rotating GTA-style minimap texture, a GPS route line and a clear player arrow on the full map.
+- [x] Interactive HUD map: rotating GTA-style minimap (rotates with the camera, speed zoom, N marker, player arrow), A* GPS route line on minimap and pause map, tap-to-drop waypoint + venue pick, destination diamond clamped to the radar rim when off-map, and now world-space GPS: pulsing red chevrons along the next ~90 m of route plus a light beam + ring at the destination (src/gps3d.js).
 - [x] Minimap marks every Reckless venue (pins T/W/G/U/H/X).
 - [~] Unreal-style UI: styled HUD and phone. Needs a polish pass (motion, typography, consistent panels).
 - [~] GTA, Saints Row and Red Dead-style mechanics: heat/patrol evade, poster run, collectibles, photo hunt, dance minigame. Missing: driving, cab hailing, NPC reactions.

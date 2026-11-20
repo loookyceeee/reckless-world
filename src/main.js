@@ -38,6 +38,7 @@ import { buildFlavour, buildWetStreaks } from './flavour.js';
 import { buildTempleExterior, updateTempleExterior, buildTempleInterior, setTempleMode, updateTempleInterior, INTERIOR_ORIGIN } from './temple.js';
 import { createAvatar, animateAvatar, OUTFITS, loadAnims, bakeCrowdVariants } from './character.js';
 import { buildGraph, buildTraffic, updateTraffic } from './traffic.js';
+import { createGps3D } from './gps3d.js';
 import { buildLandmarks, updateLandmarks } from './landmarks.js';
 import { createHUD, buildMinimapBase, loadMinimapImage, makeRouter } from './hud.js';
 import { VENUES, DISTRICTS, POSTER_SPOTS } from './venues.js';
@@ -133,7 +134,7 @@ async function start() {
   if (T.CV) T.CV.cap = T.crowd.length;
   const LM = buildLandmarks(scene, city, city.grid); LM.root.parent = city.root;
   city.templeDoor = ext.doorPos; const carModels = Q.has('nocars') ? null : await (await fetch(import.meta.env.BASE_URL + 'data/cars.json')).json().catch(() => null); if (carModels && !Q.has('oldveh')) Object.assign(carModels, await (await fetch(import.meta.env.BASE_URL + 'data/vehicles.json')).json().catch(() => ({}))); const traffic = buildTraffic(scene, city, { models: carModels, low: LOW, stops: (city.sf && city.sf.stops) || [], signals: (city.sf && city.sf.signals) || [] }); bar(85);
-  const route = makeRouter(buildGraph(city.roads, false)); let routeT = 0;
+  const route = makeRouter(buildGraph(city.roads, false)); let routeT = 0; const GPS3 = createGps3D(scene);
   // player
   let player = createAvatar(scene, { name: 'player', outfit: 'skate', fit: true });
   await crewCfgP; window.__rw.crewRules = CR.CREW_RULES;
@@ -320,7 +321,7 @@ async function start() {
   let npLast = '', muS = {};
   const MU = createMusic({ onState: (m) => { muS = m; if (m.playing && m.title && m.title !== npLast) { npLast = m.title; if (!app.title) hud.note({ kicker: 'NOW PLAYING · RECKLESS FM', title: m.title.toUpperCase(), body: 'Reckless Raves on SoundCloud', type: 'radio' }); } AU.beatOff = m.playing; const np = document.getElementById('np'); if (np) { np.innerHTML = m.playing && m.title ? `♪ ${m.title.toUpperCase()} · RECKLESS RAVES ON SOUNDCLOUD` : (m.failed ? '♪ RECKLESS BEAT (SOUNDCLOUD UNAVAILABLE)' : ''); np.href = m.link; } } });
   DANCE = createDance({ hud, AU, MU, isTouch, onPunch: (k) => { punch = Math.max(punch, k); buzz(k > 0.8 ? 18 : 8); } }); window.__rw.dance = DANCE;
-  window.__rw.MU = MU; window.__rw.hud = hud;
+  window.__rw.MU = MU; window.__rw.hud = hud; window.__rw.setDest = (d) => { DEST = d; routeT = 0; };
   const sndLbl = () => { const b = document.getElementById('sndBtn'); if (b) b.textContent = 'SOUND: ' + (AU.on ? 'ON' : 'OFF'); if (AU.on && !Q.has('nosc')) MU.start(); else MU.pause(); };
   addEventListener('pointerdown', () => { if (!app.title && !AU.on && !app._snd) { app._snd = 1; AU.unlock(); sndLbl(); } }, { once: false });
   app.key = (k) => {
@@ -464,7 +465,7 @@ async function start() {
     else if (T.mode === 'rave' && T.danceFloor(P)) interact = { label: '<b>E</b> DANCE', act: () => DANCE.start({ venue: T.name, t }) };
     hud.prompt(interact ? interact.label : ''); if (isTouch) { const ia = !!interact; if (ia && !app._ia) buzz(12); app._ia = ia; hud.$('tAct').classList.toggle('on', ia); }
     // HUD
-    slowT -= dt; if (slowT <= 0) { slowT = 0.5; if (COL) app.blips.collectibles = COL.blips(); if (app.inside) EV.raveTick().then(ev => { if (!ev) return; if (ev.blocked) hud.note({ kicker: 'CREW', title: '10 MINUTES IN', body: ev.blocked }); else hud.stamp({ title: 'VISIT LOGGED', sub: T.name + ' · 10 MINUTES IN', lines: ['RAVE VISIT · TEST EVENT QUEUED', 'CREW ADDS XP AFTER LAUNCH'] }); }); state.street = app.inside ? T.name : nearestStreet(); state.district = app.inside ? (T.club ? T.sub + (T.mode === 'day' ? ' · HOUSE LIGHTS' : ' · RAVE') : (T.mode === 'day' ? 'NAVE · DAYLIGHT' : 'NAVE · RAVE')) : nearestDistrict();
+    GPS3.update(state.route, DEST, P, performance.now() / 1000, app.inside || app.title); slowT -= dt; if (slowT <= 0) { slowT = 0.5; if (COL) app.blips.collectibles = COL.blips(); if (app.inside) EV.raveTick().then(ev => { if (!ev) return; if (ev.blocked) hud.note({ kicker: 'CREW', title: '10 MINUTES IN', body: ev.blocked }); else hud.stamp({ title: 'VISIT LOGGED', sub: T.name + ' · 10 MINUTES IN', lines: ['RAVE VISIT · TEST EVENT QUEUED', 'CREW ADDS XP AFTER LAUNCH'] }); }); state.street = app.inside ? T.name : nearestStreet(); state.district = app.inside ? (T.club ? T.sub + (T.mode === 'day' ? ' · HOUSE LIGHTS' : ' · RAVE') : (T.mode === 'day' ? 'NAVE · DAYLIGHT' : 'NAVE · RAVE')) : nearestDistrict();
       { const dd = Math.hypot(P.x - ext.doorPos.x, P.z - ext.doorPos.z); AU.update({ inside: app.inside, dist: dd }); MU.setVolume(app.inside ? 90 : 22 + Math.max(0, 1 - dd / 90) * 30); }
       routeT -= 0.5; if (routeT <= 0 && !app.inside) { routeT = 1.5; if (DEST && DEST.kind === 'waypoint' && Math.hypot(DEST.x - P.x, DEST.z - P.z) < 14) { DEST = null; hud.toast('WAYPOINT REACHED'); } state.route = DEST ? route(P.x, P.z, DEST.x, DEST.z) : null; } if (app.inside) state.route = null; state.dest = DEST;
       const tv = VENUES[0]; state.objective = (M && M.objective()) || (app.inside ? '' : `▲ THE TEMPLE <b>${Math.round(Math.hypot(P.x - ext.doorPos.x, P.z - ext.doorPos.z))}M</b>`); }
