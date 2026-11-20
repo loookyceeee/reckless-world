@@ -143,10 +143,14 @@ if __name__ == '__main__':
     gm = global_map(alpha, look_parts)
     eo = D['Eyes|co']; ours = [tuple(eo[eo[:, 0] * s > 0][:, [0, 2]].mean(0)) for s in (-1, 1)]
     er = eye_centres_ref(rgb, alpha, gm, ours)
+    if FEM:  # the global-map guess lands on the hairline once the v5 body/hair changed: refine around the sheet's measured iris spots instead
+        _g = iter([(100.0, 122.0), (145.0, 122.0)]); _pts = list(_g)
+        er = [eye_centres_ref(rgb, alpha, (lambda x, z, q=q: q), [(0, 0)])[0] for q in _pts]
     # head map: x from the eye spacing, z from crown (top of alpha) to the eye line
     ax = (er[1][0] - er[0][0]) / (ours[1][0] - ours[0][0]); bx = er[0][0] - ax * ours[0][0]
     ys, xs = np.where(alpha); ztop = figure_bbox(['Hair', 'Body'])[3]; ez = (ours[0][1] + ours[1][1]) / 2; eyy = (er[0][1] + er[1][1]) / 2
     az = (eyy - ys.min()) / (ztop - ez); bz = ys.min() + az * ztop
+    if os.environ.get('HEADMAP', 'uniform') == 'uniform': az = ax; bz = eyy + az * ez   # v5 rebuild: uniform scale from the eye spacing, anchored on the eye line (crown-fit squashed the face once the hair volume changed)
     hm = Map(ax, bx, az, bz); print('global', vars(gm), 'head', vars(hm), 'eyes ref', er)
     vis_all = depth_buffer(look_parts)
     sk = skin_mask(rgb) & alpha
