@@ -116,7 +116,7 @@ async function start() {
   await document.fonts.ready;
   await loadAnims(import.meta.env.BASE_URL + 'data/anims.json').catch(e => console.warn('anims', e));
 
-  const crewCfgP = CR.loadCrewConfig(); CR.loadAvatarManifest(); window.__rw.crewArt = () => CR.avatarArtSource(); // loyalty's ranks/unlocks/starter fit, fetched while the city builds
+  const crewCfgP = CR.loadCrewConfig(); CR.loadAvatarManifest(); window.__rw.crewArt = () => CR.avatarArtSource(); window.__rw.CR = CR; // loyalty's ranks/unlocks/starter fit, fetched while the city builds
   const city = await buildCity(scene, { low: LOW }); bar(55);
   const SKY = buildSky(scene, { low: LOW }); scene.__env = SKY.env;
   applyWet(scene, SKY.env, { roads: [0.5, 0.02, 0.04, 2.5], puddle: [1.0, 0.4, 0.3, 1.6], markings: [0.3, 0.02], pavement: [0.12, 0.0, 0.02, 3.5] });
