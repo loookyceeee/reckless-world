@@ -775,6 +775,12 @@ if _os.environ.get('AV_RESKIN', '1') == '1':
         _dt.layers_vgroup_select_src = 'ALL'; _dt.layers_vgroup_select_dst = 'NAME'; bpy.context.view_layer.objects.active = _o
         with bpy.context.temp_override(object=_o, active_object=_o): bpy.ops.object.modifier_move_to_index(modifier=_dt.name, index=0); bpy.ops.object.modifier_apply(modifier=_dt.name)
     print('reskinned garments')
+# glTF keeps 4 influences per vertex: limit + normalise body and garments now, so both push-outs see the skinning the game plays
+for _o in [o for o in bpy.data.objects if o.type == 'MESH' and (o.name.startswith('G_') or o == body) and o.vertex_groups]:
+    bpy.ops.object.select_all(action='DESELECT'); bpy.context.view_layer.objects.active = _o; _o.select_set(True)
+    with bpy.context.temp_override(object=_o, active_object=_o, selected_objects=[_o]):
+        bpy.ops.object.vertex_group_limit_total(group_select_mode='ALL', limit=4); bpy.ops.object.vertex_group_normalize_all(group_select_mode='ALL', lock_active=False)
+print('weights limited to 4')
 # keep every garment outside the body after the silhouette fields (an inward pull must never let skin show through the cloth)
 from mathutils.bvhtree import BVHTree
 _bvh = BVHTree.FromPolygons([v.co.copy() for v in body.data.vertices], [pl.vertices[:] for pl in body.data.polygons])  # rest-pose body (the evaluated one carried the stance pose)
@@ -791,7 +797,8 @@ for _o in [o for o in bpy.data.objects if o.type == 'MESH' and o.name.startswith
     for pl in _o.data.polygons:
         for k_ in pl.edge_keys: _ec[k_] = _ec.get(k_, 0) + 1
     _bnd = {i for k_, c_ in _ec.items() if c_ == 1 for i in k_}; _pl = [pl.vertices[:] for pl in _o.data.polygons]
-    for _it in range(int(_os.environ.get('AV_REVR', '0'))):
+    RVM = float(_os.environ.get('AV_RVM', '0.003')); RVC = float(_os.environ.get('AV_RVC', '0.008'))
+    for _it in range(int(_os.environ.get('AV_REVR', '4'))):
         _gb = BVHTree.FromPolygons([v.co.copy() for v in _o.data.vertices], _pl); _push = {}; _m = 0
         for bv_ in body.data.vertices:
             _loc, _nrm, _fi, _dd = _gb.find_nearest(bv_.co, 0.04)
@@ -800,8 +807,8 @@ for _o in [o for o in bpy.data.objects if o.type == 'MESH' and o.name.startswith
             if _sd > -0.002:
                 _m += 1
                 for i in _pl[_fi]:
-                    if _push.get(i, (0, None))[0] < _sd + 0.006: _push[i] = (_sd + 0.006, _nrm.copy())
-        for i, (_a, _nr) in _push.items(): _o.data.vertices[i].co += _nr * min(_a, 0.015)
+                    if _push.get(i, (0, None))[0] < _sd + RVM: _push[i] = (_sd + RVM, _nrm.copy())
+        for i, (_a, _nr) in _push.items(): _o.data.vertices[i].co += _nr * min(_a, RVC)
         if _m: print('pushout rev', _o.name, _it, _m)
         if not _m: break
 # ...and again in the idle stance (the pose the game shows most): skinning differences at elbows/hips can still let skin through
@@ -817,17 +824,22 @@ def _pushout_posed(objs, mg_of):
         return M
     toA_ = arm.matrix_world.inverted() @ body.matrix_world
     Wb = wmap(body); bp = []
-    for v, d in zip(body.data.vertices, Wb):
+    _dg = bpy.context.evaluated_depsgraph_get(); _be = body.evaluated_get(_dg).to_mesh()
+    _EV = len(_be.vertices) == len(body.data.vertices) and _os.environ.get('AV_EVPOSE', '1') == '1'  # the real armature deformation (what the export plays), not a hand blend
+    for i_, (v, d) in enumerate(zip(body.data.vertices, Wb)):
+        if _EV: bp.append(toA_ @ _be.vertices[i_].co.copy()); continue
         M = blend(d) if d else None; bp.append((M @ (toA_ @ v.co)) if M is not None else (toA_ @ v.co))
+    body.evaluated_get(_dg).to_mesh_clear()
     bv = BVHTree.FromPolygons(bp, [pl.vertices[:] for pl in body.data.polygons])
     BN = [(blend(d).to_3x3() @ v.normal).normalized() if d and blend(d) is not None else v.normal.copy() for v, d in zip(body.data.vertices, Wb)]
     for o in objs:
         Wo = wmap(o); tA = arm.matrix_world.inverted() @ o.matrix_world; inv = tA.inverted(); mg = mg_of(o.name); n = 0
+        _oe = o.evaluated_get(_dg).to_mesh(); _oev = [tA @ w.co.copy() for w in _oe.vertices] if _EV and len(_oe.vertices) == len(o.data.vertices) else None; o.evaluated_get(_dg).to_mesh_clear()
         for v, d in zip(o.data.vertices, Wo):
             if not d: continue
             M = blend(d)
             if M is None: continue
-            pr = tA @ v.co; pp = M @ pr; loc, nrm, _i, _d = bv.find_nearest(pp)
+            pr = tA @ v.co; pp = _oev[v.index] if _oev else M @ pr; loc, nrm, _i, _d = bv.find_nearest(pp)
             if loc is None: continue
             sd = (pp - loc).dot(nrm)
             if sd < mg:
