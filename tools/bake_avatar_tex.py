@@ -164,7 +164,7 @@ if __name__ == '__main__':
                 low = np.where(-dz > s.kz[-1], s.eyy + tail, low)
                 return px, np.where(dz < 0, low, py)
         # ours (m below the eye line) -> sheet (px below its eye line); measured: nose tip -0.058, lips -0.076, chin -0.094 / sheet 15, 28, 42
-        hm = FaceMap(hm, ez, eyy, [0.0, 0.058, 0.076, 0.094], [0.0, 15.0, 28.0, 42.0])
+        hm = FaceMap(hm, ez, eyy, [0.0, 0.063, 0.0826, 0.102], [0.0, 15.0, 28.0, 42.0])  # natural lower face (no HZ squash below the brow): x0.96/0.883
     print('global', vars(gm), 'head', vars(hm), 'eyes ref', er)
     vis_all = depth_buffer(look_parts)
     sk = skin_mask(rgb) & alpha

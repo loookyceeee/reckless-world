@@ -972,8 +972,8 @@ for o in list(bpy.context.scene.objects):  # drop helper spheres (42-vert Icosph
 # --- size budget: collapse-decimate the clothing shells and the male curl crop (only one top + one bottom show at a time;
 # the body/face keep full density for the projected face texture). Weights survive the collapse. AV_DEC=0 disables.
 if _os.environ.get('AV_DEC', '1') == '1':
-    for o in [o for o in bpy.context.scene.objects if o.type == 'MESH' and (o.name.startswith('G_') and o.name not in ('G_briefs', 'G_bra') or o.name == 'Curls')]:
-        n0 = len(o.data.polygons); md = o.modifiers.new('dec', 'DECIMATE'); md.ratio = (0.6 if FEM else 0.32) if o.name == 'Curls' else float(_os.environ.get('AV_DECG', '0.42')); md.use_collapse_triangulate = True
+    for o in [o for o in bpy.context.scene.objects if o.type == 'MESH' and (o.name.startswith('G_') and o.name not in ('G_briefs', 'G_bra') or o.name == 'Curls' or (o.name in ('Eyebrows', 'Stud') and FEM))]:
+        n0 = len(o.data.polygons); md = o.modifiers.new('dec', 'DECIMATE'); md.ratio = (0.42 if FEM else 0.32) if o.name == 'Curls' else 0.5 if o.name in ('Eyebrows', 'Stud') else float(_os.environ.get('AV_DECG', '0.36' if FEM else '0.42')); md.use_collapse_triangulate = True
         bpy.context.view_layer.objects.active = o; bpy.ops.object.modifier_apply(modifier=md.name); print('decimate', o.name, n0, '->', len(o.data.polygons))
 # --- bake UVs + projection dump: every visible part gets a fresh non-overlapping UV layout (smart project) and its posed
 # (idle frame 1 = the app's stance) loop positions/normals are dumped so tools/bake_avatar_tex.py can project the app's
