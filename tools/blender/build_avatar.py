@@ -204,6 +204,13 @@ _piv = _bh['Head'][0]; _SJ = {sd: _bh['upperarm' + sd][0] for sd in ('_l', '_r')
 _HW = {sd: _bh['hand' + sd][0] for sd in ('_l', '_r')}
 _z0 = min((arm.matrix_world.inverted() @ body.matrix_world @ v.co).z for v in body.data.vertices)
 _drop = (_HJ['_l'].z - _z0) * (1 - V5P['LL'])
+_HFACE = FEM and _os.environ.get('HFACE', '1') == '1'  # female: keep the face (below the brow) at natural proportions; HX/HZ reshape only the cranium under the hair
+if _HFACE:
+    _AI = arm.matrix_world.inverted(); _ztop = max((_AI @ body.matrix_world @ v.co).z for v in body.data.vertices)
+    _eo = [o for o in bpy.data.objects if o.type == 'MESH' and o.name.startswith('Eyes')]
+    _ze = (sum((_AI @ _eo[0].matrix_world @ v.co).z for v in _eo[0].data.vertices) / len(_eo[0].data.vertices)) if _eo else _piv.z + 0.5 * (_ztop - _piv.z)
+    _HH = _ztop - _piv.z; _zb = _ze + 0.04 * _HH; _HZc = (( _ztop - _piv.z) * V5P['HZ'] - (_zb - _piv.z)) / max(1e-4, _ztop - _zb)
+    print('HFACE eye', round(_ze - _piv.z, 3), 'top', round(_ztop - _piv.z, 3), 'cranium HZ', round(_HZc, 3))
 _RAD = (('upperarm', 'ua'), ('lowerarm', 'la'), ('thigh', 'th'), ('calf', 'ca'))
 def _axis(p, bn):
     h, t = _bh[bn]; a = t - h; u = max(0.0, min(1.0, (p - h).dot(a) / a.length_squared)); return h + a * u, u
@@ -231,7 +238,12 @@ def _T(p, bn, is_bone=False):
             h_ = _HJ[sd]; q = h_ + (q - h_) * V5P['LL']; q.x = h_.x * V5P['TX'] ** 0.5 + (q.x - h_.x)
             return q
     if bn in _HEADB:
-        d_ = q - _piv; s_ = V5P['HS']; q = _piv + Vector((d_.x * s_ * V5P['HX'], d_.y * s_ * V5P['HX'], d_.z * s_ * V5P['HZ']))
+        d_ = q - _piv; s_ = V5P['HS']
+        if _HFACE:
+            f_ = max(0.0, min(1.0, (q.z - (_ze - 0.08 * _HH)) / (0.14 * _HH))); f_ = f_ * f_ * (3 - 2 * f_); kx_ = 1 + (V5P['HX'] - 1) * f_
+            dz_ = d_.z if q.z <= _zb else (_zb - _piv.z) + (q.z - _zb) * _HZc
+            q = _piv + Vector((d_.x * s_ * kx_, d_.y * s_ * kx_, dz_ * s_))
+        else: q = _piv + Vector((d_.x * s_ * V5P['HX'], d_.y * s_ * V5P['HX'], d_.z * s_ * V5P['HZ']))
         return q - Vector((0, 0, _drop))
     if bn.startswith(('spine', 'pelvis', 'clavicle')):
         q.x *= V5P['TX']
