@@ -235,6 +235,7 @@ if __name__ == '__main__':
         if V5 and V5F.get(iid):  # v5: per-gender garment-only RGBA over the fixed base -> exact garment mask, no colour classification
             bi = np.array(Image.open(V5D + 'base.png').convert('RGBA')).astype(np.float32) / 255.0; gi = np.array(Image.open(V5D + 'garments/' + V5F[iid] + '.png').convert('RGBA')).astype(np.float32) / 255.0
             ga = gi[..., 3:4]; rgb = gi[..., :3] * ga + bi[..., :3] * (1 - ga); alpha = (bi[..., 3] > 0.5) | (ga[..., 0] > 0.5); v5mask = ga[..., 0] > 0.5
+            same = (np.abs(gi[..., :3] - bi[..., :3]).sum(-1) < 0.09) & (bi[..., 3] > 0.5); v5mask = v5mask & ~ndi.binary_dilation(same & v5mask, iterations=1)   # layer pixels identical to the base (hands/arms baked into the cut) are not cloth
         else:
             if not os.path.exists(L + look + '.png'): print('no look', look); continue
             rgb, alpha = load(look); v5mask = None

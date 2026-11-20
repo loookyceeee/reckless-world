@@ -274,7 +274,7 @@ def _stance0():
     for bn, ang in (('spine_02', 0.0), ('spine_03', -3.0), ('neck_01', -5.0), ('Head', 3.0)):
         if bn in arm.pose.bones: arm.pose.bones[bn].rotation_quaternion = Euler((math.radians(ang), 0, 0)).to_quaternion()
     bpy.context.view_layer.update()
-def apply_field(objs, path, ref_obj, depth_torso=0.5, maxk=(0.55, 1.9), snap=False, maxpx=1e9):
+def apply_field(objs, path, ref_obj, depth_torso=0.5, maxk=(0.55, 1.9), snap=False, maxpx=1e9, keep_head=False):
     if not path or not _os.path.exists(path): return
     F = _json.load(open(path)); rows = F['rows']; H_ = F['H']; W_ = F.get('W', 300)
     prev_mode = bpy.context.object.mode if bpy.context.object else 'OBJECT'
@@ -367,6 +367,8 @@ def apply_field(objs, path, ref_obj, depth_torso=0.5, maxk=(0.55, 1.9), snap=Fal
         bmz.free()
         for i, dp in dv.items():
             M3 = disp[i][1]
+            if keep_head:  # the face keeps its sheet-tuned shape (the projected face texture is fitted to it); fade out through the neck
+                dw = Wm[i] or {}; dp = dp * (1.0 - dw.get('Head', 0.0) / (sum(dw.values()) or 1.0))
             try: dr = M3.inverted() @ dp
             except Exception: continue
             v = o.data.vertices[i]; v.co = inv @ ((toA2 @ v.co) + dr); nmoved += 1
@@ -383,7 +385,7 @@ if not FLD and _os.environ.get('V5FIELDS') is None:  # default: the committed v5
         for _n, _F in _json.loads(_gz.open(_fz, 'rt').read()).items(): _json.dump(_F, open(_os.path.join(FLD, _n), 'w'))
 print('V5 fields', FLD or 'none')
 import glob as _glob
-for _fp in (sorted(_glob.glob(FLD + '/body*.json')) if FLD else []): apply_field([o for o in bpy.context.scene.objects if o.type == 'MESH' and o.name in (body.name, 'Eyes', 'Eyebrows')], _fp, body)
+for _fp in (sorted(_glob.glob(FLD + '/body*.json')) if FLD else []): apply_field([o for o in bpy.context.scene.objects if o.type == 'MESH' and o.name in (body.name, 'Eyes', 'Eyebrows')], _fp, body, keep_head=FEM)
 
 # --- hair: short textured crop with a skin fade, as a scalp shell (planar-projected strand texture + fade vertex colours) ---
 import random
@@ -578,14 +580,14 @@ def region(kind):
         side = b[-2:] if b[-2:] in ('_l', '_r') else ''
         up = kind in ('tee', 'long', 'crop', 'hoodie', 'bra')
         if up:
-            ok = b in TORSO or (b == 'neck_01' and p.z < z_neck + 0.03) or (b == 'pelvis' and p.z > z_pelvis + (-0.07 if kind in ('tee', 'long') else 0.02 if kind != 'hoodie' else -0.05))
+            ok = b in TORSO or (b == 'neck_01' and (p.z < z_neck + 0.03 or (kind == 'hoodie' and hn(p).y > -0.35))) or (b == 'pelvis' and p.z > z_pelvis + (-0.07 if kind in ('tee', 'long') else 0.02 if kind != 'hoodie' else -0.05))
             if b.startswith('thigh') and kind in ('tee', 'long'): ok = p.z > z_pelvis - 0.07
             if b.startswith('upperarm'): ok = kind != 'tee' and kind != 'crop' or tparam(p, b) < (0.85 if FEM else 0.97)
             if b.startswith('lowerarm'): ok = kind in ('long', 'hoodie') and tparam(p, b) < 0.93
             if kind == 'crop' and ok and p.z < z_sp2 - 0.01: ok = False
             if kind == 'hoodie' and b == 'Head':
                 hc = (hh + ht) / 2; q = p - hc
-                ok = not (q.y < -0.01 and q.z < 0.07 and abs(q.x) < 0.085)   # v5: hood UP (seasoned hoodie / rawdwg zip) - whole head except the face opening
+                n_ = hn(p); ok = not (n_.y < -0.05 and n_.z < 0.28 and abs(n_.x) < 0.64)   # v5: hood UP (seasoned hoodie / rawdwg zip) - whole head except an oval face opening (head-bbox space, front = -y)
             if kind == 'bra': ok = (b in TORSO or b.startswith('clavicle')) and z_neck - 0.29 < p.z < z_neck - 0.04 and (p.z < z_neck - 0.12 or abs(p.x) > 0.05) and not b.startswith('upperarm')  # black sports bra: base layer under bare-torso looks
             if ok: sel.add(i)
         else:
@@ -609,6 +611,7 @@ for i_, (p_, d_) in enumerate(zip(P, W)):
 _ch = [(p_.y - _cy) for p_, d_ in zip(P, W) if (dom(d_) or '').startswith(('spine', 'clavicle')) and z_neck - 0.26 < p_.z < z_neck - 0.14]
 TFR = -min(_ch) if _ch else 0.12; TBK = max(_ch) if _ch else 0.12
 print('TEE chest front/back', round(TFR, 3), round(TBK, 3))
+_HENV = [((Ph[i] - hc), (Ph[i] - hc).normalized()) for i in hv[::2]]
 def make(kind):
     sel = region(kind)
     o = body.copy(); o.data = body.data.copy(); o.name = 'G_' + kind; bpy.context.collection.objects.link(o)
@@ -654,8 +657,12 @@ def make(kind):
                 if kind in ('pants', 'cuffed', 'shorts') and b.startswith(('thigh', 'calf')) and (q.x - p.x) * (1 if p.x > 0 else -1) < 0: q.x = p.x + (q.x - p.x) * 0.25
             v.co = toA.inverted() @ q + norms[v.index] * d
         else:
-            if kind == 'hoodie' and b == 'Head': d = 0.045
-            v.co = v.co + norms[v.index] * d
+            if kind == 'hoodie' and b == 'Head':  # hood: a smooth bag on the head's radial envelope (over the ears and hair, no spikes)
+                q_ = p - hc; dv_ = q_.normalized(); rr = 0.0
+                for hq, hqn in _HENV:
+                    if hqn.dot(dv_) > 0.95: rr = max(rr, hq.dot(dv_))
+                v.co = toA.inverted() @ (hc + dv_ * (max(rr, q_.length) + 0.034 + 0.03 * smooth(0.0, -0.11, q_.z)))  # flares out over the jaw onto the shoulders like v5
+            else: v.co = v.co + norms[v.index] * d
     bmesh.ops.delete(bm, geom=kill, context='VERTS')
     if kind in ('tee', 'crop', 'long', 'hoodie'):  # drape: relax the shell so the base's muscle relief doesn't print through
         dl0 = bm.verts.layers.deform.active; gn0 = {g.index: g.name for g in o.vertex_groups}
@@ -709,6 +716,25 @@ VAR = ''
 if FLD:
     for _k in ['tee', 'crop', 'long', 'hoodie', 'jeans', 'pants', 'cuffed', 'shorts', 'shoes', 'shortsL', 'pantsW', 'jersey', 'teeD']:
         for _fp in sorted(_glob.glob(FLD + '/' + _k + '[0-9]*.json')): apply_field([bpy.data.objects['G_' + _k]], _fp, body, snap=_os.environ.get('V5SNAP', '1') == '1', maxpx=float(_os.environ.get('V5MAXPX', '9')))
+    for _fp in sorted(_glob.glob(FLD + '/hair[0-9]*.json')):  # hair volume to the v5 silhouette (the face itself stays put)
+        apply_field([o for o in bpy.data.objects if o.type == 'MESH' and o.name in ('Hair', 'Curls')], _fp, body, maxpx=12)
+# hood: relax the field-warped head shell into a smooth bag before the push-out
+if 'G_hoodie' in bpy.data.objects:
+    _ho = bpy.data.objects['G_hoodie']; _bm = bmesh.new(); _bm.from_mesh(_ho.data); _dl = _bm.verts.layers.deform.active; _gn = {g.index: g.name for g in _ho.vertex_groups}
+    _hv = [v for v in _bm.verts if _dl and len(v[_dl]) and _gn.get(max(v[_dl].items(), key=lambda kv: kv[1])[0], '') in ('Head', 'neck_01') and not v.is_boundary]
+    for _ in range(6): bmesh.ops.smooth_vert(_bm, verts=_hv, factor=0.5, use_axis_x=True, use_axis_y=True, use_axis_z=True)
+    _bm.to_mesh(_ho.data); _bm.free()
+# keep every garment outside the body after the silhouette fields (an inward pull must never let skin show through the cloth)
+from mathutils.bvhtree import BVHTree
+_bvh = BVHTree.FromObject(body, bpy.context.evaluated_depsgraph_get())
+for _o in [o for o in bpy.data.objects if o.type == 'MESH' and o.name.startswith('G_')]:
+    _mg = 0.0025 if _o.name in ('G_briefs', 'G_bra') else 0.006; _n = 0
+    for _v in _o.data.vertices:
+        _loc, _nrm, _i, _dd = _bvh.find_nearest(_v.co)
+        if _loc is None: continue
+        _sd = (_v.co - _loc).dot(_nrm)
+        if _sd < _mg: _v.co = _v.co + _nrm * (_mg - _sd); _n += 1
+    print('pushout', _o.name, _n)
 # --- female tee re-model (TEE2): a real boxy tee instead of the inflated body shell. Torso = lofted superellipse rings
 # (straight sides below the chest, following the shoulder slope above), sleeves = straight wide tubes along the upper arm;
 # boolean union -> voxel remesh (clean manifold, no torn sleeves) -> pushed outside the body -> straight hem/sleeve/neck cuts ->
