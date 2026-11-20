@@ -124,64 +124,73 @@ def wheel2(m, x, y, z, r, w, rim='rim', spokes=5, seg=30, dish=0.05, hub='hub'):
         t = 2 * math.pi * q / 5 + 0.3; box(m, (x + s * (ad + 0.012), y + 0.13 * r * math.cos(t), z + 0.13 * r * math.sin(t)), (0.02, 0.018, 0.018), 'rimD')
 
 # ---------------- glider-style rapid bus ----------------
-PAL = {'purple': (0.52, 0.17, 0.66), 'purpleD': (0.25, 0.07, 0.32), 'roof': (0.52, 0.2, 0.64), 'silver': (0.86, 0.88, 0.91), 'glass': (0.07, 0.08, 0.12),
-       'skirt': (0.16, 0.12, 0.2), 'bellows': (0.13, 0.13, 0.15), 'tyre': (0.07, 0.07, 0.075), 'tyreS': (0.12, 0.12, 0.13), 'hub': (0.55, 0.56, 0.6), 'rim': (0.74, 0.76, 0.8), 'rimD': (0.1, 0.1, 0.11), 'pod': (0.7, 0.72, 0.76),
+PAL = {'purple': (0.48, 0.12, 0.78), 'purpleD': (0.25, 0.07, 0.32), 'roof': (0.52, 0.2, 0.64), 'silver': (0.86, 0.88, 0.91), 'glass': (0.07, 0.08, 0.12),
+       'skirt': (0.16, 0.12, 0.2), 'bellows': (0.4, 0.41, 0.44), 'tyre': (0.07, 0.07, 0.075), 'tyreS': (0.12, 0.12, 0.13), 'hub': (0.55, 0.56, 0.6), 'rim': (0.74, 0.76, 0.8), 'rimD': (0.1, 0.1, 0.11), 'pod': (0.7, 0.72, 0.76),
        'led': (0.85, 0.9, 1.0), 'head': (1.0, 0.97, 0.88), 'tail': (1.0, 0.08, 0.06), 'dest': (1.0, 0.62, 0.1), 'door': (0.09, 0.1, 0.13), 'frame': (0.3, 0.3, 0.34),
        'white': (0.93, 0.94, 0.95), 'bbY': (0.97, 0.8, 0.1), 'bbB': (0.07, 0.2, 0.62), 'black': (0.08, 0.08, 0.09), 'blue': (0.16, 0.42, 1.0), 'steel': (0.32, 0.33, 0.36),
-       'amber': (1.0, 0.6, 0.08), 'glassLit': (0.17, 0.18, 0.21), 'cabin': (0.42, 0.4, 0.34), 'paint': (0.86, 0.87, 0.89), 'trim': (0.12, 0.12, 0.13), 'grille': (0.05, 0.05, 0.06)}
-EMIT = {'led', 'head', 'tail', 'dest', 'amber', 'glassLit', 'cabin'}
+       'amber': (1.0, 0.6, 0.08), 'glassLit': (0.17, 0.18, 0.21), 'cabin': (0.42, 0.4, 0.34), 'paint': (0.86, 0.87, 0.89), 'trim': (0.12, 0.12, 0.13), 'grille': (0.05, 0.05, 0.06), 'bellowsL': (0.58, 0.59, 0.62), 'btnG': (0.3, 1.0, 0.35)}
+EMIT = {'led', 'head', 'tail', 'dest', 'amber', 'glassLit', 'cabin', 'btnG'}
 
 def glider():
+    """purple RECKLESS articulated bus (research/asset-refs/bus_colour.png + bus_grey.png): black glazing band, purple lower body
+    and roof cap, white swoosh lines, purple wheel spats, grey concertina. Text/logos are decals added in src/traffic.js."""
     m = M(); W, Y0, H = 2.55, 0.3, 2.95
-    GYS = (0.5, 1.06, 1.32, 1.4, 2.47, 2.56, 2.66, 2.74)
+    GYS = (0.5, 1.0, 1.06, 1.4, 2.47, 2.56, 2.66, 2.74)
     DOORS = [7.75, 3.9, -3.2, -7.2]  # nearside (-x) doors, UK left-hand kerb
     def col(c, n, front=None):
         x, y, z = c; nx, ny, nz = n
-        if ny > 0.75 and y > 2.9: return 'roof'
-        if nz > 0.45 and z > 8.6:  # nose
+        if ny > 0.75 and y > 2.9: return 'purple'
+        if nz > 0.45 and z > 8.6:  # nose: big black screen, amber destination, LED column, purple chin
             if 2.62 < y < 2.88 and abs(x) < 0.95: return 'dest'
-            if 0.95 < y < 2.62: return 'glass'
-            if 0.55 < y < 0.75 and abs(x) > 0.45: return 'head'
-            if 1.06 < y < 1.32 or 0.8 < y < 0.95: return 'silver'
-            return 'purple' if y > 0.5 else 'skirt'
-        if nz < -0.45 and z < -8.6:
-            if 0.6 < y < 0.92 and abs(x) > 0.55: return 'tail'
-            if 1.4 < y < 2.6 and abs(x) < 0.9: return 'glass'
-            if 2.82 < y < 2.9: return 'led'
-            return 'purple' if y > 0.5 else 'skirt'
+            if 0.95 < y < 2.62: return 'glass' if abs(x) < 1.0 else 'black'
+            if 0.45 < y < 0.95 and abs(x) > 0.82: return 'head'
+            if 0.95 < y < 1.0: return 'white'
+            return 'purple' if y > 0.42 else 'purpleD'
+        if nz < -0.45 and z < -8.6:  # rear: black screen, red tails, purple lower
+            if 0.5 < y < 1.25 and abs(x) > 0.95: return 'tail'
+            if 2.62 < y < 2.88 and abs(x) < 0.6: return 'dest'
+            if 1.25 < y < 2.62: return 'black'
+            return 'purple' if y > 0.42 else 'purpleD'
         if abs(nx) > 0.5:
             if x < 0 and any(abs(z - d) < 0.6 for d in DOORS) and 0.5 < y < 2.56: return 'door'
-            if 2.66 < y < 2.74: return 'led'
-            if 2.47 < y < 2.56: return 'cabin'  # interior ceiling light-line seen through the tint
-            if 1.4 < y < 2.47: return 'glass'  # dark tinted side glass (reflective body material)
-            if 1.06 < y < 1.32: return 'silver'
-            if y < 0.5: return 'skirt'
-            return 'purple'
+            if y > 2.74: return 'purple'          # roof cap band (RECKLESS wordmark decal sits here)
+            if 2.66 < y < 2.74: return 'white'    # upper swoosh line
+            if 2.47 < y < 2.56: return 'cabin'    # interior light line seen through the tint
+            if 1.4 < y < 2.66: return 'glass'
+            if 1.06 < y < 1.4: return 'black'
+            if 1.0 < y < 1.06: return 'white'     # lower swoosh line
+            return 'purple' if y > 0.42 else 'purpleD'
         if ny < -0.5: return 'skirt'
-        return 'purple' if y > 0.5 else 'skirt'
+        return 'purple' if y > 0.5 else 'purpleD'
     def section(z0, z1, nose_f, nose_r):
         rings = []; N = int((z1 - z0) / 0.2) + 1
         for i in range(N + 1):
-            z = z0 + (z1 - z0) * i / N; w, h, r, y0 = W, H, 0.32, Y0
+            z = z0 + (z1 - z0) * i / N; w, h, r, y0 = W, H, 0.3, Y0
             tf = max(0.0, (z - (z1 - nose_f)) / nose_f) if nose_f else 0; tr = max(0.0, ((z0 + nose_r) - z) / nose_r) if nose_r else 0
-            if tf > 0: w = W * (1 - 0.09 * tf ** 2.4); h = H - 0.38 * tf ** 2.2; r = 0.32 + 0.38 * tf; y0 = Y0 + 0.05 * tf ** 3
-            if tr > 0: w = W * (1 - 0.05 * tr ** 2.5); h = H - 0.18 * tr ** 2; r = 0.32 + 0.12 * tr
+            if tf > 0: w = W * (1 - 0.07 * tf ** 2.4); h = H - 0.3 * tf ** 2.2; r = 0.3 + 0.36 * tf; y0 = Y0 + 0.04 * tf ** 3
+            if tr > 0: w = W * (1 - 0.05 * tr ** 2.5); h = H - 0.14 * tr ** 2; r = 0.3 + 0.14 * tr
             rings.append((z, rr_ring(w, h, r, y0, 8, GYS)))
-        if nose_f:  # bulged tram nose cap
-            for dz, k in ((0.12, 0.9), (0.2, 0.7)): rings.append((z1 + dz, rr_ring(W * (1 - 0.09) * k, (H - 0.38) * (0.82 + 0.18 * k), 0.7 * k + 0.05, Y0 + 0.08 + (1 - k) * 0.5, 8, GYS)))
+        if nose_f:  # bulged nose cap
+            for dz, k in ((0.12, 0.9), (0.2, 0.7)): rings.append((z1 + dz, rr_ring(W * (1 - 0.07) * k, (H - 0.3) * (0.82 + 0.18 * k), 0.66 * k + 0.05, Y0 + 0.08 + (1 - k) * 0.5, 8, GYS)))
         loft(m, rings, col)
-    section(-0.15, 8.75, 1.6, 0)    # front car (tram nose)
-    section(-9.0, -1.05, 0, 0.6)    # rear car
-    for k in range(9):              # bellows: accordion rings
-        z = -1.05 + k * 0.1125; w = 2.36 if k % 2 else 2.44
-        loft(m, [(z, rr_ring(w, 2.6, 0.25, 0.42)), (z + 0.1125, rr_ring(2.44 if k % 2 else 2.36, 2.6, 0.25, 0.42))], lambda c, n: 'bellows', False, False)
-    for z0, z1 in ((0.4, 7.6), (-8.4, -1.6)):  # roof pods (battery/HVAC fairings)
-        loft(m, [(z0, rr_ring(1.7, 0.01, 0.005, 3.24)), (z0 + 0.5, rr_ring(1.9, 0.32, 0.14, 3.18)), (z1 - 0.5, rr_ring(1.9, 0.32, 0.14, 3.18)), (z1, rr_ring(1.7, 0.01, 0.005, 3.24))], lambda c, n: 'pod', False, False)
-    for d in DOORS:  # door frames
-        box(m, (-W / 2 - 0.012, 1.55, d), (0.02, 2.3, 0.05), 'frame'); box(m, (-W / 2 - 0.012, 1.55, d + 0.6), (0.02, 2.3, 0.05), 'frame'); box(m, (-W / 2 - 0.012, 1.55, d - 0.6), (0.02, 2.3, 0.05), 'frame')
-    for z in (7.0, 1.0, -6.8):  # axles, wheels mostly hidden behind the skirts ("covered wheels")
-        for x in (-1.0, 1.0): wheel2(m, x, 0.5, z, 0.5, 0.32, rim='steel', spokes=10, dish=0.07)
-    for x in (-1.0, 1.0): box(m, (x * 1.28, 2.25, 8.1), (0.06, 0.12, 0.26), 'frame')  # camera-mirror stalks
+    section(-0.15, 8.75, 1.4, 0)    # front car
+    section(-9.0, -1.05, 0, 0.5)    # rear car
+    for k in range(9):              # grey concertina: alternating light/dark ribs
+        z = -1.05 + k * 0.1125; w = 2.36 if k % 2 else 2.46
+        loft(m, [(z, rr_ring(w, 2.62, 0.25, 0.4)), (z + 0.1125, rr_ring(2.46 if k % 2 else 2.36, 2.62, 0.25, 0.4))], (lambda kk: (lambda c, n: 'bellowsL' if kk % 2 else 'bellows'))(k), False, False)
+    for z0, z1 in ((0.6, 7.4), (-8.2, -1.8)):  # low roof fairings with vent grilles (top view on the sheet)
+        loft(m, [(z0, rr_ring(1.6, 0.01, 0.005, 3.24)), (z0 + 0.4, rr_ring(1.8, 0.2, 0.09, 3.2)), (z1 - 0.4, rr_ring(1.8, 0.2, 0.09, 3.2)), (z1, rr_ring(1.6, 0.01, 0.005, 3.24))], lambda c, n: 'purple', False, False)
+        for q in range(3): box(m, (0, 3.41, z0 + 0.9 + q * 0.75), (0.9, 0.02, 0.6), 'grille')
+    for d in DOORS:  # door frames + green/blue door buttons
+        for dz in (0.0, 0.6, -0.6): box(m, (-W / 2 - 0.012, 1.55, d + dz), (0.02, 2.3, 0.05), 'frame')
+        box(m, (-W / 2 - 0.02, 1.45, d - 0.3), (0.02, 0.07, 0.07), 'btnG'); box(m, (-W / 2 - 0.02, 1.45, d + 0.3), (0.02, 0.07, 0.07), 'btnG')
+    for z in (7.0, 1.0, -6.8):  # axles; wheels behind purple spats
+        for x in (-1.0, 1.0):
+            wheel2(m, x, 0.5, z, 0.5, 0.32, rim='steel', spokes=10, dish=0.07)
+            s_ = 1 if x > 0 else -1; seg = 20; cx_ = s_ * (W / 2 + 0.006)
+            c0 = m.v((cx_ + s_ * 0.03, 0.55, z)); ring = [m.v((cx_, 0.55 + 0.5 * math.cos(2 * math.pi * k / seg), z + 0.56 * math.sin(2 * math.pi * k / seg))) for k in range(seg)]
+            for k in range(seg): _ofs(m, c0, ring[k], ring[(k + 1) % seg], 'purple', (s_, 0, 0))
+    for x in (-1.0, 1.0): box(m, (x * 1.3, 2.3, 8.3), (0.06, 0.12, 0.3), 'black'); box(m, (x * 1.42, 2.05, 8.42), (0.16, 0.34, 0.1), 'black')  # mirror arms + heads
     return m
 
 def wagon():

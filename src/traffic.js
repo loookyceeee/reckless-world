@@ -1,6 +1,7 @@
 import { FresnelParameters } from '@babylonjs/core/Materials/fresnelParameters';
 // Pooled stylised traffic on OSM road graph (UK: drive on the LEFT), fictional patrol vehicles, pedestrians.
 import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
+import { Mesh } from '@babylonjs/core/Meshes/mesh';
 import { VertexData } from '@babylonjs/core/Meshes/mesh.vertexData';
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
 import { Color3 } from '@babylonjs/core/Maths/math.color';
@@ -34,6 +35,34 @@ function policeTex(scene) {
   const t = new DynamicTexture('policeTxt', { width: 512, height: 128 }, scene, true); const c = t.getContext(); c.clearRect(0, 0, 512, 128);
   c.fillStyle = '#123a9e'; c.font = '900 96px Arial, Helvetica, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('POLICE', 256, 68);
   t.hasAlpha = true; t.anisotropicFilteringLevel = 8; t.update(); return t;
+}
+
+// RECKLESS bus livery decals (research/asset-refs/bus_colour.png): one 1024x512 atlas, one merged quad mesh per bus, 1 draw call.
+// Wordmark, BELFAST destination, R logo, roof stripes; number plates are left BLANK (no real-format plates, no operator marks).
+function busDecalTex(scene) {
+  const W = 1024, H = 512, t = new DynamicTexture('busDecal', { width: W, height: H }, scene, true), c = t.getContext(); c.clearRect(0, 0, W, H);
+  c.textAlign = 'center'; c.textBaseline = 'middle';
+  c.fillStyle = '#fff'; c.font = 'italic 900 132px "Arial Black", Arial, Helvetica, sans-serif'; c.fillText('RECKLESS', 512, 86);           // row 0: wordmark
+  c.fillStyle = '#060608'; c.fillRect(0, 172, W, 168); c.fillStyle = '#ffae1a'; c.font = 'bold 112px "Courier New", monospace'; c.fillText('BELFAST', 512, 258); // row 1: destination (amber on black)
+  const R = (x0, y0, s) => { c.save(); c.translate(x0, y0); c.fillStyle = '#fff'; c.font = 'italic 900 ' + (s * 0.95) + 'px "Arial Black", Arial, sans-serif'; c.fillText('R', 0, 4);
+    c.strokeStyle = '#fff'; c.lineWidth = s * 0.07; c.beginPath(); c.moveTo(-s * 0.55, s * 0.36); c.quadraticCurveTo(0, s * 0.18, s * 0.6, -s * 0.3); c.stroke(); c.restore(); };
+  R(85, 425, 150);                                                                                                       // row 2: R logo (0..170)
+  c.fillStyle = '#fff'; for (const x of [210, 290]) { c.beginPath(); c.moveTo(x, 500); c.lineTo(x + 40, 500); c.lineTo(x + 100, 350); c.lineTo(x + 60, 350); c.fill(); } // roof stripes (180..400)
+  c.fillStyle = '#f2f2ee'; c.fillRect(430, 380, 260, 80); c.fillStyle = '#f2c21a'; c.fillRect(740, 380, 260, 80);       // blank plates: front white, rear yellow
+  t.hasAlpha = true; t.anisotropicFilteringLevel = 8; t.update(); return t;
+}
+const BUS_UV = { word: [0, 0, 1, 172 / 512], dest: [0.08, 172 / 512, 0.92, 340 / 512], logo: [0, 340 / 512, 170 / 1024, 1], stripes: [180 / 1024, 340 / 512, 400 / 1024, 1], plateF: [430 / 1024, 380 / 512, 690 / 1024, 460 / 512], plateR: [740 / 1024, 380 / 512, 1000 / 1024, 460 / 512] };
+function busDecalVD() {
+  const P = [], N = [], U = [], I = [];
+  const quad = (c, r, n, w, h, key) => { const [u0, v0, u1, v1] = BUS_UV[key], b = P.length / 3, up = [n[1] * r[2] - n[2] * r[1], n[2] * r[0] - n[0] * r[2], n[0] * r[1] - n[1] * r[0]];
+    for (const [sx, sy, u, v] of [[-1, -1, u1, v1], [1, -1, u0, v1], [1, 1, u0, v0], [-1, 1, u1, v0]]) { P.push(c[0] + r[0] * sx * w / 2 + up[0] * sy * h / 2, c[1] + r[1] * sx * w / 2 + up[1] * sy * h / 2, c[2] + r[2] * sx * w / 2 + up[2] * sy * h / 2); N.push(...n); U.push(u, 1 - v); }
+    I.push(b, b + 2, b + 1, b, b + 3, b + 2); };
+  const X = 1.287;
+  for (const sd of [1, -1]) { const r = [0, 0, -sd], n = [sd, 0, 0];   // viewer's right on each flank (front of the bus is +z)
+    quad([sd * X, 2.86, 3.2], r, n, 2.0, 0.27, 'word'); quad([sd * X, 2.86, -4.6], r, n, 2.0, 0.27, 'word'); quad([sd * X, 2.86, sd > 0 ? 0.55 : 1.0], r, n, 0.42, 0.24, 'stripes'); }
+  quad([0, 2.75, 8.86], [1, 0, 0], [0, 0, 1], 1.5, 0.22, 'dest'); quad([0, 0.78, 8.93], [1, 0, 0], [0, 0, 1], 0.42, 0.42, 'logo'); quad([0, 0.52, 8.92], [1, 0, 0], [0, 0, 1], 0.52, 0.12, 'plateF');
+  quad([0, 1.95, -9.02], [-1, 0, 0], [0, 0, -1], 0.5, 0.5, 'logo'); quad([0, 1.55, -9.02], [-1, 0, 0], [0, 0, -1], 1.3, 0.22, 'word'); quad([0, 0.62, -9.02], [-1, 0, 0], [0, 0, -1], 0.52, 0.12, 'plateR');
+  const vd = new VertexData(); vd.positions = P; vd.normals = N; vd.uvs = U; vd.indices = I; return vd;
 }
 function carVD(kind, body) {
   const P = [];
@@ -135,6 +164,8 @@ export function buildTraffic(scene, city, { low = false, stops = [], signals = [
   const barM2 = new StandardMaterial('barM2', scene); barM2.disableLighting = true; barM2.emissiveColor = hex('#2a6bff');
   const polM = new StandardMaterial('polM', scene); polM.diffuseTexture = policeTex(scene); polM.useAlphaFromDiffuseTexture = true; polM.emissiveColor = new Color3(0.25, 0.25, 0.3); polM.specularColor = Color3.Black();
   bbM.emissiveColor = new Color3(0.22, 0.22, 0.22); // retro-reflective
+  const busDM = new StandardMaterial('busDecalM', scene); busDM.diffuseTexture = busDecalTex(scene); busDM.useAlphaFromDiffuseTexture = true; busDM.emissiveTexture = busDM.diffuseTexture; busDM.emissiveColor = new Color3(0.45, 0.45, 0.45); busDM.specularColor = new Color3(0.2, 0.2, 0.2); busDM.backFaceCulling = false;
+  let busDT = null; const busDeco = (node) => { if (!busDT) { busDT = new Mesh('busDecal', scene); busDecalVD().applyToMesh(busDT); busDT.material = busDM; busDT.position.y = -500; busDT.alwaysSelectAsActiveMesh = true; } const d = busDT.createInstance('bd'); d.parent = node; d.position.set(0, 0, 0); };
   const darkM = new StandardMaterial('lbBase', scene); darkM.diffuseColor = hex('#1b1d22'); darkM.specularColor = new Color3(0.2, 0.2, 0.2);
   const patrolDeco = (node, kind) => {
     const W = kind === 'wagon';
@@ -190,6 +221,7 @@ export function buildTraffic(scene, city, { low = false, stops = [], signals = [
     const node = new TransformNode('car', scene); node.position.y = -0.085;
     const b = t.b.createInstance('ci'); b.parent = node; b.position.set(0, 0, 0); const l = t.l.createInstance('li'); l.parent = node; l.position.set(0, 0, 0);
     if (s.patrol) patrolDeco(node, s.kind);
+    if (s.kind === 'bus' && models && models.glider) busDeco(node);
     if (!low) { const hb = beamSrc.createInstance('hb'); hb.parent = node; hb.position.set(0, 0, 0); }
     cars.push({ node, kind: s.kind, patrol: !!s.patrol, a: 0, b: 0, s: 0, len: 1, speed: 0, max: s.kind === 'bus' ? 8 : s.kind === 'wagon' ? 9 : 10 + R() * 4, heading: 0, offset: 0 });
   }
@@ -208,7 +240,7 @@ export function buildTraffic(scene, city, { low = false, stops = [], signals = [
   // parked cars along kerbs, a black-taxi rank and a bus waiting at a real stop
   const parked = []; let busStop = null;
   const park = (key, kind, col, x, z, h, extra) => { const tp = tpl(key, kind, col); const node = new TransformNode('parked', scene); node.position.set(x, -0.085, z); node.rotation.y = h;
-    const b = tp.b.createInstance('pi'); b.parent = node; b.position.set(0, 0, 0); const l = tp.l.createInstance('pl'); l.parent = node; l.position.set(0, 0, 0); l.setEnabled(!!(extra && extra.lights)); parked.push({ node, kind }); return node; };
+    const b = tp.b.createInstance('pi'); b.parent = node; b.position.set(0, 0, 0); const l = tp.l.createInstance('pl'); l.parent = node; l.position.set(0, 0, 0); l.setEnabled(!!(extra && extra.lights)); if (kind === 'bus' && models && models.glider) busDeco(node); parked.push({ node, kind }); return node; };
   const kerbSpots = []; for (const r of city.roads) { if (!r.d || !['residential', 'tertiary', 'unclassified', 'secondary'].includes(r.t) || r.w < 6) continue;
     for (let i = 0; i < r.pts.length - 1; i++) { const a = r.pts[i], b = r.pts[i + 1]; const L = Math.hypot(b[0] - a[0], b[1] - a[1]); if (L < 14) continue; const ux = (b[0] - a[0]) / L, uz = (b[1] - a[1]) / L;
       for (let s = 6; s < L - 6; s += 5.6) kerbSpots.push([a[0] + ux * s - uz * (r.w / 2 - 1.05), a[1] + uz * s + ux * (r.w / 2 - 1.05), Math.atan2(ux, uz)]); } }

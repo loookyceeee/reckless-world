@@ -122,11 +122,12 @@ for eb in arm.data.edit_bones:
     else: eb.head = T_up(eb.head); eb.tail = T_up(eb.tail)
 bpy.ops.object.mode_set(mode='OBJECT')
 # --- arms: the app figure's arms are ~18% longer (fingertips at mid-thigh) and the shoulders sit wider ---
-ARM_L, SH_OUT = (1.12, 0.02) if FEM else (1.18, 0.04)
+ARM_L, SH_OUT = (1.12, 0.036) if FEM else (1.18, 0.03)
+SH_DN = 0.0 if FEM else 0.01   # male sheet: lower, sloped shoulders
 def _bws(n): b = arm.data.bones[n]; return b.head_local.copy(), b.tail_local.copy()
 ADESC = {sd: {b.name for b in arm.data.bones if b.name == 'upperarm' + sd or any(q.name == 'upperarm' + sd for q in b.parent_recursive)} for sd in ('_l', '_r')}
 SJ = {sd: _bws('upperarm' + sd)[0] for sd in ADESC}
-def T_arm(p, sd): s_ = SJ[sd]; q = p - s_; sg = 1 if s_.x > 0 else -1; return Vector((s_.x + sg * SH_OUT + q.x * ARM_L, p.y, p.z))
+def T_arm(p, sd): s_ = SJ[sd]; q = p - s_; sg = 1 if s_.x > 0 else -1; return Vector((s_.x + sg * SH_OUT + q.x * ARM_L, p.y, p.z - SH_DN))
 for o in meshes:
     Wm = wmap(o); toA2 = arm.matrix_world.inverted() @ o.matrix_world; inv = toA2.inverted()
     for v, d in zip(o.data.vertices, Wm):
@@ -135,7 +136,7 @@ for o in meshes:
         for sd in ADESC:
             wa = sum(w for bn, w in d.items() if bn in ADESC[sd]) / tw; wc = d.get('clavicle' + sd, 0.0) / tw
             if wa > 0: a = a + (T_arm(p, sd) - p) * wa; moved = True
-            if wc > 0: a.x += (1 if SJ[sd].x > 0 else -1) * SH_OUT * 0.5 * wc; moved = True
+            if wc > 0: a.x += (1 if SJ[sd].x > 0 else -1) * SH_OUT * 0.5 * wc; a.z -= SH_DN * 0.6 * wc; moved = True
         if moved: v.co = inv @ a
 bpy.ops.object.mode_set(mode='EDIT')
 for eb in arm.data.edit_bones:
@@ -276,7 +277,7 @@ if FEM:  # replace the curls with a high top bun + loose face strands, and the s
         g_ = ob.vertex_groups.get('Head') or ob.vertex_groups.new(name='Head'); g_.add(list(range(len(ob.data.vertices))), 1.0, 'REPLACE')
         ob.data.materials.append(bpy.data.materials.get(matn) or bpy.data.materials.new(matn)); return ob
     TI = toA.inverted(); bb = bmesh.new(); random.seed(21)
-    RB = ex.x * 0.58; crown = hc + Vector((0, ex.y * 0.3, ex.z * 0.98 + RB * 0.25))
+    RB = ex.x * 0.7; crown = hc + Vector((0, ex.y * 0.6, ex.z * 0.8 + RB * 0.3))  # sheet: big high bun set back on the crown
     # bun: a ball of coiled rope (stacked tilted tori) sitting high on the crown
     for k in range(7):
         a_ = 0.35 + k / 6 * (math.pi - 0.7); rr = RB * (0.12 + 0.72 * math.sin(a_)); zc = crown.z + RB * 0.62 * math.cos(a_)
@@ -402,21 +403,21 @@ def make(kind):
         elif kind == 'cuffed': k = (1.3 if b.startswith('thigh') else 1.45 if b.startswith('calf') else 1.1)
         elif kind == 'shorts': k = 1.4 if b.startswith('thigh') else 1.12
         elif kind in ('briefs', 'bra'): k = 1.04
-        elif kind == 'shoes': k = 1.6
+        elif kind == 'shoes': k = 1.6 if FEM else 1.72
         if kind in ('jeans', 'pants', 'cuffed', 'shorts') and p.z > z_pelvis - 0.03:  # waistband tucks under any top
             f = max(0.0, min(1.0, (p.z - (z_pelvis - 0.03)) / 0.04)); k = k + (1.02 - k) * f; d = d + (0.005 - d) * f
         if k != 1.0 and b and b != 'Head':
             c = axis_pt(p, b) if not b.startswith(('spine', 'pelvis', 'clavicle', 'neck')) else Vector((0, axis_pt(p, b).y * 0 + (axis_pt(p, 'spine_02').y), p.z))
             if b.startswith(('spine', 'pelvis', 'clavicle', 'neck')): c = Vector((0.0, axis_pt(p, 'spine_02').y + 0.01, p.z))
-            if not FEM and kind in ('tee', 'crop') and b.startswith('upperarm'):  # (parked for the pipeline rebuild) straight boxy short sleeve: near-constant wide tube, tiny flare (no puff)
-                r = (p - c).length; tp_ = tparam(p, b); R = max(r * 1.1, (0.074 + 0.01 * tp_) if FEM else (0.068 + 0.042 * tp_)); q = c + (p - c) * (R / max(r, 1e-4))
+            if kind in ('tee', 'crop') and b.startswith('upperarm'):  # (parked for the pipeline rebuild) straight boxy short sleeve: near-constant wide tube, tiny flare (no puff)
+                r = (p - c).length; tp_ = tparam(p, b); R = max(r * 1.1, (0.07 + 0.038 * tp_) if FEM else (0.068 + 0.042 * tp_)); bl_ = max(0.0, min(1.0, tp_ / 0.22)); R = r * 1.1 + (R - r * 1.1) * bl_ * bl_ * (3 - 2 * bl_); q = c + (p - c) * (R / max(r, 1e-4))  # blend in from the shoulder (no spikes at the joint)
             elif kind == 'jeans' and b.startswith(('thigh', 'calf')):  # straight-leg baggy: near-constant radius from mid-thigh to the hem
-                r = (p - c).length; R = max(r * 1.3, (0.104 if FEM else 0.118) if b.startswith('thigh') else (0.112 if FEM else 0.128) + 0.012 * tparam(p, b)); q = c + (p - c) * (R / max(r, 1e-4)); q.y = c.y + (q.y - c.y) * 1.2 + 0.012 * (tparam(p, b) if b.startswith('calf') else 0.5)  # deep, baggy, sits back over the heel
+                r = (p - c).length; R = max(r * 1.3, (0.114 if FEM else 0.118) if b.startswith('thigh') else (0.124 if FEM else 0.128) + 0.012 * tparam(p, b)); q = c + (p - c) * (R / max(r, 1e-4)); q.y = c.y + (q.y - c.y) * 1.2 + 0.012 * (tparam(p, b) if b.startswith('calf') else 0.5)  # deep, baggy, sits back over the heel
                 if (q.x - p.x) * (1 if p.x > 0 else -1) < 0: q.x = p.x + (q.x - p.x) * (0.2 if b.startswith('thigh') else 0.55)   # inner leg hugs: legs split high like the app
             elif b.startswith(('spine', 'pelvis', 'clavicle', 'neck')):  # torso: loose in depth, barely wider (no shoulder pads)
                 kx = 1 + (k - 1) * (0.3 if kind in ('tee', 'crop', 'long', 'hoodie') else 0.4); dq = p - c
                 if kind in ('tee', 'long', 'crop') and p.z < z_neck - 0.1:  # boxy oversized fit: sides hang straight to the hem
-                    xm = TW.get(round(p.z, 2), 0.15); tgt = (0.28 if FEM else 0.31) * (abs(dq.x) / max(xm, 1e-3)); kb = min(2.0, tgt / max(abs(dq.x), 1e-3))
+                    xm = TW.get(round(p.z, 2), 0.15); tgt = (0.31 if FEM else 0.31) * (abs(dq.x) / max(xm, 1e-3)); kb = min(2.0, tgt / max(abs(dq.x), 1e-3))
                     fz = max(0.0, min(1.0, ((z_neck - 0.13) - p.z) / 0.08)); kx = max(kx, kx + (kb - kx) * fz)   # boxy below the chest, follows the shoulder slope above (no shoulder block)
                     k = 1.0; ext = (TFR if dq.y < 0 else TBK) * 0.97 * max(0.0, 1 - 0.7 * min(1.0, abs(dq.x) / max(xm, 1e-3)) ** 2); ny = dq.y * k
                     if abs(ny) < ext: ny = math.copysign(abs(ny) + (ext - abs(ny)) * fz, dq.y if dq.y != 0 else -1.0)
@@ -484,13 +485,13 @@ if not FEM:  # sheet trainers are long and chunky: stretch each shoe ~15% heel-t
         ps = [_toS @ _M.vertices[i].co for i in ids]; cy0 = (min(p.y for p in ps) + max(p.y for p in ps)) / 2; zmin = min(p.z for p in ps)
         for i, p in zip(ids, ps):
             f = max(0.0, 1 - (p.z - zmin) / 0.12)  # only the foot part, fading out up the ankle
-            q = Vector((p.x, cy0 + (p.y - cy0) * (1 + 0.25 * f), p.z)); _M.vertices[i].co = _toS.inverted() @ q
+            q = Vector((p.x, cy0 + (p.y - cy0) * (1 + 0.33 * f), p.z)); _M.vertices[i].co = _toS.inverted() @ q
 sb = bmesh.new()
 for sd in ('_l', '_r'):
     pts = [_toS @ v.co for v, d in zip(_sh.data.vertices, _Ws) if d and (dom(d) or '').endswith(sd) and (dom(d) or '').startswith(('foot', 'ball'))]
     if not pts: continue
     x0, x1 = min(p.x for p in pts), max(p.x for p in pts); y0, y1 = min(p.y for p in pts), max(p.y for p in pts); z0 = min(p.z for p in pts)
-    cx_, cy_ = (x0 + x1) / 2, (y0 + y1) / 2; hw_, hl_ = (x1 - x0) / 2 * 1.08, (y1 - y0) / 2 * 1.05; th_ = 0.045
+    cx_, cy_ = (x0 + x1) / 2, (y0 + y1) / 2; hw_, hl_ = (x1 - x0) / 2 * (1.08 if FEM else 1.12), (y1 - y0) / 2 * 1.05; th_ = 0.045 if FEM else 0.05
     ring = []
     for j in range(24):  # rounded-rect outline (toe and heel rounded)
         a_ = j / 24 * 6.283; ca, sa = math.cos(a_), math.sin(a_)
