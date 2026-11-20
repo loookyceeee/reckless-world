@@ -9,6 +9,7 @@ import { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTextur
 import { Vector3 } from '@babylonjs/core/Maths/math.vector';
 import { hex, rng, box, cyl, rbox, xf, color, merge, toMesh, plane } from './geo.js';
 import { createAvatar, animateAvatar } from './character.js';
+import { CreatePlaneVertexData } from '@babylonjs/core/Meshes/Builders/planeBuilder';
 
 export function buildGraph(roads, drive) {
   const pos = new Map(), adj = new Map(), info = new Map();
@@ -250,12 +251,37 @@ export function buildTraffic(scene, city, { low = false, stops = [], signals = [
     const ref = tp || { x: 0, z: 0 }; let stop = null, sd = 1e9; for (const st of stops) { const d = Math.hypot(st[0] - ref.x, st[1] - ref.z); if (d < sd) { sd = d; stop = st; } }
     if (stop) { const s = near(stop[0], stop[1]); if (s) { const bx = s.px - s.uz * (s.w / 2 - 1.65), bz = s.pz + s.ux * (s.w / 2 - 1.65); park('bus', 'bus', hex('#7e2a91'), bx, bz, Math.atan2(s.ux, s.uz), { lights: true }); busStop = { x: bx - s.uz * 3.2, z: bz + s.ux * 3.2, h: Math.atan2(s.ux, s.uz) }; } } }
   // bus shelters (lit Reckless ad panel) at the Temple's real stop and a rapid-bus fast-travel stop by every venue
-  const shM = new StandardMaterial('shelter', scene); shM.diffuseColor = new Color3(1, 1, 1); shM.specularColor = new Color3(0.4, 0.4, 0.4);
+  // Reckless bus shelter (research/asset-refs/street_kit_colour.png): dark frame, roof with RECKLESS fascia + warm under-light, glass back/side,
+  // red bench, lit R ad panel, purple stop flag, an R bin and two bollards. Shared materials/textures: ~3 draw calls per stop, ~900 tris.
+  const shM = new StandardMaterial('shelter', scene); shM.diffuseColor = new Color3(1, 1, 1); shM.specularColor = new Color3(0.35, 0.35, 0.38);
+  const glM = new StandardMaterial('shelterGlass', scene); glM.diffuseColor = hex('#9fb4c8'); glM.alpha = 0.28; glM.specularColor = new Color3(0.9, 0.9, 1); glM.specularPower = 96; glM.backFaceCulling = false;
+  const shT = new DynamicTexture('shelterAtlas', { width: 512, height: 512 }, scene, true); { const g = shT.getContext();
+    const gr = g.createLinearGradient(0, 0, 0, 384); gr.addColorStop(0, '#12051f'); gr.addColorStop(0.55, '#5a1aa8'); gr.addColorStop(1, '#a43cff'); g.fillStyle = gr; g.fillRect(0, 0, 256, 384); // ad panel (0..256 x 0..384)
+    g.fillStyle = '#0a0410'; for (let k = 0; k < 26; k++) { const x = k * 10 + (k % 3) * 3, h = 40 + (k * 37 % 50); g.beginPath(); g.arc(x, 384 - h, 9, 0, 6.28); g.fill(); g.fillRect(x - 8, 384 - h, 16, h); if (k % 4 === 0) { g.fillRect(x - 2, 384 - h - 46, 4, 40); } } // crowd, hands up
+    g.fillStyle = '#fff'; g.textAlign = 'center'; g.font = 'italic 900 150px "Arial Black", Arial'; g.fillText('R', 128, 170); g.strokeStyle = '#fff'; g.lineWidth = 10; g.beginPath(); g.moveTo(52, 190); g.quadraticCurveTo(128, 160, 210, 92); g.stroke();
+    g.font = 'italic 900 40px "Arial Black", Arial'; g.fillText('RECKLESS', 128, 252);
+    g.fillStyle = '#26282e'; g.fillRect(0, 400, 512, 112); g.fillStyle = '#fff'; g.font = 'italic 900 64px "Arial Black", Arial'; g.fillText('RECKLESS', 256, 478); // roof fascia (y 400..512)
+    g.fillStyle = '#5b2a9e'; g.fillRect(272, 0, 240, 300); g.fillStyle = '#fff'; g.font = 'italic 900 120px "Arial Black", Arial'; g.fillText('R', 392, 130); g.font = '800 44px Arial'; g.fillText('Bus Stop', 392, 210); // stop flag (272..512 x 0..300)
+    g.fillStyle = '#ffd27a'; g.fillRect(272, 320, 240, 60); shT.update(); } // under-roof light strip (272..512 x 320..380)
+  const shLit = new StandardMaterial('shelterLit', scene); shLit.disableLighting = true; shLit.emissiveTexture = shT;
+  const uvq = (w, h, u0, v0, u1, v1, o) => { const vd = xf(CreatePlaneVertexData({ width: w, height: h }), o); const U = []; for (let k = 0; k < vd.positions.length / 3; k++) { const a = vd.uvs[k * 2], b = vd.uvs[k * 2 + 1]; U.push(u0 + (u1 - u0) * a, 1 - (v0 + (v1 - v0) * (1 - b))); } vd.uvs = U; return vd; };
+  const FR = hex('#3a3d45'), RD = hex('#e8401c'), DK = hex('#2a2c33'), PU = hex('#7b2cff'), MG = hex('#8a8f99');
+  const frameVD = merge([color(xf(box(3.9, 0.14, 1.75), { t: [0, 2.62, 0.05] }), FR), color(xf(box(3.9, 0.05, 1.6), { t: [0, 2.53, 0.05] }), hex('#1c1d22')),
+    ...[-1.9, 1.9].flatMap(x => [color(xf(box(0.09, 2.6, 0.09), { t: [x, 1.3, -0.68] }), FR), color(xf(box(0.09, 2.6, 0.09), { t: [x, 1.3, 0.68] }), FR)]),
+    ...[-0.63, 0.63].map(x => color(xf(box(0.06, 2.5, 0.06), { t: [x, 1.25, -0.7] }), FR)), color(xf(box(3.8, 0.06, 0.05), { t: [0, 0.32, -0.7] }), FR), color(xf(box(3.8, 0.05, 0.05), { t: [0, 1.6, -0.7] }), FR),
+    color(xf(box(1.9, 0.12, 0.42), { t: [-0.4, 0.5, -0.42] }), RD), ...[-1.3, 0.5].map(x => color(xf(box(0.1, 0.5, 0.42), { t: [x, 0.25, -0.42] }), RD)), // red bench
+    color(xf(box(1.3, 1.9, 0.12), { t: [1.18, 1.3, 0.62] }), DK), // ad panel housing (side)
+    color(xf(cyl(2.9, 0.045, 0.045, 8), { t: [-2.5, 1.45, 0.75] }), MG), // stop flag pole
+    color(xf(rbox(0.46, 0.92, 0.46, 0.06, 2), { t: [2.45, 0.46, 0.5] }), DK), color(xf(box(0.48, 0.09, 0.48), { t: [2.45, 0.76, 0.5] }), PU), // R bin
+    ...[-3.0, 3.0].map(x => color(xf(cyl(0.95, 0.08, 0.09, 8), { t: [x, 0.475, 1.25] }), DK))]); // bollards
+  const glassVD = merge([xf(box(3.7, 2.15, 0.02), { t: [0, 1.4, -0.7] }), xf(box(0.02, 2.15, 1.2), { t: [-1.9, 1.4, -0.05] })]);
+  const litVD = merge([uvq(1.12, 1.68, 0, 0, 0.5, 0.75, { t: [1.18, 1.3, 0.555] }), uvq(1.12, 1.68, 0, 0, 0.5, 0.75, { t: [1.18, 1.3, 0.685], r: [0, Math.PI, 0] }), // ad, both faces
+    uvq(3.9, 0.14, 0, 400 / 512, 1, 1, { t: [0, 2.62, 0.93], r: [0, Math.PI, 0] }), uvq(3.9, 0.14, 0, 400 / 512, 1, 1, { t: [0, 2.62, -0.83] }), // fascia front/back
+    uvq(0.62, 0.78, 272 / 512, 0, 1, 300 / 512, { t: [-2.5, 2.6, 0.78] }), uvq(0.62, 0.78, 272 / 512, 0, 1, 300 / 512, { t: [-2.5, 2.6, 0.72], r: [0, Math.PI, 0] }), // stop flag
+    uvq(3.2, 0.06, 272 / 512, 320 / 512, 1, 380 / 512, { t: [0, 2.5, 0.2], r: [-Math.PI / 2, 0, 0] })]); // light strip under the roof
   const mkShelter = (st) => {
-    const sh = toMesh('busShelter-' + st.id, merge([color(xf(box(3.6, 0.08, 1.5), { t: [0, 2.5, 0] }), hex('#30343c')), ...[-1.75, 1.75].map(x => color(xf(box(0.08, 2.5, 0.08), { t: [x, 1.25, -0.65] }), hex('#30343c'))), color(xf(box(3.5, 2.1, 0.03), { t: [0, 1.25, -0.7] }), hex('#8fa4b8')), color(xf(box(2.2, 0.08, 0.4), { t: [0, 0.5, -0.45] }), hex('#30343c'))]), scene, shM);
-    sh.position.set(st.x, 0, st.z); sh.rotation.y = st.h + Math.PI / 2;
-    const adM = new StandardMaterial('shelterAd', scene); adM.disableLighting = true; const adT = new DynamicTexture('adT', { width: 256, height: 384 }, scene, true); { const g = adT.getContext(); g.fillStyle = '#000'; g.fillRect(0, 0, 256, 384); g.fillStyle = '#fff'; g.font = '800 34px Unbounded, Arial'; g.textAlign = 'center'; g.fillText('RECKLESS', 128, 170); g.font = '600 18px "DM Sans", Arial'; g.fillText(st.ad || 'THE TEMPLE · BELFAST', 128, 210); g.strokeStyle = '#fff'; g.lineWidth = 6; g.strokeRect(14, 14, 228, 356); adT.update(); }
-    adM.emissiveTexture = adT; const ad = toMesh('shelterAdPanel', xf(plane(1.1, 1.65), { t: [1.15, 1.25, -0.74] }), scene, adM); ad.parent = sh; 
+    const sh = toMesh('busShelter-' + st.id, frameVD, scene, shM); sh.position.set(st.x, 0, st.z); sh.rotation.y = st.h + Math.PI / 2;
+    const gl = toMesh('shelterGlass-' + st.id, glassVD, scene, glM); gl.parent = sh; const lit = toMesh('shelterLit-' + st.id, litVD, scene, shLit); lit.parent = sh;
     return sh; };
   const rapid = [];
   if (busStop) { mkShelter({ ...busStop, id: 'temple' }); }

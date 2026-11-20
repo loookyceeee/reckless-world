@@ -22,7 +22,7 @@ House rules: zero spend · the game never awards XP and never PUTs · `test:true
 - [~] Buses: the purple RECKLESS bendy bus from asset-refs (black glass band, white swoosh, RECKLESS wordmark, BELFAST destination, R logo, purple wheel spats, grey concertina, blank plates). In the tree, not yet gated or live.
 - [~] Realistically proportioned cars with proper wheels: procedural cars with wheel2 tyres and rims. Some kinds still look toy-like; LODs are basic.
 - [~] Armoured patrol wagons (wagon_ref + asset-refs): yellow/blue Battenburg and POLICE text, no crest or plates. Still needs the asset-refs details: caged roof lights, grille cage, mesh skirts, white steel wheels, rear double doors, two-row Battenburg.
-- [ ] Street kit from asset-refs: Reckless shelter (red bench, lit ad panel) at every fast-travel stop, trees, lampposts, benches, bins, bollards, signs, barriers, cones, utility boxes, drains, bike rack, planters, as instanced LOD props.
+- [~] Street kit from asset-refs: DONE (b-streetkit): sheet-style Reckless shelter at every fast-travel stop (dark frame, lit RECKLESS fascia + light strip, glass, red bench, lit R/crowd ad panel, purple R stop flag, R bin, bollards; one shared atlas), plus ~1,050 baked R bins, red benches, utility boxes, planters, bike racks and cones beside lamps on the pavement (per-cell baked, no extra draw calls). Existing trees/lamps/bollards/railings kept. TODO: drains, barriers, signs, LODs.
 
 ## HUD, map and UI
 - [~] Much better interactive HUD map with player markers: the pause map has filters, stop/poster/collectible blips and patrol cones. It still needs a rotating GTA-style minimap texture, a GPS route line and a clear player arrow on the full map.

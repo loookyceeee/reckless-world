@@ -398,6 +398,23 @@ export async function buildCity(scene, { low = false } = {}) {
   }
   for (const [x, z] of lamps) grid.add(x - 0.12, z, x + 0.12, z, 8);
 
+  // ---------- street kit (research/asset-refs/street_kit_colour.png): R bins, benches, utility boxes, planters, bike racks, cones ----------
+  // one thin-instanced mesh per prop (1 draw call each, ~100-400 tris), dropped beside every few lamps on the pavement, facing the road
+  {
+    const kit = { bin: [], bench: [], box: [], planter: [], rack: [], cone: [] }; const order = ['bin', 'bench', 'box', 'bin', 'planter', 'rack', 'bin', 'box', 'cone', 'bench'];
+    lamps.forEach((l, i) => { if (i % (low ? 6 : 3)) return; const r = roadNear(l[0], l[1]); if (!r) return; const tx = -r.nz, tz = r.nx, side = i % 2 ? 1 : -1;
+      const q = kerbside(l[0] + tx * 1.7 * side + r.nx * 0.4, l[1] + tz * 1.7 * side + r.nz * 0.4, 0.55); if (!q) return; const k = order[(i / (low ? 6 : 3) | 0) % order.length];
+      kit[k].push([q[0], q[1], Math.atan2(-r.nx, -r.nz)]); grid.add(q[0] - 0.25, q[1], q[0] + 0.25, q[1], 1); });
+    const DK = hex('#2a2c33'), MG = hex('#8a8f99'), PU = hex('#7b2cff'), RD = hex('#e8401c'), WD = hex('#9a6234'), GN = hex('#3d6b3e'), FL = hex('#d24bd8'), OR = hex('#ff6a1a'), WT = hex('#f2f2ee');
+    place('kitBin', merge([color(xf(rbox(0.48, 0.95, 0.48, 0.06, 2), { t: [0, 0.475, 0] }), DK), color(xf(box(0.5, 0.09, 0.5), { t: [0, 0.78, 0] }), PU), color(xf(rbox(0.52, 0.08, 0.52, 0.04, 2), { t: [0, 0.99, 0] }), MG), color(xf(box(0.2, 0.06, 0.02), { t: [0, 0.88, 0.25] }), hex('#0b0b0d'))]), kit.bin, 2);
+    place('kitBench', merge([color(xf(box(1.6, 0.06, 0.42), { t: [0, 0.45, 0] }), RD), color(xf(box(1.6, 0.36, 0.06), { t: [0, 0.68, -0.2], r: [-0.12, 0, 0] }), RD), ...[-0.7, 0.7].map(x => color(xf(box(0.06, 0.45, 0.42), { t: [x, 0.225, 0] }), DK))]), kit.bench, 2);
+    place('kitUtilBox', merge([color(xf(box(0.7, 1.05, 0.34), { t: [0, 0.525, 0] }), hex('#8d939c')), color(xf(box(0.74, 0.05, 0.38), { t: [0, 1.07, 0] }), MG), color(xf(box(0.12, 0.12, 0.01), { t: [0, 0.85, 0.175] }), hex('#f2c21a'))]), kit.box, 2);
+    place('kitPlanter', merge([color(xf(box(1.1, 0.5, 0.6), { t: [0, 0.25, 0] }), DK), color(xf(sphere(4), { s: [0.5, 0.22, 0.26], t: [0, 0.56, 0] }), GN), color(xf(sphere(3), { s: [0.12, 0.1, 0.12], t: [0.25, 0.7, 0.05] }), FL), color(xf(sphere(3), { s: [0.11, 0.09, 0.11], t: [-0.28, 0.68, -0.04] }), FL), color(xf(sphere(3), { s: [0.1, 0.08, 0.1], t: [0.02, 0.73, 0.1] }), FL)]), kit.planter, 2);
+    place('kitRack', merge([-0.45, 0, 0.45].flatMap(x => [color(xf(cyl(0.8, 0.025, 0.025, 6), { t: [x, 0.4, -0.3] }), MG), color(xf(cyl(0.8, 0.025, 0.025, 6), { t: [x, 0.4, 0.3] }), MG), color(xf(cyl(0.6, 0.025, 0.025, 6), { r: [Math.PI / 2, 0, 0], t: [x, 0.8, 0] }), MG)])), kit.rack, 2);
+    place('kitCone', merge([color(xf(box(0.4, 0.04, 0.4), { t: [0, 0.02, 0] }), hex('#1a1a1c')), color(xf(cyl(0.55, 0.02, 0.14, 8), { t: [0, 0.31, 0] }), OR), color(xf(cyl(0.1, 0.075, 0.1, 8, false), { t: [0, 0.32, 0] }), WT)]), kit.cone, 2);
+    window.__kitList = kit; window.__kit = Object.fromEntries(Object.entries(kit).map(([k, v]) => [k, v.length]));
+  }
+
   // ---------- venue beacons (sky searchlights), ground rings ----------
   const beamM = new StandardMaterial('beamM', scene); beamM.diffuseTexture = beamTex(scene); beamM.useAlphaFromDiffuseTexture = true; beamM.emissiveColor = new Color3(0.17, 0.16, 0.23); beamM.disableLighting = true; beamM.alphaMode = 1; beamM.backFaceCulling = false;
   { const f = new FresnelParameters(); f.leftColor = Color3.Black(); f.rightColor = Color3.White(); f.bias = 0; f.power = 1.6; beamM.opacityFresnelParameters = f; } // soft volumetric edges instead of hard-edged bands across the sky
