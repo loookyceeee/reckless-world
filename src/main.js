@@ -39,6 +39,7 @@ import { buildTempleExterior, updateTempleExterior, buildTempleInterior, setTemp
 import { createAvatar, animateAvatar, OUTFITS, loadAnims, bakeCrowdVariants } from './character.js';
 import { buildGraph, buildTraffic, updateTraffic } from './traffic.js';
 import { createGps3D } from './gps3d.js';
+import { createDrive } from './drive.js';
 import { buildLandmarks, updateLandmarks } from './landmarks.js';
 import { createHUD, buildMinimapBase, loadMinimapImage, makeRouter } from './hud.js';
 import { VENUES, DISTRICTS, POSTER_SPOTS } from './venues.js';
@@ -219,7 +220,7 @@ async function start() {
   try { const meta = await (await fetch(import.meta.env.BASE_URL + 'data/minimap_meta.json')).json(); const im = await loadMinimapImage(import.meta.env.BASE_URL + 'data/' + meta.file, meta); if (im) mapBase = Object.assign(im, { bounds: mapBase.bounds, proc: mapBase }); } catch (e) { console.warn('minimap', e); }
   app.mapBase = mapBase;
   const hud = createHUD(app);
-  const RB = createRapid({ scene, traffic, hud, app, grid: city.grid }); window.__rw.RB = RB; window.__rw.traffic = traffic;
+  const RB = createRapid({ scene, traffic, hud, app, grid: city.grid }); window.__rw.RB = RB; window.__rw.traffic = traffic; const DRV = createDrive(traffic); window.__rw.DRV = DRV; const wrapA = (a) => { while (a > Math.PI) a -= 2 * Math.PI; while (a < -Math.PI) a += 2 * Math.PI; return a; };
   // GPS destination (GTA-style): defaults to the Temple door; venues or a tapped waypoint from the pause map
   let DEST = { x: ext.doorPos.x, z: ext.doorPos.z, label: 'THE TEMPLE', kind: 'venue', id: 'temple' };
   const venueDest = VENUES.filter(v => v.inSlice).map(v => v.id === 'temple' ? { ...v, x: ext.doorPos.x, z: ext.doorPos.z } : v.id === 'warehousexl' && whDoor ? { ...v, x: whDoor.x, z: whDoor.z } : (d => d ? { ...v, x: d.x, z: d.z } : v)(venueDoors.find(q => q.v.id === v.id)));
@@ -393,6 +394,7 @@ async function start() {
     if (window.__rw.auto) { iz = window.__rw.auto.iz || 0; ix = window.__rw.auto.ix || 0; }
     if (SEAT && Math.hypot(ix, iz) > 0.3) standUp();
     if (app.lockMove || (DANCE && DANCE.active())) { ix = 0; iz = 0; }
+    if (DRV && DRV.on) { DRV.update(dt, app.paused ? 0 : ix, app.paused ? 0 : iz, K.has('Space'), P, city.grid); ix = 0; iz = 0; C.yaw += wrapA(P.heading - C.yaw) * Math.min(1, dt * (Math.abs(DRV.speed) > 1 ? 2.6 : 0.6)); }
     const mag = Math.min(1, Math.hypot(ix, iz)); const kb0 = K.has('KeyW') || K.has('KeyS') || K.has('KeyA') || K.has('KeyD') || K.has('ArrowUp') || K.has('ArrowDown') || K.has('ArrowLeft') || K.has('ArrowRight'); const kb = kb0 && !(padX || padY);
     // gait (research/game-design.md 2.1): walk 1.6 / jog 3.2 / sprint 6.0 m/s; keyboard jogs, Shift sprints; stick < 0.55 walks, full push (or RUN) sprints
     if (stick.x || stick.y) { if (mag > 0.97) fullPushT += dt; else fullPushT = 0; } else fullPushT = 0;
@@ -455,6 +457,7 @@ async function start() {
       else if (Math.hypot(P.x - ext.doorPos.x, P.z - ext.doorPos.z) < 3.2) interact = { label: `<b>E</b> ENTER THE TEMPLE`, act: enterTemple };
       else if (venueDoors.some(d => Math.hypot(P.x - d.x, P.z - d.z) < 3.2)) { const d = venueDoors.find(d => Math.hypot(P.x - d.x, P.z - d.z) < 3.2); interact = { label: `<b>E</b> ENTER ${d.v.name}${d.v.nostalgia ? ' · EST. · THE OLD PALM HOUSE' : ''}`, act: () => enterClub(d.v.id, d) }; }
       else if (Math.hypot(P.x - whDoor.x, P.z - whDoor.z) < 3.2) interact = { label: `<b>E</b> ENTER THE WARE-HOUSE XL`, act: () => enterClub('warehousexl', whDoor) };
+      else if (!M?.busy?.() && DRV && DRV.near(P)) { const pc = DRV.near(P); interact = { label: `<b>E</b> GET IN`, act: () => { DRV._cd = C.dist; DRV.enter(pc, P, player); C.dist = 8.2; C.yaw = P.heading; C.pitch = 0.22; } }; }
       else if (RB.nearStop(P)) { const st = RB.nearStop(P); interact = { label: `<b>E</b> RAPID BUS · FAST TRAVEL`, act: () => RB.menu(st, P) }; }
       else for (const ps of posters) if (Math.hypot(P.x - ps.ix, P.z - ps.iz) < 2.4) { const done = posterDone(ps); interact = { label: done ? 'POSTER UP ✓' : `<b>E</b> ${ps.mesh.isEnabled() ? 'PASTE A FRESH POSTER' : 'PASTE A RECKLESS POSTER'}`, act: async () => { if (done) return; ps.mesh.setEnabled(true); localStorage.setItem('rw.poster.' + ps.id, '1'); markPasted(ps.id); buzz([20, 40, 20]); const ev = await EV.posterPlaced(ps.id); if (!(M && M.onPaste(ps, ev))) hud.toast(ev && ev.blocked ? 'POSTER UP · ' + ev.blocked : ev ? 'POSTER UP · TEST EVENT QUEUED' : 'POSTER UP'); } }; break; }
     } else if (DANCE && DANCE.active()) interact = null;
@@ -463,6 +466,7 @@ async function start() {
     else if (app.ordered === T.name && T.bars && T.bars.some(b => Math.hypot(P.x - b.x, P.z - b.z) < 1.7)) { const b = T.bars.find(b => Math.hypot(P.x - b.x, P.z - b.z) < 1.7); interact = { label: '<b>E</b> TAKE A SEAT', act: () => sitAt(b) }; }
     else if (T.bars && T.bars.some(b => Math.hypot(P.x - b.x, P.z - b.z) < 1.7)) interact = { label: '<b>E</b> ORDER AT THE BAR', act: () => { const D = ['RECKLESS RED · CHERRY SODA', 'CARLISLE COOLER · LIME + MINT', 'NIGHT BUS · COLD BREW TONIC', 'THE USUAL · WATER, LOTS OF ICE', 'GLENGALL GINGER · GINGER BEER']; buzz(15); hud.toast('ORDERED · ' + D[Math.floor(Math.random() * D.length)] + ' · SOFT DRINKS ONLY'); app.ordered = T.name; } };
     else if (T.mode === 'rave' && T.danceFloor(P)) interact = { label: '<b>E</b> DANCE', act: () => DANCE.start({ venue: T.name, t }) };
+    if (DRV && DRV.on) interact = { label: `<b>E</b> GET OUT · ${DRV.mph()} MPH`, act: () => { if (DRV.exit(P, player, city.grid) === false) hud.toast('SLOW DOWN TO GET OUT'); else { C.dist = DRV._cd || C.dist; camSnap = true; } } };
     hud.prompt(interact ? interact.label : ''); if (isTouch) { const ia = !!interact; if (ia && !app._ia) buzz(12); app._ia = ia; hud.$('tAct').classList.toggle('on', ia); }
     // HUD
     GPS3.update(state.route, DEST, P, performance.now() / 1000, app.inside || app.title); slowT -= dt; if (slowT <= 0) { slowT = 0.5; if (COL) app.blips.collectibles = COL.blips(); if (app.inside) EV.raveTick().then(ev => { if (!ev) return; if (ev.blocked) hud.note({ kicker: 'CREW', title: '10 MINUTES IN', body: ev.blocked }); else hud.stamp({ title: 'VISIT LOGGED', sub: T.name + ' · 10 MINUTES IN', lines: ['RAVE VISIT · TEST EVENT QUEUED', 'CREW ADDS XP AFTER LAUNCH'] }); }); state.street = app.inside ? T.name : nearestStreet(); state.district = app.inside ? (T.club ? T.sub + (T.mode === 'day' ? ' · HOUSE LIGHTS' : ' · RAVE') : (T.mode === 'day' ? 'NAVE · DAYLIGHT' : 'NAVE · RAVE')) : nearestDistrict();

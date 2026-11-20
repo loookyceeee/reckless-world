@@ -35,7 +35,7 @@ House rules: zero spend · the game never awards XP and never PUTs · `test:true
 - [x] SoundCloud radio with clean labels (explicit titles become "artist · RECKLESS RADIO").
 
 ## Stages
-- [ ] Stage 9: driving (enter/exit a car, arcade handling on the road graph) and hailing black cabs (the phone shows COMING SOON).
+- [~] Stage 9: driving chunk 1 DONE (src/drive.js): E to get in any parked hatch/saloon, arcade throttle/brake/reverse/handbrake (Space), speed-sensitive steering, building + traffic bumps, body roll/pitch, headlights on, chase cam that follows the heading, GET OUT · MPH prompt (must slow below ~7 mph), GPS/minimap follow the car. TODO: lanes/AI reaction, touch/gamepad polish, in-car radio, black-cab hailing (phone still shows COMING SOON).
 - [ ] Stage 10: rain/weather, NPC reactions (peds flinch or cheer, react to dancing and sprinting), radio in cars, photo mode upgrade (filters, poses, hide HUD). A photo frame/hunt exists, so this is partial.
 - [ ] Stage 11: mechanics QA (look-behind, gamepad, sensitivity, collisions, stamina, heat edge cases), with a written test list.
 - [~] Stage 12: polish plus perf tiers. Perf tiers exist (perf.js low/med/high). No KTX2, LODs are partial, and mobile profiling isn't done.

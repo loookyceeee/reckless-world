@@ -276,7 +276,7 @@ export function buildTraffic(scene, city, { low = false, stops = [], signals = [
   // parked cars along kerbs, a black-taxi rank and a bus waiting at a real stop
   const parked = []; let busStop = null;
   const park = (key, kind, col, x, z, h, extra) => { const tp = tpl(key, kind, col); const node = new TransformNode('parked', scene); node.position.set(x, -0.085, z); node.rotation.y = h;
-    const b = tp.b.createInstance('pi'); b.parent = node; b.position.set(0, 0, 0); const l = tp.l.createInstance('pl'); l.parent = node; l.position.set(0, 0, 0); l.setEnabled(!!(extra && extra.lights)); if (kind === 'bus' && models && models.glider) busDeco(node); parked.push({ node, kind }); return node; };
+    const b = tp.b.createInstance('pi'); b.parent = node; b.position.set(0, 0, 0); const l = tp.l.createInstance('pl'); l.parent = node; l.position.set(0, 0, 0); l.setEnabled(!!(extra && extra.lights)); if (kind === 'bus' && models && models.glider) busDeco(node); parked.push({ node, kind, key, l }); return node; };
   const kerbSpots = []; for (const r of city.roads) { if (!r.d || !['residential', 'tertiary', 'unclassified', 'secondary'].includes(r.t) || r.w < 6) continue;
     for (let i = 0; i < r.pts.length - 1; i++) { const a = r.pts[i], b = r.pts[i + 1]; const L = Math.hypot(b[0] - a[0], b[1] - a[1]); if (L < 14) continue; const ux = (b[0] - a[0]) / L, uz = (b[1] - a[1]) / L;
       for (let s = 6; s < L - 6; s += 5.6) kerbSpots.push([a[0] + ux * s - uz * (r.w / 2 - 1.05), a[1] + uz * s + ux * (r.w / 2 - 1.05), Math.atan2(ux, uz)]); } }
