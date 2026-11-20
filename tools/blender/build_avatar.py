@@ -773,6 +773,7 @@ def _pushout_posed(objs, mg_of):
     for v, d in zip(body.data.vertices, Wb):
         M = blend(d) if d else None; bp.append((M @ (toA_ @ v.co)) if M is not None else (toA_ @ v.co))
     bv = BVHTree.FromPolygons(bp, [pl.vertices[:] for pl in body.data.polygons])
+    BN = [(blend(d).to_3x3() @ v.normal).normalized() if d and blend(d) is not None else v.normal.copy() for v, d in zip(body.data.vertices, Wb)]
     for o in objs:
         Wo = wmap(o); tA = arm.matrix_world.inverted() @ o.matrix_world; inv = tA.inverted(); mg = mg_of(o.name); n = 0
         for v, d in zip(o.data.vertices, Wo):
@@ -787,8 +788,40 @@ def _pushout_posed(objs, mg_of):
                 except Exception: continue
                 v.co = inv @ (pr + dr); n += 1
         print('pushout posed', o.name, n)
+        # reverse pass: body verts that poke between the (coarser) garment verts push the covering face outward
+        bnd = set()
+        _ec = {}
+        for pl in o.data.polygons:
+            for k_ in pl.edge_keys: _ec[k_] = _ec.get(k_, 0) + 1
+        for k_, c_ in _ec.items():
+            if c_ == 1: bnd.update(k_)
+        Ms = [blend(d) if d else None for d in Wo]
+        for it_ in range(5):
+            gp = [(Ms[i] @ (tA @ v.co)) if Ms[i] is not None else (tA @ v.co) for i, v in enumerate(o.data.vertices)]
+            polys = [pl.vertices[:] for pl in o.data.polygons]; gb = BVHTree.FromPolygons(gp, polys); push = {}; m_ = 0
+            for qi, q in enumerate(bp):
+                loc, nrm, fi, dd = gb.find_nearest(q, 0.03)
+                if loc is None or any(vi in bnd for vi in polys[fi]) or BN[qi].dot(nrm) < 0.6: continue
+                sd = (q - loc).dot(nrm)
+                if sd > -0.0015:
+                    for vi in polys[fi]: push[vi] = max(push.get(vi, (0, None))[0], 0.004 + sd), nrm
+                    m_ += 1
+            for vi, (amt, nrm) in push.items():
+                M = Ms[vi]
+                if M is None: continue
+                try: dr = M.to_3x3().inverted() @ (nrm * min(amt, 0.01))
+                except Exception: continue
+                v = o.data.vertices[vi]; v.co = inv @ (tA @ v.co + dr)
+            print('pushout reverse', o.name, it_, m_)
+            if not m_: break
     for pb in arm.pose.bones: pb.matrix_basis.identity()
     bpy.ops.object.mode_set(mode='OBJECT')
+# --- size budget (before the posed push-out so the coarser shells still clear the skin): collapse-decimate the clothing shells and the male curl crop (only one top + one bottom show at a time;
+# the body/face keep full density for the projected face texture). Weights survive the collapse. AV_DEC=0 disables.
+if _os.environ.get('AV_DEC', '1') == '1':
+    for o in [o for o in bpy.context.scene.objects if o.type == 'MESH' and (o.name.startswith('G_') and o.name not in ('G_briefs', 'G_bra') or o.name == 'Curls' or (o.name in ('Eyebrows', 'Stud') and FEM))]:
+        n0 = len(o.data.polygons); md = o.modifiers.new('dec', 'DECIMATE'); md.ratio = (0.42 if FEM else 0.32) if o.name == 'Curls' else 0.5 if o.name in ('Eyebrows', 'Stud') else float(_os.environ.get('AV_DECG', '0.36' if FEM else '0.42')); md.use_collapse_triangulate = True
+        bpy.context.view_layer.objects.active = o; bpy.ops.object.modifier_apply(modifier=md.name); print('decimate', o.name, n0, '->', len(o.data.polygons))
 _pushout_posed([o for o in bpy.data.objects if o.type == 'MESH' and o.name.startswith('G_')], lambda n: 0.0025 if n in ('G_briefs', 'G_bra') else 0.007)
 # --- female tee re-model (TEE2): a real boxy tee instead of the inflated body shell. Torso = lofted superellipse rings
 # (straight sides below the chest, following the shoulder slope above), sleeves = straight wide tubes along the upper arm;
@@ -969,12 +1002,6 @@ arm.animation_data.action = None
 s = TARGET_H / hcur; arm.scale = (arm.scale[0] * s, arm.scale[1] * s, arm.scale[2] * s)
 for o in list(bpy.context.scene.objects):  # drop helper spheres (42-vert Icosphere shipped with the base kit)
     if o.type == 'MESH' and o.name not in ('Stud', 'Curls', 'Soles') and (o.name.startswith('Icosphere') or len(o.data.vertices) < 60): bpy.data.objects.remove(o, do_unlink=True)
-# --- size budget: collapse-decimate the clothing shells and the male curl crop (only one top + one bottom show at a time;
-# the body/face keep full density for the projected face texture). Weights survive the collapse. AV_DEC=0 disables.
-if _os.environ.get('AV_DEC', '1') == '1':
-    for o in [o for o in bpy.context.scene.objects if o.type == 'MESH' and (o.name.startswith('G_') and o.name not in ('G_briefs', 'G_bra') or o.name == 'Curls' or (o.name in ('Eyebrows', 'Stud') and FEM))]:
-        n0 = len(o.data.polygons); md = o.modifiers.new('dec', 'DECIMATE'); md.ratio = (0.42 if FEM else 0.32) if o.name == 'Curls' else 0.5 if o.name in ('Eyebrows', 'Stud') else float(_os.environ.get('AV_DECG', '0.36' if FEM else '0.42')); md.use_collapse_triangulate = True
-        bpy.context.view_layer.objects.active = o; bpy.ops.object.modifier_apply(modifier=md.name); print('decimate', o.name, n0, '->', len(o.data.polygons))
 # --- bake UVs + projection dump: every visible part gets a fresh non-overlapping UV layout (smart project) and its posed
 # (idle frame 1 = the app's stance) loop positions/normals are dumped so tools/bake_avatar_tex.py can project the app's
 # front renders onto it (face, hair, skin, every wardrobe garment). See research/techniques-sources.md (texture projection).
