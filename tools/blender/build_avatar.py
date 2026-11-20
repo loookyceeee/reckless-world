@@ -731,6 +731,21 @@ if FLD:
         for _fp in sorted(_glob.glob(FLD + '/' + _k + '[0-9]*.json')): apply_field([bpy.data.objects['G_' + _k]], _fp, body, snap=_os.environ.get('V5SNAP', '1') == '1', maxpx=float(_os.environ.get('V5MAXPX', '9')), skip=('upperarm', 'lowerarm', 'hand'))
     for _fp in sorted(_glob.glob(FLD + '/hair[0-9]*.json')):  # hair volume to the v5 silhouette (the face itself stays put)
         apply_field([o for o in bpy.data.objects if o.type == 'MESH' and o.name in ('Hair', 'Curls')], _fp, body, maxpx=12)
+# hoodie hem: the fields lift the hem at the hips; drop the lowest band so it laps over the waistband like v5 (no skin gap)
+for _hn in ('G_hoodie',):
+    if _hn not in bpy.data.objects: continue
+    _ho = bpy.data.objects[_hn]; _tA = arm.matrix_world.inverted() @ _ho.matrix_world; _ec = {}
+    for pl in _ho.data.polygons:
+        for k_ in pl.edge_keys: _ec[k_] = _ec.get(k_, 0) + 1
+    _Wh = wmap(_ho); _arm_ = lambda i: bool(_Wh[i]) and max(_Wh[i].items(), key=lambda kv: kv[1])[0].startswith(('upperarm', 'lowerarm', 'hand'))
+    _bv = {i for k_, c_ in _ec.items() if c_ == 1 for i in k_ if not _arm_(i)}
+    _hz = [(_tA @ _ho.data.vertices[i].co).z for i in _bv if (_tA @ _ho.data.vertices[i].co).z < z_pelvis + 0.1]
+    if _hz:
+        _zh = max(_hz); _DR = float(_os.environ.get('HEMDROP', '0.045')); _inv = _tA.inverted()
+        for v in _ho.data.vertices:
+            p = _tA @ v.co
+            if p.z < _zh + 0.06 and not _arm_(v.index): f_ = min(1.0, (_zh + 0.06 - p.z) / 0.06); p.z -= _DR * f_ * f_; v.co = _inv @ p
+        print('hem drop', _hn, round(_zh - z_pelvis, 3), len(_hz))
 # hood: relax the field-warped head shell into a smooth bag before the push-out
 if 'G_hoodie' in bpy.data.objects:
     _ho = bpy.data.objects['G_hoodie']; _bm = bmesh.new(); _bm.from_mesh(_ho.data); _dl = _bm.verts.layers.deform.active; _gn = {g.index: g.name for g in _ho.vertex_groups}

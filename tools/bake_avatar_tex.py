@@ -177,7 +177,14 @@ if __name__ == '__main__':
     if FEM:  # dark features only inside the face oval: not her side strands, hoops or the neck shadow under the chin
         cxe = (er[0][0] + er[1][0]) / 2; yy_, xx_ = np.mgrid[:alpha.shape[0], :alpha.shape[1]]; ytop = eyy - 0.62 * de_; ybot = eyy + 42.0
         dark_ok &= (((xx_ - cxe) / (0.84 * de_)) ** 2 + ((yy_ - (ytop + ybot) / 2) / ((ybot - ytop) / 2)) ** 2) < 1.0
-    head_front = fill(rgb, alpha & (skin_mask(rgb) | ((rgb.mean(-1) < 0.5) & dark_ok)), 2)  # keep eyes/brows/lips (dark) on the face; scalp = skin under the fade
+        # lower face: only the lips may stay dark (the sheet's jaw/chin contour shading smeared onto our jaw); shaded skin below the nose -> in-painted skin
+        lips_ = (((xx_ - cxe) / (0.42 * de_)) ** 2 + ((yy_ - (eyy + 28.0)) / 7.0) ** 2) < 1.0
+        low_ = (yy_ > eyy + 10.0) & ~lips_
+        dark_ok &= ~low_
+        _lum = rgb.mean(-1); _sk0 = np.median(rgb[skin_mask(rgb) & alpha], 0).mean()
+        shade_low = low_ & (yy_ < eyy + 60.0) & (_lum < 0.82 * _sk0)
+    if not FEM: shade_low = np.zeros_like(alpha)
+    head_front = fill(rgb, alpha & ((skin_mask(rgb) & ~shade_low) | ((rgb.mean(-1) < 0.5) & dark_ok)), 2)  # keep eyes/brows/lips (dark) on the face; scalp = skin under the fade
     ska = sk.copy(); ska[int(gm(0, 0.78)[1]):] = False  # arms/hands only (shoe leather reads as skin)
     body_front = fill(rgb, ska, 2)
     plate = np.ones_like(rgb) * skin_c * 0.97
