@@ -164,7 +164,7 @@ if __name__ == '__main__':
                 low = np.where(-dz > s.kz[-1], s.eyy + tail, low)
                 return px, np.where(dz < 0, low, py)
         # ours (m below the eye line) -> sheet (px below its eye line); measured: nose tip -0.058, lips -0.076, chin -0.094 / sheet 15, 28, 42
-        hm = FaceMap(hm, ez, eyy, [0.0, 0.063, 0.0826, 0.102], [0.0, 15.0, 28.0, 42.0])  # natural lower face (no HZ squash below the brow): x0.96/0.883
+        hm = FaceMap(hm, ez, eyy, [0.0, 0.067, 0.097, 0.11], [0.0, 15.0, 28.0, 42.0])  # measured on the natural lower face (profile peaks): nose tip, lips, chin point; the jaw underside below runs into the neck (skin)
     print('global', vars(gm), 'head', vars(hm), 'eyes ref', er)
     vis_all = depth_buffer(look_parts)
     sk = skin_mask(rgb) & alpha
@@ -185,6 +185,11 @@ if __name__ == '__main__':
         shade_low = low_ & (yy_ < eyy + 60.0) & (_lum < 0.82 * _sk0)
     if not FEM: shade_low = np.zeros_like(alpha)
     head_front = fill(rgb, alpha & ((skin_mask(rgb) & ~shade_low) | ((rgb.mean(-1) < 0.5) & dark_ok)), 2)  # keep eyes/brows/lips (dark) on the face; scalp = skin under the fade
+    if FEM:  # chin / jaw below the lips and the cheeks outside the features: clean skin with a soft edge (the sheet's chin shading read as a goatee on our jaw)
+        _cx = (er[0][0] + er[1][0]) / 2; _yy, _xx = np.mgrid[:alpha.shape[0], :alpha.shape[1]]
+        _keep = (((_xx - _cx) / (0.42 * de_)) ** 2 + ((_yy - (eyy + 27.0)) / 6.0) ** 2 < 1.0) | (_yy < eyy + 17.0) & (np.abs(_xx - _cx) < 0.62 * de_)
+        _w = ndi.gaussian_filter((~_keep & (_yy > eyy - 4.0) & (_yy < eyy + 90.0)).astype(np.float32), 2.5)[..., None]
+        head_front = head_front * (1 - _w) + skin_c * _w
     ska = sk.copy(); ska[int(gm(0, 0.78)[1]):] = False  # arms/hands only (shoe leather reads as skin)
     body_front = fill(rgb, ska, 2)
     plate = np.ones_like(rgb) * skin_c * 0.97
@@ -193,6 +198,7 @@ if __name__ == '__main__':
     hw = smooth(zneck - 0.03, zneck + 0.03, Z)[..., None]
     vis_body = depth_buffer(['Body'])
     skin_only = fill(rgb, sk & (rgb.mean(-1) > 0.45), 2); face_lo = np.stack([ndi.median_filter(skin_only[..., c], size=25) for c in range(3)], -1); face_lo = ndi.gaussian_filter(face_lo, (10, 10, 0))
+    if FEM: face_lo = np.ones_like(rgb) * skin_c  # female: jaw sides / under the chin take clean skin (the blurred plate pulled in hair-strand and neck-shadow browns)
     cH = bake('Body', 1024, head_front, face_lo, hm, vis_body, (0.32, 0.72) if FEM else (0.3, 0.62)); # torso / arms / hands from the shirtless 'jeans' look so bare torsos carry the app's abs and arm shading
     rgbJ, alphaJ = load('tee-jeans' if FEM else 'jeans'); gmJ = global_map(alphaJ, BODY + ['G_jeans', 'G_shoes'])
     skJ = skin_mask(rgbJ) & alphaJ; skJ[int(gmJ(0, 0.78)[1]):] = False; skJ = ndi.binary_erosion(skJ, iterations=2)
