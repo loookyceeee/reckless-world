@@ -796,7 +796,7 @@ def _pushout_posed(objs, mg_of):
         for k_, c_ in _ec.items():
             if c_ == 1: bnd.update(k_)
         Ms = [blend(d) if d else None for d in Wo]
-        for it_ in range(5):
+        for it_ in range(int(_os.environ.get('AV_REV', '0'))):  # off by default: the 'holes' were the hands + hem gap, not poke-through
             gp = [(Ms[i] @ (tA @ v.co)) if Ms[i] is not None else (tA @ v.co) for i, v in enumerate(o.data.vertices)]
             polys = [pl.vertices[:] for pl in o.data.polygons]; gb = BVHTree.FromPolygons(gp, polys); push = {}; m_ = 0
             for qi, q in enumerate(bp):
