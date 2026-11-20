@@ -19,9 +19,9 @@ House rules: zero spend · the game never awards XP and never PUTs · `test:true
 
 ## Vehicles and traffic
 - [x] Glider fast travel (glider.js, stops on the minimap).
-- [~] Buses: the purple RECKLESS bendy bus from asset-refs (black glass band, white swoosh, RECKLESS wordmark, BELFAST destination, R logo, purple wheel spats, grey concertina, blank plates). In the tree, not yet gated or live.
+- [~] Buses (bus fix 2026-11-20b: lit glazing with purple seats + poles, glazed doors with green/blue buttons, big italic RECKLESS + slashes both cars, visible tyres in arches with purple hub covers + flares, BELFAST board and front R now visible, raised roof pods with fan vents + grilles, full-height silver bellows): the purple RECKLESS bendy bus from asset-refs (black glass band, white swoosh, RECKLESS wordmark, BELFAST destination, R logo, purple wheel spats, grey concertina, blank plates). In the tree, not yet gated or live.
 - [~] Realistically proportioned cars with proper wheels: procedural cars with wheel2 tyres and rims. Some kinds still look toy-like; LODs are basic.
-- [~] Armoured patrol wagons (wagon_ref + asset-refs): yellow/blue Battenburg, POLICE text, no crest or plates; caged grille, roof AC grilles, now white steel wheels, hanging mesh skirts and caged lamp pods (40656ab+1). TODO: caged blue roof beacons, LOD.
+- [~] Armoured patrol wagons (wagon_ref + asset-refs): yellow/blue Battenburg, POLICE text, no crest or plates; caged grille, roof AC grilles, now white steel wheels, hanging mesh skirts and caged lamp pods (40656ab+1). Now also caged blue roof beacons, windscreen/side window grilles, a bull-bar cage and matte paint. TODO: LOD.
 - [~] Street kit from asset-refs: DONE (b-streetkit): sheet-style Reckless shelter at every fast-travel stop (dark frame, lit RECKLESS fascia + light strip, glass, red bench, lit R/crowd ad panel, purple R stop flag, R bin, bollards; one shared atlas), plus ~1,050 baked R bins, red benches, utility boxes, planters, bike racks and cones beside lamps on the pavement (per-cell baked, no extra draw calls). Existing trees/lamps/bollards/railings kept. TODO: drains, barriers, signs, LODs.
 
 ## HUD, map and UI

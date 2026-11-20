@@ -58,11 +58,42 @@ function busDecalVD() {
   const quad = (c, r, n, w, h, key) => { const [u0, v0, u1, v1] = BUS_UV[key], b = P.length / 3, up = [n[1] * r[2] - n[2] * r[1], n[2] * r[0] - n[0] * r[2], n[0] * r[1] - n[1] * r[0]];
     for (const [sx, sy, u, v] of [[-1, -1, u1, v1], [1, -1, u0, v1], [1, 1, u0, v0], [-1, 1, u1, v0]]) { P.push(c[0] + r[0] * sx * w / 2 + up[0] * sy * h / 2, c[1] + r[1] * sx * w / 2 + up[1] * sy * h / 2, c[2] + r[2] * sx * w / 2 + up[2] * sy * h / 2); N.push(...n); U.push(u, 1 - v); }
     I.push(b, b + 2, b + 1, b, b + 3, b + 2); };
-  const X = 1.287;
+  const X = 1.29;
   for (const sd of [1, -1]) { const r = [0, 0, -sd], n = [sd, 0, 0];   // viewer's right on each flank (front of the bus is +z)
-    quad([sd * X, 2.86, 3.2], r, n, 2.0, 0.27, 'word'); quad([sd * X, 2.86, -4.6], r, n, 2.0, 0.27, 'word'); quad([sd * X, 2.86, sd > 0 ? 0.55 : 1.0], r, n, 0.42, 0.24, 'stripes'); }
-  quad([0, 2.75, 8.86], [1, 0, 0], [0, 0, 1], 1.5, 0.22, 'dest'); quad([0, 0.78, 8.93], [1, 0, 0], [0, 0, 1], 0.42, 0.42, 'logo'); quad([0, 0.52, 8.92], [1, 0, 0], [0, 0, 1], 0.52, 0.12, 'plateF');
-  quad([0, 1.95, -9.02], [-1, 0, 0], [0, 0, -1], 0.5, 0.5, 'logo'); quad([0, 1.55, -9.02], [-1, 0, 0], [0, 0, -1], 1.3, 0.22, 'word'); quad([0, 0.62, -9.02], [-1, 0, 0], [0, 0, -1], 0.52, 0.12, 'plateR');
+    quad([sd * X, 2.95, 3.0], r, n, 3.9, 0.42, 'word'); quad([sd * X, 2.95, -4.9], r, n, 3.9, 0.42, 'word');           // big italic RECKLESS on the roof band, both cars
+    quad([sd * X, 2.94, -1.75], r, n, 0.95, 0.34, 'stripes'); quad([sd * X, 2.94, 6.6], r, n, 0.95, 0.34, 'stripes'); } // white slashes behind the bellows + toward the nose
+  quad([0, 2.75, 8.968], [1, 0, 0], [0, 0, 1], 1.6, 0.24, 'dest'); quad([0, 0.8, 8.968], [1, 0, 0], [0, 0, 1], 0.5, 0.5, 'logo'); quad([0, 0.6, 8.968], [1, 0, 0], [0, 0, 1], 0.52, 0.12, 'plateF');
+  quad([0, 1.95, -9.02], [-1, 0, 0], [0, 0, -1], 0.6, 0.6, 'logo'); quad([0, 1.5, -9.02], [-1, 0, 0], [0, 0, -1], 1.5, 0.26, 'word'); quad([0, 0.62, -9.02], [-1, 0, 0], [0, 0, -1], 0.52, 0.12, 'plateR');
+  quad([0, 2.75, -9.02], [-1, 0, 0], [0, 0, -1], 1.2, 0.2, 'dest');
+  const vd = new VertexData(); vd.positions = P; vd.normals = N; vd.uvs = U; vd.indices = I; return vd;
+}
+// lit bus glazing (bus_colour.png): window bays show the warm interior (light strip, purple seats, grab poles) through a tint;
+// glazed doors with green open buttons + blue access icons. One 1024x512 atlas: window tile 0..512, door tile 512..1024.
+function busGlassTex(scene) {
+  const t = new DynamicTexture('busGlass', { width: 1024, height: 512 }, scene, true), c = t.getContext();
+  const interior = (x0, w, floor) => { const g = c.createLinearGradient(0, 0, 0, 512); g.addColorStop(0, '#fff1c8'); g.addColorStop(0.08, '#f2cf8a'); g.addColorStop(0.16, '#a07c50'); g.addColorStop(0.55, '#5a4634'); g.addColorStop(1, floor ? '#3a3038' : '#241c26'); c.fillStyle = g; c.fillRect(x0, 0, w, 512);
+    c.fillStyle = 'rgba(20,24,40,0.85)'; c.fillRect(x0 + w * 0.12, 120, w * 0.76, 170); c.fillStyle = 'rgba(255,220,150,0.25)'; c.fillRect(x0 + w * 0.12, 120, w * 0.76, 6); }; // far-side windows
+  interior(0, 512, false);
+  for (const sx of [70, 290]) { c.fillStyle = '#5a1fb8'; c.beginPath(); c.roundRect(sx, 300, 150, 212, 26); c.fill(); c.fillStyle = '#7b3cf0'; c.beginPath(); c.roundRect(sx + 14, 314, 122, 70, 18); c.fill(); c.fillStyle = '#3a1278'; c.fillRect(sx + 8, 420, 134, 10); }
+  c.fillStyle = '#e8c23a'; c.fillRect(250, 30, 12, 482); c.fillStyle = '#fff6d8'; c.fillRect(0, 18, 512, 16);
+  c.fillStyle = 'rgba(8,10,18,0.32)'; c.fillRect(0, 0, 512, 512); c.fillStyle = 'rgba(255,255,255,0.07)'; c.beginPath(); c.moveTo(40, 512); c.lineTo(200, 0); c.lineTo(260, 0); c.lineTo(100, 512); c.fill();
+  c.fillStyle = '#050507'; c.fillRect(0, 0, 14, 512); c.fillRect(498, 0, 14, 512); c.fillRect(0, 0, 512, 10); c.fillRect(0, 502, 512, 10);
+  interior(512, 512, true); c.fillStyle = '#e8c23a'; c.fillRect(760, 30, 10, 482); c.fillStyle = '#fff6d8'; c.fillRect(512, 14, 512, 12);
+  c.fillStyle = 'rgba(8,10,18,0.3)'; c.fillRect(512, 0, 512, 512);
+  c.fillStyle = '#1a1b20'; for (const x of [512, 760, 1004]) c.fillRect(x, 0, 20, 512); c.fillRect(512, 0, 512, 16); c.fillRect(512, 496, 512, 16); c.fillRect(512, 250, 512, 10); // leaf frames + rail
+  for (const bx of [740, 788]) { c.fillStyle = '#121216'; c.beginPath(); c.arc(bx, 200, 17, 0, 6.29); c.fill(); c.strokeStyle = '#4dff6a'; c.lineWidth = 6; c.beginPath(); c.arc(bx, 200, 13, 0, 6.29); c.stroke();
+    c.fillStyle = '#1e6bff'; c.beginPath(); c.roundRect(bx - 14, 290, 28, 28, 5); c.fill(); c.fillStyle = '#fff'; c.beginPath(); c.arc(bx, 306, 7, 0, 6.29); c.fill(); }
+  t.anisotropicFilteringLevel = 8; t.update(); return t;
+}
+function busGlassVD() {
+  const P = [], N = [], U = [], I = [];
+  const quad = (cz, sd, w, y0, y1, u0, u1) => { const b = P.length / 3, x = sd * 1.284;
+    for (const [dz, y, u, v] of [[-1, y0, 0, 1], [1, y0, 1, 1], [1, y1, 1, 0], [-1, y1, 0, 0]]) { const uu = u0 + (u1 - u0) * (sd > 0 ? 1 - u : u); P.push(x, y, cz + dz * w / 2); N.push(sd, 0, 0); U.push(uu, 1 - v); }
+    if (sd > 0) I.push(b, b + 1, b + 2, b, b + 2, b + 3); else I.push(b, b + 2, b + 1, b, b + 3, b + 2); };
+  const DOORS = [7.75, 3.9, -3.2, -7.2];
+  for (const sd of [1, -1]) for (const [z0, z1] of [[0.0, 7.2], [-8.75, -1.2]]) { const n = Math.round((z1 - z0) / 1.3); for (let k = 0; k < n; k++) { const zc = z0 + (k + 0.5) * (z1 - z0) / n;
+    if (sd < 0 && DOORS.some(d => Math.abs(zc - d) < 1.25)) continue; quad(zc, sd, (z1 - z0) / n - 0.08, 1.44, 2.46, 0, 0.5); } }
+  for (const d of DOORS) quad(d, -1, 1.22, 0.42, 2.56, 0.5, 1);
   const vd = new VertexData(); vd.positions = P; vd.normals = N; vd.uvs = U; vd.indices = I; return vd;
 }
 function carVD(kind, body) {
@@ -150,13 +181,14 @@ export function buildTraffic(scene, city, { low = false, stops = [], signals = [
       for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) for (const id of cell.get((gx + i) + ',' + (gz + j)) || []) { const p = G.pos.get(id); const d = Math.hypot(p[0] - x, p[1] - z); if (d < bd) { bd = d; best = id; } }
       if (best != null) SIG.set(best, ((x * 0.137 + z * 0.291) % 1 + 1) % 1 * 24); } }
   const bodyM = new StandardMaterial('carBody', scene); bodyM.specularColor = new Color3(0.55, 0.55, 0.6); bodyM.specularPower = 64; bodyM.emissiveColor = new Color3(0.07, 0.07, 0.08); if (scene.__env) { bodyM.reflectionTexture = scene.__env; const f = new FresnelParameters(); f.bias = 0.08; f.power = 2; f.leftColor = new Color3(0.7, 0.7, 0.75); f.rightColor = new Color3(0.1, 0.1, 0.12); bodyM.reflectionFresnelParameters = f; }
+  const wagonM = new StandardMaterial('wagonBody', scene); wagonM.specularColor = new Color3(0.12, 0.12, 0.13); wagonM.specularPower = 18; wagonM.emissiveColor = new Color3(0.05, 0.05, 0.055); // matte armour paint
   const lightM = new StandardMaterial('carLights', scene); lightM.disableLighting = true; lightM.emissiveColor = Color3.White();
   const COLS = ['#d64545', '#f2f2f2', '#2b2b30', '#3f6fd8', '#e7c33a', '#7d8a96', '#4e9a6b', '#b8b0a0', '#c2185b'].map(hex);
   const templates = {};
   const tpl = (key, kind, col) => {
     if (templates[key]) return templates[key];
     if (key === 'patrolcar' && models && models.pestate) kind = 'pestate'; // modelled patrol estate (tools/gen_vehicles.py)
-    const b = toMesh('car-' + key, (MODEL_OF[kind] && modelVD(models, kind, col)) || carVD(kind, col), scene, bodyM); const l = toMesh('carL-' + key, (models && models[MODEL_OF[kind]] && models[MODEL_OF[kind]].emit && modelVD(models, kind, col, 'lights')) || lightsVD(kind), scene, lightM);
+    const b = toMesh('car-' + key, (MODEL_OF[kind] && modelVD(models, kind, col)) || carVD(kind, col), scene, kind === 'wagon' ? wagonM : bodyM); const l = toMesh('carL-' + key, (models && models[MODEL_OF[kind]] && models[MODEL_OF[kind]].emit && modelVD(models, kind, col, 'lights')) || lightsVD(kind), scene, lightM);
     b.position.y = -500; l.position.y = -500; b.alwaysSelectAsActiveMesh = true; l.alwaysSelectAsActiveMesh = true; return (templates[key] = { b, l, kind });
   };
   // patrol livery meshes (fictional Belfast-style; Battenburg side panels, blue roof bar, no marks)
@@ -166,7 +198,10 @@ export function buildTraffic(scene, city, { low = false, stops = [], signals = [
   const polM = new StandardMaterial('polM', scene); polM.diffuseTexture = policeTex(scene); polM.useAlphaFromDiffuseTexture = true; polM.emissiveColor = new Color3(0.25, 0.25, 0.3); polM.specularColor = Color3.Black();
   bbM.emissiveColor = new Color3(0.22, 0.22, 0.22); // retro-reflective
   const busDM = new StandardMaterial('busDecalM', scene); busDM.diffuseTexture = busDecalTex(scene); busDM.useAlphaFromDiffuseTexture = true; busDM.emissiveTexture = busDM.diffuseTexture; busDM.emissiveColor = new Color3(0.45, 0.45, 0.45); busDM.specularColor = new Color3(0.2, 0.2, 0.2); busDM.backFaceCulling = false;
-  let busDT = null; const busDeco = (node) => { if (!busDT) { busDT = new Mesh('busDecal', scene); busDecalVD().applyToMesh(busDT); busDT.material = busDM; busDT.position.y = -500; busDT.alwaysSelectAsActiveMesh = true; } const d = busDT.createInstance('bd'); d.parent = node; d.position.set(0, 0, 0); };
+  const busGM = new StandardMaterial('busGlassM', scene); busGM.diffuseTexture = busGlassTex(scene); busGM.emissiveTexture = busGM.diffuseTexture; busGM.emissiveColor = new Color3(0.5, 0.48, 0.46); busGM.specularColor = new Color3(0.9, 0.9, 0.95); busGM.specularPower = 128; busGM.backFaceCulling = false;
+  let busDT = null, busGT = null; const busDeco = (node) => { if (!busDT) { busDT = new Mesh('busDecal', scene); busDecalVD().applyToMesh(busDT); busDT.material = busDM; busDT.position.y = -500; busDT.alwaysSelectAsActiveMesh = true;
+      busGT = new Mesh('busGlass', scene); busGlassVD().applyToMesh(busGT); busGT.material = busGM; busGT.position.y = -500; busGT.alwaysSelectAsActiveMesh = true; }
+    const d = busDT.createInstance('bd'); d.parent = node; d.position.set(0, 0, 0); const g = busGT.createInstance('bg'); g.parent = node; g.position.set(0, 0, 0); };
   const darkM = new StandardMaterial('lbBase', scene); darkM.diffuseColor = hex('#1b1d22'); darkM.specularColor = new Color3(0.2, 0.2, 0.2);
   const patrolDeco = (node, kind) => {
     const W = kind === 'wagon';

@@ -175,21 +175,37 @@ def glider():
         loft(m, rings, col)
     section(-0.15, 8.75, 1.4, 0)    # front car
     section(-9.0, -1.05, 0, 0.5)    # rear car
-    for k in range(9):              # grey concertina: alternating light/dark ribs
-        z = -1.05 + k * 0.1125; w = 2.36 if k % 2 else 2.46
-        loft(m, [(z, rr_ring(w, 2.62, 0.25, 0.4)), (z + 0.1125, rr_ring(2.46 if k % 2 else 2.36, 2.62, 0.25, 0.4))], (lambda kk: (lambda c, n: 'bellowsL' if kk % 2 else 'bellows'))(k), False, False)
-    for z0, z1 in ((0.6, 7.4), (-8.2, -1.8)):  # low roof fairings with vent grilles (top view on the sheet)
-        loft(m, [(z0, rr_ring(1.6, 0.01, 0.005, 3.24)), (z0 + 0.4, rr_ring(1.8, 0.2, 0.09, 3.2)), (z1 - 0.4, rr_ring(1.8, 0.2, 0.09, 3.2)), (z1, rr_ring(1.6, 0.01, 0.005, 3.24))], lambda c, n: 'purple', False, False)
-        for q in range(3): box(m, (0, 3.41, z0 + 0.9 + q * 0.75), (0.9, 0.02, 0.6), 'grille')
+    NB = 16; zb0, zb1 = -1.05, -0.15; dzb = (zb1 - zb0) / NB   # silver concertina, full body height, crisp light/dark ribs
+    for k in range(NB):
+        z = zb0 + k * dzb; wa, wb = (2.36, 2.5) if k % 2 else (2.5, 2.36)
+        loft(m, [(z, rr_ring(wa, 2.86, 0.3, 0.36)), (z + dzb / 2, rr_ring(wb, 2.86, 0.3, 0.36)), (z + dzb, rr_ring(wa, 2.86, 0.3, 0.36))], (lambda kk: (lambda c, n: 'bellowsL' if n[2] * (1 if kk % 2 else -1) > 0 else 'bellows'))(k), False, False)
+    for zf in (zb0 - 0.02, zb1 + 0.02): loft(m, [(zf - 0.03, rr_ring(2.6, 2.98, 0.32, 0.3)), (zf + 0.03, rr_ring(2.6, 2.98, 0.32, 0.3))], lambda c, n: 'black', False, False)  # end frames
+    for z0, z1 in ((0.9, 6.9), (-7.9, -2.0)):  # roof pods (top view on the sheet): raised purple fairing, 3 round fan vents, side mesh grilles
+        loft(m, [(z0, rr_ring(1.7, 0.02, 0.008, 3.22)), (z0 + 0.5, rr_ring(1.9, 0.34, 0.14, 3.2)), (z1 - 0.5, rr_ring(1.9, 0.34, 0.14, 3.2)), (z1, rr_ring(1.7, 0.02, 0.008, 3.22))], lambda c, n: 'purple', False, False)
+        zc = (z0 + z1) / 2
+        for q in (-1, 0, 1):
+            fx, fz, fr = 0.0, zc + q * 0.62, 0.26; seg = 16; c0 = m.v((fx, 3.555, fz)); ring = [m.v((fx + fr * math.cos(2 * math.pi * k / seg), 3.555, fz + fr * math.sin(2 * math.pi * k / seg))) for k in range(seg)]
+            for k in range(seg): _ofs(m, c0, ring[k], ring[(k + 1) % seg], 'grille', (0, 1, 0))
+            ring2 = [m.v((fx + (fr + 0.04) * math.cos(2 * math.pi * k / seg), 3.552, fz + (fr + 0.04) * math.sin(2 * math.pi * k / seg))) for k in range(seg)]
+            for k in range(seg): k2 = (k + 1) % seg; _ofs(m, ring[k], ring[k2], ring2[k2], 'steel', (0, 1, 0)); _ofs(m, ring[k], ring2[k2], ring2[k], 'steel', (0, 1, 0))
+        for sd in (-1, 1):
+            for q in range(3): box(m, (sd * 0.955, 3.38, zc - 1.4 + q * 1.4), (0.02, 0.18, 1.0), 'grille')
     for d in DOORS:  # door frames + green/blue door buttons
-        for dz in (0.0, 0.6, -0.6): box(m, (-W / 2 - 0.012, 1.55, d + dz), (0.02, 2.3, 0.05), 'frame')
-        box(m, (-W / 2 - 0.02, 1.45, d - 0.3), (0.02, 0.07, 0.07), 'btnG'); box(m, (-W / 2 - 0.02, 1.45, d + 0.3), (0.02, 0.07, 0.07), 'btnG')
-    for z in (7.0, 1.0, -6.8):  # axles; wheels behind purple spats
-        for x in (-1.0, 1.0):
-            wheel2(m, x, 0.5, z, 0.5, 0.32, rim='steel', spokes=10, dish=0.07)
-            s_ = 1 if x > 0 else -1; seg = 20; cx_ = s_ * (W / 2 + 0.006)
-            c0 = m.v((cx_ + s_ * 0.03, 0.55, z)); ring = [m.v((cx_, 0.55 + 0.5 * math.cos(2 * math.pi * k / seg), z + 0.56 * math.sin(2 * math.pi * k / seg))) for k in range(seg)]
-            for k in range(seg): _ofs(m, c0, ring[k], ring[(k + 1) % seg], 'purple', (s_, 0, 0))
+        for dz in (0.64, -0.64): box(m, (-W / 2 - 0.012, 1.5, d + dz), (0.03, 2.3, 0.07), 'frame')
+        box(m, (-W / 2 - 0.012, 2.6, d), (0.03, 0.06, 1.34), 'frame')
+    for z in (7.0, 1.0, -6.8):  # axles: tyres visible in dark arches, flat purple hub covers (sheet close-up), purple arch flares
+        for s_ in (-1, 1):
+            wheel2(m, s_ * 1.14, 0.5, z, 0.5, 0.32, rim='purple', spokes=0, dish=0.03, hub='purpleD')
+            seg = 24; ax = s_ * (W / 2 + 0.004); AR0, AR1 = 0.6, 0.71
+            c0 = m.v((ax, 0.62, z)); ring = [m.v((ax, max(0.3, 0.5 + AR0 * math.sin(math.pi * k / seg)), z + AR0 * math.cos(math.pi * k / seg))) for k in range(seg + 1)]
+            for k in range(seg): _ofs(m, c0, ring[k], ring[k + 1], 'rimD', (s_, 0, 0))   # dark arch opening
+            fx = s_ * (W / 2 + 0.035)
+            pt = lambda x, r, t: m.v((x, 0.5 + r * math.sin(t), z + r * math.cos(t)))
+            for k in range(seg):
+                t0, t1 = math.pi * k / seg, math.pi * (k + 1) / seg
+                a_, b_, c_, d_ = pt(fx, AR0, t0), pt(fx, AR0, t1), pt(fx, AR1, t1), pt(fx, AR1, t0); _ofs(m, a_, b_, c_, 'purple', (s_, 0, 0)); _ofs(m, a_, c_, d_, 'purple', (s_, 0, 0))
+                a_, b_, c_, d_ = pt(ax, AR0, t0), pt(ax, AR0, t1), pt(fx, AR0, t1), pt(fx, AR0, t0); tm = (t0 + t1) / 2; rf = (0, -math.sin(tm), -math.cos(tm)); _ofs(m, a_, b_, c_, 'purpleD', rf); _ofs(m, a_, c_, d_, 'purpleD', rf)
+                a_, b_, c_, d_ = pt(ax, AR1, t0), pt(ax, AR1, t1), pt(fx, AR1, t1), pt(fx, AR1, t0); rf = (0, math.sin(tm), math.cos(tm)); _ofs(m, a_, b_, c_, 'purple', rf); _ofs(m, a_, c_, d_, 'purple', rf)
     for x in (-1.0, 1.0): box(m, (x * 1.3, 2.3, 8.3), (0.06, 0.12, 0.3), 'black'); box(m, (x * 1.42, 2.05, 8.42), (0.16, 0.34, 0.1), 'black')  # mirror arms + heads
     return m
 
@@ -323,6 +339,29 @@ def wagon():
     for sd in (-1, 1):
         for k in range(3): box(m, (sd * 0.76 - 0.1 + k * 0.1, 0.88, ZF + 0.12), (0.018, 0.32, 0.018), 'trim')   # lamp cage bars
         box(m, (sd * 0.76, 0.88, ZF + 0.12), (0.32, 0.018, 0.018), 'trim')
+    # bull-bar cage: tubular frame proud of the grille band, tied back to the bumper
+    ZBB = ZF + 0.3
+    for x in (-0.86, -0.3, 0.3, 0.86): box(m, (x, 0.78, ZBB), (0.05, 0.62, 0.05), 'trim')
+    for y in (0.5, 0.78, 1.07): box(m, (0, y, ZBB), (1.78, 0.045, 0.045), 'trim')
+    for x in (-0.86, 0.86):
+        for y in (0.5, 1.07): box(m, (x, y, ZF + 0.2), (0.045, 0.045, 0.22), 'trim')
+    for k in range(9): box(m, (-0.24 + k * 0.06, 0.78, ZBB + 0.005), (0.012, 0.56, 0.012), 'trim')
+    # caged blue roof beacons (lamps themselves are the alternating blue meshes in traffic.js at (+-0.72, 2.34, 0.98))
+    for sd in (-1, 1):
+        bx, bz = sd * 0.72, 0.98
+        for dx in (-0.13, 0.13):
+            for dz in (-0.13, 0.13): box(m, (bx + dx, YCT + 0.17, bz + dz), (0.02, 0.26, 0.02), 'trim')
+        for dz in (-0.13, 0.0, 0.13): box(m, (bx, YCT + 0.3, bz + dz), (0.28, 0.02, 0.02), 'trim')
+        for dx in (-0.13, 0.0, 0.13): box(m, (bx + dx, YCT + 0.3, bz), (0.02, 0.02, 0.28), 'trim')
+        for dy in (0.1, 0.2):
+            for dz in (-0.13, 0.13): box(m, (bx, YCT + dy, bz + dz), (0.28, 0.015, 0.015), 'trim')
+    # window grilles: mesh over the split windscreen, cross-bars on the cab and box side windows
+    for k in range(13): box(m, (-0.78 + k * 0.13, (WY0 + WY1) / 2, ZW + 0.05), (0.012, WY1 - WY0, 0.012), 'trim')
+    for k in range(4): box(m, (0, WY0 + 0.1 + k * 0.17, ZW + 0.055), (CW - 0.24, 0.012, 0.012), 'trim')
+    for sd in (-1, 1):
+        x = sd * (CW / 2 + 0.016); xb = sd * (BW / 2 + 0.016)
+        for k in range(3): box(m, (x, 1.48 + k * 0.17, (ZB + ZC) / 2 + 0.05), (0.01, 0.014, 0.56), 'trim')
+        for k in range(2): box(m, (xb, 1.68 + k * 0.2, -0.25), (0.01, 0.014, 0.56), 'trim')
     return m
 
 def pestate():
