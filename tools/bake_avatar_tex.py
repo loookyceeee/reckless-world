@@ -146,12 +146,26 @@ if __name__ == '__main__':
     if FEM:  # the global-map guess lands on the hairline once the v5 body/hair changed: refine around the sheet's measured iris spots instead
         _g = iter([(100.0, 122.0), (145.0, 122.0)]); _pts = list(_g)
         er = [eye_centres_ref(rgb, alpha, (lambda x, z, q=q: q), [(0, 0)])[0] for q in _pts]
+        er = [(x_, 121.5) for x_, _ in er]   # iris centre row (the dark-blob search locks onto the upper lash line ~5 px higher)
     # head map: x from the eye spacing, z from crown (top of alpha) to the eye line
     ax = (er[1][0] - er[0][0]) / (ours[1][0] - ours[0][0]); bx = er[0][0] - ax * ours[0][0]
     ys, xs = np.where(alpha); ztop = figure_bbox(['Hair', 'Body'])[3]; ez = (ours[0][1] + ours[1][1]) / 2; eyy = (er[0][1] + er[1][1]) / 2
     az = (eyy - ys.min()) / (ztop - ez); bz = ys.min() + az * ztop
     if os.environ.get('HEADMAP', 'uniform') == 'uniform': az = ax; bz = eyy + az * ez   # v5 rebuild: uniform scale from the eye spacing, anchored on the eye line (crown-fit squashed the face once the hair volume changed)
-    hm = Map(ax, bx, az, bz); print('global', vars(gm), 'head', vars(hm), 'eyes ref', er)
+    hm = Map(ax, bx, az, bz)
+    if FEM:  # lower face: piecewise vertical map so the sheet's nose / mouth / chin land on our nose tip / lips / chin (single scale put her mouth on the chin)
+        class FaceMap(Map):
+            def __init__(s, base, ez, eyy, kz, kp):
+                Map.__init__(s, base.ax, base.bx, base.az, base.bz); s.ez, s.eyy, s.kz, s.kp = ez, eyy, kz, kp
+            def __call__(s, x, z):
+                px, py = Map.__call__(s, x, z); dz = np.asarray(z) - s.ez
+                low = s.eyy + np.interp(-dz, s.kz, s.kp, right=s.kp[-1] + (np.maximum(-dz, s.kz[-1]) - s.kz[-1]) * s.az if False else None)
+                tail = s.kp[-1] + (-dz - s.kz[-1]) * s.az
+                low = np.where(-dz > s.kz[-1], s.eyy + tail, low)
+                return px, np.where(dz < 0, low, py)
+        # ours (m below the eye line) -> sheet (px below its eye line); measured: nose tip -0.058, lips -0.076, chin -0.094 / sheet 15, 28, 42
+        hm = FaceMap(hm, ez, eyy, [0.0, 0.058, 0.076, 0.094], [0.0, 15.0, 28.0, 42.0])
+    print('global', vars(gm), 'head', vars(hm), 'eyes ref', er)
     vis_all = depth_buffer(look_parts)
     sk = skin_mask(rgb) & alpha
     skin_c = np.median(rgb[sk], 0); print('skin', skin_c)
@@ -159,7 +173,11 @@ if __name__ == '__main__':
     skin_c = np.clip(skin_c * WARM, 0, 1)
     # body skin: head region (face, ears, neck) projected with the head map; rest = arm skin with in-painting
     de_ = abs(er[1][0] - er[0][0]); scalp_ = np.zeros_like(alpha); scalp_[:int(eyy - 0.62 * de_)] = True  # above the brows: the app's hair
-    head_front = fill(rgb, alpha & (skin_mask(rgb) | ((rgb.mean(-1) < 0.5) & ~scalp_)), 2)  # keep eyes/brows/lips (dark) on the face; scalp = skin under the fade
+    dark_ok = ~scalp_
+    if FEM:  # dark features only inside the face oval: not her side strands, hoops or the neck shadow under the chin
+        cxe = (er[0][0] + er[1][0]) / 2; yy_, xx_ = np.mgrid[:alpha.shape[0], :alpha.shape[1]]; ytop = eyy - 0.62 * de_; ybot = eyy + 42.0
+        dark_ok &= (((xx_ - cxe) / (0.84 * de_)) ** 2 + ((yy_ - (ytop + ybot) / 2) / ((ybot - ytop) / 2)) ** 2) < 1.0
+    head_front = fill(rgb, alpha & (skin_mask(rgb) | ((rgb.mean(-1) < 0.5) & dark_ok)), 2)  # keep eyes/brows/lips (dark) on the face; scalp = skin under the fade
     ska = sk.copy(); ska[int(gm(0, 0.78)[1]):] = False  # arms/hands only (shoe leather reads as skin)
     body_front = fill(rgb, ska, 2)
     plate = np.ones_like(rgb) * skin_c * 0.97
@@ -227,7 +245,7 @@ if __name__ == '__main__':
         stitch = sel_ & (np.abs(np.mod(ht_ / 0.028, 1.0) - 0.5) < 0.05) & (ht_ < 0.1); csh[stitch] = np.array([0.2, 0.2, 0.21])
         toe = sel_ & (Y_ < y0s + (y1s - y0s) * 0.12) & (ht_ < 0.05); csh[toe] = np.array([0.13, 0.13, 0.135])
     csh[~ms_] = 0.07; save(csh, 'shoes')
-    json.dump({'global': vars(gm), 'head': vars(hm)}, open(DBG + '/maps.json', 'w'))
+    json.dump({'global': vars(gm), 'head': vars(hm)}, open(DBG + '/maps.json', 'w'), default=lambda o: o.tolist() if hasattr(o, 'tolist') else str(o))
     # ---- every wardrobe garment from its own app render ----
     import re
     src = open(os.path.join(os.path.dirname(__file__), '..', 'src', 'crew.js')).read()

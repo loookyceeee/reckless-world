@@ -274,7 +274,7 @@ def _stance0():
     for bn, ang in (('spine_02', 0.0), ('spine_03', -3.0), ('neck_01', -5.0), ('Head', 3.0)):
         if bn in arm.pose.bones: arm.pose.bones[bn].rotation_quaternion = Euler((math.radians(ang), 0, 0)).to_quaternion()
     bpy.context.view_layer.update()
-def apply_field(objs, path, ref_obj, depth_torso=0.5, maxk=(0.55, 1.9), snap=False, maxpx=1e9, keep_head=False):
+def apply_field(objs, path, ref_obj, depth_torso=0.5, maxk=(0.55, 1.9), snap=False, maxpx=1e9, keep_head=False, skip=()):
     if not path or not _os.path.exists(path): return
     F = _json.load(open(path)); rows = F['rows']; H_ = F['H']; W_ = F.get('W', 300)
     prev_mode = bpy.context.object.mode if bpy.context.object else 'OBJECT'
@@ -311,6 +311,7 @@ def apply_field(objs, path, ref_obj, depth_torso=0.5, maxk=(0.55, 1.9), snap=Fal
         disp = {}; proj = {}
         for i, (v, d) in enumerate(zip(o.data.vertices, Wm)):
             if not d: continue
+            if skip and (dom(d) or '').startswith(skip): continue   # sleeves keep their tube round the arm (a row warp would slide them onto the torso)
             pr = toA2 @ v.co; pp = posed(pr, d); xw, zw = pp.x * kz, pp.z * kz + zoff
             X = 500 + xw * S0; Y = 1350 - (zw - z0) * S0; xn = X * s_ + off; yn = 10 + (Y - t) * s_
             if F.get('snapall') and _os.environ.get('V5DBG'): _DBG.append((xn, yn))
@@ -624,7 +625,7 @@ def make(kind):
         k = 1.0
         if kind in ('tee', 'crop'): k = ((1.12 + 0.95 * tparam(p, b) ** 1.2) * (1.12 if FEM else 1.0)) if b.startswith('upperarm') else 1.27  # no puff over the shoulder, flares to the hem  # sleeve flares toward the hem
         elif kind == 'long': k = 1.35 if b.startswith(('upperarm', 'lowerarm')) else 1.1
-        elif kind == 'hoodie': k = 1.45 if b.startswith(('upperarm', 'lowerarm')) else (1.0 if b == 'Head' else 1.2)
+        elif kind == 'hoodie': k = (1.22 if FEM else 1.45) if b.startswith(('upperarm', 'lowerarm')) else (1.0 if b == 'Head' else 1.2)  # v5 female hoodie sleeves sit closer to the arm
         elif kind == 'jeans': k = (1.35 if b.startswith('thigh') else 1.95 if b.startswith('calf') else 1.12)
         elif kind == 'pants': k = (1.3 if b.startswith('thigh') else (1.45 + 1.15 * tparam(p, b) ** 1.5 if VAR == 'W' else 1.6) if b.startswith('calf') else 1.1)  # VAR W: v5 artillery cargos flare wide to the hem
         elif kind == 'cuffed': k = (1.3 if b.startswith('thigh') else 1.45 if b.startswith('calf') else 1.1)
@@ -661,7 +662,7 @@ def make(kind):
                 q_ = p - hc; dv_ = q_.normalized(); rr = 0.0
                 for hq, hqn in _HENV:
                     if hqn.dot(dv_) > 0.95: rr = max(rr, hq.dot(dv_))
-                v.co = toA.inverted() @ (hc + dv_ * (max(rr, q_.length) + 0.034 + 0.03 * smooth(0.0, -0.11, q_.z)))  # flares out over the jaw onto the shoulders like v5
+                v.co = toA.inverted() @ (hc + dv_ * (max(rr, q_.length) + 0.034 + (0.045 if FEM else 0.03) * smooth(0.0, -0.11, q_.z)))  # flares out over the jaw onto the shoulders like v5
             else: v.co = v.co + norms[v.index] * d
     bmesh.ops.delete(bm, geom=kill, context='VERTS')
     if kind in ('tee', 'crop', 'long', 'hoodie'):  # drape: relax the shell so the base's muscle relief doesn't print through
@@ -715,7 +716,7 @@ for k, vv, nm in (('shorts', 'L', 'shortsL'), ('pants', 'W', 'pantsW'), ('long',
 VAR = ''
 if FLD:
     for _k in ['tee', 'crop', 'long', 'hoodie', 'jeans', 'pants', 'cuffed', 'shorts', 'shoes', 'shortsL', 'pantsW', 'jersey', 'teeD']:
-        for _fp in sorted(_glob.glob(FLD + '/' + _k + '[0-9]*.json')): apply_field([bpy.data.objects['G_' + _k]], _fp, body, snap=_os.environ.get('V5SNAP', '1') == '1', maxpx=float(_os.environ.get('V5MAXPX', '9')))
+        for _fp in sorted(_glob.glob(FLD + '/' + _k + '[0-9]*.json')): apply_field([bpy.data.objects['G_' + _k]], _fp, body, snap=_os.environ.get('V5SNAP', '1') == '1', maxpx=float(_os.environ.get('V5MAXPX', '9')), skip=('upperarm', 'lowerarm', 'hand'))
     for _fp in sorted(_glob.glob(FLD + '/hair[0-9]*.json')):  # hair volume to the v5 silhouette (the face itself stays put)
         apply_field([o for o in bpy.data.objects if o.type == 'MESH' and o.name in ('Hair', 'Curls')], _fp, body, maxpx=12)
 # hood: relax the field-warped head shell into a smooth bag before the push-out
@@ -723,6 +724,15 @@ if 'G_hoodie' in bpy.data.objects:
     _ho = bpy.data.objects['G_hoodie']; _bm = bmesh.new(); _bm.from_mesh(_ho.data); _dl = _bm.verts.layers.deform.active; _gn = {g.index: g.name for g in _ho.vertex_groups}
     _hv = [v for v in _bm.verts if _dl and len(v[_dl]) and _gn.get(max(v[_dl].items(), key=lambda kv: kv[1])[0], '') in ('Head', 'neck_01') and not v.is_boundary]
     for _ in range(6): bmesh.ops.smooth_vert(_bm, verts=_hv, factor=0.5, use_axis_x=True, use_axis_y=True, use_axis_z=True)
+    # face opening: relax the jagged rim along itself (each rim vert -> mean of its two rim neighbours), a clean oval edge
+    _rim = [v for v in _bm.verts if v.is_boundary and _dl and len(v[_dl]) and _gn.get(max(v[_dl].items(), key=lambda kv: kv[1])[0], '') == 'Head']
+    _rs = set(_rim)
+    for _ in range(14):
+        _np = {}
+        for v in _rim:
+            nb = [e.other_vert(v) for e in v.link_edges if e.is_boundary and e.other_vert(v) in _rs]
+            if len(nb) == 2: _np[v] = v.co * 0.4 + (nb[0].co + nb[1].co) * 0.3
+        for v, c in _np.items(): v.co = c
     _bm.to_mesh(_ho.data); _bm.free()
 # keep every garment outside the body after the silhouette fields (an inward pull must never let skin show through the cloth)
 from mathutils.bvhtree import BVHTree
@@ -735,6 +745,39 @@ for _o in [o for o in bpy.data.objects if o.type == 'MESH' and o.name.startswith
         _sd = (_v.co - _loc).dot(_nrm)
         if _sd < _mg: _v.co = _v.co + _nrm * (_mg - _sd); _n += 1
     print('pushout', _o.name, _n)
+# ...and again in the idle stance (the pose the game shows most): skinning differences at elbows/hips can still let skin through
+def _pushout_posed(objs, mg_of):
+    bpy.context.view_layer.objects.active = arm; bpy.ops.object.mode_set(mode='POSE'); _stance0()
+    SK = {pb.name: (pb.matrix @ pb.bone.matrix_local.inverted()) for pb in arm.pose.bones}
+    def blend(d):
+        tw = sum(d.values()) or 1.0; M = None
+        for bn, w in d.items():
+            m = SK.get(bn)
+            if m is None: continue
+            M = m * (w / tw) if M is None else M + m * (w / tw)
+        return M
+    toA_ = arm.matrix_world.inverted() @ body.matrix_world
+    Wb = wmap(body); bp = []
+    for v, d in zip(body.data.vertices, Wb):
+        M = blend(d) if d else None; bp.append((M @ (toA_ @ v.co)) if M is not None else (toA_ @ v.co))
+    bv = BVHTree.FromPolygons(bp, [pl.vertices[:] for pl in body.data.polygons])
+    for o in objs:
+        Wo = wmap(o); tA = arm.matrix_world.inverted() @ o.matrix_world; inv = tA.inverted(); mg = mg_of(o.name); n = 0
+        for v, d in zip(o.data.vertices, Wo):
+            if not d: continue
+            M = blend(d)
+            if M is None: continue
+            pr = tA @ v.co; pp = M @ pr; loc, nrm, _i, _d = bv.find_nearest(pp)
+            if loc is None: continue
+            sd = (pp - loc).dot(nrm)
+            if sd < mg:
+                try: dr = M.to_3x3().inverted() @ (nrm * (mg - sd))
+                except Exception: continue
+                v.co = inv @ (pr + dr); n += 1
+        print('pushout posed', o.name, n)
+    for pb in arm.pose.bones: pb.matrix_basis.identity()
+    bpy.ops.object.mode_set(mode='OBJECT')
+_pushout_posed([o for o in bpy.data.objects if o.type == 'MESH' and o.name.startswith('G_')], lambda n: 0.0025 if n in ('G_briefs', 'G_bra') else 0.007)
 # --- female tee re-model (TEE2): a real boxy tee instead of the inflated body shell. Torso = lofted superellipse rings
 # (straight sides below the chest, following the shoulder slope above), sleeves = straight wide tubes along the upper arm;
 # boolean union -> voxel remesh (clean manifold, no torn sleeves) -> pushed outside the body -> straight hem/sleeve/neck cuts ->
@@ -914,6 +957,12 @@ arm.animation_data.action = None
 s = TARGET_H / hcur; arm.scale = (arm.scale[0] * s, arm.scale[1] * s, arm.scale[2] * s)
 for o in list(bpy.context.scene.objects):  # drop helper spheres (42-vert Icosphere shipped with the base kit)
     if o.type == 'MESH' and o.name not in ('Stud', 'Curls', 'Soles') and (o.name.startswith('Icosphere') or len(o.data.vertices) < 60): bpy.data.objects.remove(o, do_unlink=True)
+# --- size budget: collapse-decimate the clothing shells and the male curl crop (only one top + one bottom show at a time;
+# the body/face keep full density for the projected face texture). Weights survive the collapse. AV_DEC=0 disables.
+if _os.environ.get('AV_DEC', '1') == '1':
+    for o in [o for o in bpy.context.scene.objects if o.type == 'MESH' and (o.name.startswith('G_') and o.name not in ('G_briefs', 'G_bra') or (o.name == 'Curls' and not FEM))]:
+        n0 = len(o.data.polygons); md = o.modifiers.new('dec', 'DECIMATE'); md.ratio = 0.5 if o.name == 'Curls' else 0.55; md.use_collapse_triangulate = True
+        bpy.context.view_layer.objects.active = o; bpy.ops.object.modifier_apply(modifier=md.name); print('decimate', o.name, n0, '->', len(o.data.polygons))
 # --- bake UVs + projection dump: every visible part gets a fresh non-overlapping UV layout (smart project) and its posed
 # (idle frame 1 = the app's stance) loop positions/normals are dumped so tools/bake_avatar_tex.py can project the app's
 # front renders onto it (face, hair, skin, every wardrobe garment). See research/techniques-sources.md (texture projection).
