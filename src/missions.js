@@ -92,12 +92,12 @@ export function createMissions(ctx) {
     bumpNot();
     if (!w) { PR.state = 'bank'; const d = ctx.drops.slice().sort((a, b) => near(a, P) - near(b, P))[0] || ctx.pickup; PR.bankAt = d;
       ctx.setDest({ x: d.x, z: d.z, label: 'BANK THE RUN · ' + (d.name || 'CREW DROP'), kind: 'waypoint', mission: true }); hud.note({ kicker: 'POSTER RUN', title: 'ALL WALLS UP', body: 'Walk (don\'t sprint) to the crew drop to bank the run. Sprinting past a patrol now re-raises heat.' }); return true; }
-    hud.toast(`POSTER UP · ${ctx.posters.length - left().length} / ${ctx.posters.length}${PR.lastHalf ? ' · HALF POSTER' : ''}${ev && !ev.blocked ? ' · TEST EVENT QUEUED' : ''}`);
+    hud.toast(`POSTER UP · ${ctx.posters.length - left().length} / ${ctx.posters.length}${PR.lastHalf ? ' · HALF POSTER' : ''}${ev && !ev.blocked ? ' · SENT TO RECKLESS CREW' : ''}`);
     return true;
   }
   function bank() {
     { PR.state = 'done'; ctx.setDest(null); const tot = ctx.posters.length;
-      const lines = [`POSTERS ${tot} / ${tot}`]; if (PR.queued) lines.push(`TEST EVENT QUEUED × ${PR.queued}`); if (PR.nb) lines.push(`${PR.nb} OVER TODAY'S LIMIT · NOT QUEUED`); if (!PR.queued && !PR.nb) lines.push('SIGN IN WITH YOUR CREW EMAIL TO QUEUE POSTER EVENTS'); lines.push(`TIME ${fmt(tNow - PR.t0)}`);
+      const lines = [`POSTERS ${tot} / ${tot}`]; if (PR.queued) lines.push(`SENT TO RECKLESS CREW × ${PR.queued}`); if (PR.nb) lines.push(`${PR.nb} OVER TODAY'S LIMIT · NOT QUEUED`); if (!PR.queued && !PR.nb) lines.push('SIGN IN WITH YOUR CREW EMAIL TO QUEUE POSTER EVENTS'); lines.push(`TIME ${fmt(tNow - PR.t0)}`);
       if (PR.half) lines.push(`HALF POSTERS ${PR.half}`); if (!H.seenRun) lines.push('UNSEEN ✓'); lines.push('BANKED · NO XP IN THE DEMO');
       hud.stamp({ title: 'RUN BANKED', sub: 'POSTER RUN', lines });
     }

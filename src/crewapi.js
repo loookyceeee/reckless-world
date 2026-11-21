@@ -1,5 +1,5 @@
-// Crew event client for the live APP DEV routes (deployed 61e9f1f). BEHIND A FLAG THAT STAYS OFF until Luke says switch:
-// with EVENTS_LIVE false every call is a no-op and the game keeps only the local test:true event log (events.js).
+// Crew event client for the live APP DEV routes (deployed 61e9f1f). LIVE since 21 Nov 2026 (Luke, 12:47: 'Turn everyone on, app is finished too';
+// crew_config status live, XP from 2026-11-21T00:00:00Z). Signed-in players' visits and posters go to the Crew server, which alone decides XP.
 // The game never sends XP amounts; the server decides recorded/counted (reason DAILY_CAP | WEEKLY_CAP | DUPLICATE).
 //   POST /api/crew/events/rave/start  {raveId}     -> {ok, sessionId, minSeconds:600, startedAt}
 //   POST /api/crew/events/rave/finish {sessionId}  -> {ok, recorded, counted, reason?} | 409 TOO_SOON {remainingSeconds} (session stays open) | 404 SESSION_NOT_FOUND
@@ -7,7 +7,7 @@
 //   GET  /api/crew/events/me -> today / week counts
 // 401 SESSION = sign in again; 429 RATE = back off (server limit 30 per email per 10 min; we self-limit to 20).
 import { API, getAccount } from './crew.js';
-export const EVENTS_LIVE = false; // DO NOT FLIP without Luke's go-ahead
+export const EVENTS_LIVE = true; // live (crew_config status: live). Sends event types + ids only, never XP amounts. Guests send nothing.
 const ID = /^[A-Za-z0-9_.:-]{1,64}$/;
 export const validId = (s) => typeof s === 'string' && ID.test(s);
 const sent = []; let backoffUntil = 0; const WIN = 600e3, MAX = 20;
@@ -45,3 +45,5 @@ export async function raveFinish() {
 export const posterPlaced = (posterId) => validId(posterId) ? call('POST', '/api/crew/events', { type: 'poster_placed', posterId }) : Promise.resolve({ skipped: 'BAD_ID' });
 export const eventsMe = () => call('GET', '/api/crew/events/me');
 export const openSession = () => rave;
+/** Player left before 10 minutes: forget the open session (no finish, no late retry after they've gone). */
+export const raveDrop = () => { clearTimeout(retryT); rave = null; };
