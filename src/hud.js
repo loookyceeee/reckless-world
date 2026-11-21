@@ -252,7 +252,7 @@ export function createHUD(app) {
       const rows = [...C.WARDROBE].sort((a, b) => a.level - b.level).map(p => { const locked = p.level > lvl, on = !locked && st.fit[p.slot] === p.id;
         return `<button class="cw ${on ? 'sel' : ''} ${locked ? 'lock' : ''}" data-id="${p.id}" ${locked ? 'disabled' : ''}><img src="${C.iconFor(p.id)}" onerror="this.onerror=null;this.src='${C.iconFallback(p.id)}'" alt="${p.name}" loading="lazy"/><span><b>${p.name}</b><small>${p.slot.toUpperCase()} · ${locked ? 'LOCKED · UNLOCKS AT LVL ' + p.level : 'LVL ' + p.level}</small></span></button>`; }).join('');
       const acct = st.account ? `<p class="fine">SIGNED IN AS ${st.account.email.toUpperCase()} · ${st.xp == null ? 'CREW NOT LOADED' : 'LVL ' + lvl + ' · FIT FROM THE APP'} <button id="crewOut">SIGN OUT</button></p>`
-        : `<h3>SIGN IN <small>(SAME CREW ACCOUNT AS THE APP · LOADS YOUR EQUIPPED FIT)</small></h3><div class="row"><input id="email" type="email" placeholder="you@example.com" value="${st.email || ''}"/><button id="crewIn">SIGN IN</button></div>`;
+        : `<h3>SIGN IN <small>(SAME CREW ACCOUNT AS THE APP · LOADS YOUR EQUIPPED FIT)</small></h3><div class="row"><input id="email" type="email" autocomplete="email" placeholder="YOU@EXAMPLE.COM" value="${st.email || ''}"/><button id="crewIn">SIGN IN</button></div><div class="row hidden" id="pinrow"><input id="pin" type="password" inputmode="numeric" autocomplete="one-time-code" maxlength="12" placeholder="APP PIN"/></div><p class="fine">USE THE EMAIL ON YOUR RECKLESS RAVES APP. IF YOUR ACCOUNT HAS A PIN WE WILL ASK FOR IT.</p>`;
       open(`<h2>WARDROBE</h2><p class="sub">CLOTHING DROP 018 · ${st.account ? 'YOUR CREW FIT · LVL ' + lvl : 'SIGNED OUT · LVL 1 PIECES ONLY · SIGN IN TO WEAR WHAT YOUR CREW RANK UNLOCKS'}</p>
       <div class="crewfig"><img id="crewLook" alt="CREW AVATAR"/></div>
       <h3>CREW BASE <small>${st.baseFromApp ? '(SET IN THE APP FOR YOUR ACCOUNT)' : '(SAME WARDROBE ON BOTH)'}</small></h3><div class="basesel">${['male', 'female'].map(b => `<button data-b="${b}" class="${st.base === b ? 'sel' : ''}"${st.baseFromApp ? ' disabled' : ''}>${b.toUpperCase()}</button>`).join('')}</div>
@@ -262,7 +262,11 @@ export function createHUD(app) {
         overlay.querySelectorAll('.cw').forEach(x => x.classList.toggle('sel', st.fit[C.gearById(x.dataset.id).slot] === x.dataset.id));
         look(); });
       let lk = 0; const look = () => { const n = ++lk; C.composeLook(st.base, st.fit).then(u => { const im = overlay.querySelector('#crewLook'); if (im && n === lk && u) im.src = u; }); }; look();
-      const bi = overlay.querySelector('#crewIn'); if (bi) bi.onclick = async () => { const e = overlay.querySelector('#email').value.trim().toLowerCase(); st.setEmail(e); bi.textContent = '…'; try { await st.signIn(e); } catch (err) { api.toast('THAT EMAIL DOES NOT LOOK RIGHT'); bi.textContent = 'SIGN IN'; } };
+      const bi = overlay.querySelector('#crewIn'); if (bi) bi.onclick = async () => { const e = overlay.querySelector('#email').value.trim().toLowerCase(); const pinEl = overlay.querySelector('#pin'); const pin = pinEl ? pinEl.value.trim() : '';
+        if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)) return api.toast('THAT EMAIL DOES NOT LOOK RIGHT'); st.setEmail(e); bi.textContent = '…'; bi.disabled = true;
+        try { await st.signIn(e, pin || undefined); } catch (err) { bi.disabled = false; bi.textContent = 'SIGN IN'; const m = err && err.message;
+          if (m === 'PIN') { const row = overlay.querySelector('#pinrow'); if (row) row.classList.remove('hidden'); api.toast('ENTER YOUR APP PIN'); const pe = overlay.querySelector('#pin'); if (pe) pe.focus(); }
+          else api.toast(m === 'PIN_WRONG' ? 'THAT PIN DID NOT WORK' : m === 'RATE' ? 'TOO MANY TRIES · WAIT A FEW MINUTES' : m === 'EMAIL' ? 'THAT EMAIL DOES NOT LOOK RIGHT' : 'COULD NOT SIGN IN · CHECK YOUR CONNECTION'); } };
       const bo = overlay.querySelector('#crewOut'); if (bo) bo.onclick = () => st.signOut();
       overlay.querySelectorAll('.basesel button').forEach(b => b.onclick = () => { if (st.baseFromApp || !st.setBase) return; st.base = b.dataset.b; st.setBase(st.base); overlay.querySelectorAll('.basesel button').forEach(x => x.classList.toggle('sel', x.dataset.b === st.base)); look(); });
     },

@@ -145,6 +145,7 @@ async function start() {
   let player = createAvatar(scene, { name: 'player', outfit: 'skate', fit: true });
   await crewCfgP; window.__rw.crewRules = CR.CREW_RULES;
   const CREW = { fit: CR.loadFit(), xp: null, account: CR.getAccount() };
+  window.addEventListener('rw-signin-needed', () => { CR.signOut(); CREW.account = null; CREW.xp = null; setTimeout(() => { try { hud.toast('SESSION EXPIRED · SIGN IN AGAIN IN THE WARDROBE'); } catch (e) { } }, 0); });
   const applyFit = (f) => { f = CR.allowedFit(f, CR.playerLevel(CREW.xp)); CREW.fit = f; CR.saveFit(f); player.setFit(f, CR.visibleFor); }; applyFit(CREW.fit); window.__rw.applyFit = (f) => applyFit(f); window.__rw.fitRaw = (f) => player.setFit(f, CR.visibleFor); window.__rw.CR = CR;
   // smooth rigged crew avatar (models/avatar.glb); the procedural figure stands in until it loads (?procav keeps it)
   // crew base (MALE / FEMALE): ?base= for tests, else the app's avatar_base when signed in (read-only), else the local pick
@@ -157,7 +158,7 @@ async function start() {
   window.__rw.swapAvatar = swapAvatar; swapAvatar(CREW.base);
   const setBase = (b, fromApp = false) => { if (!['male', 'female'].includes(b)) return; if (!fromApp) CR.setLocalBase(b); CREW.baseFromApp = fromApp; if (b !== CREW.base) { CREW.base = b; swapAvatar(b); } };
   const loadBase = async () => { if (!CREW.account || Q.get('base')) return null; const b = await CR.readAvatarBase(CREW.account); /* avatar-base endpoint: 'male'|'female' only when set in the app, null when unset (or on failure) -> local pick / first-launch picker. GET only. */ if (b) setBase(b, true); return b; };
-  const loadCrew = async () => { if (!CREW.account) return; CREW.basePending = loadBase(); try { const r = await CR.readCrew(CREW.account); if (r) { CREW.xp = r.xp; if (r.fit.top || r.fit.outer || r.fit.legs) applyFit(r.fit); } } catch (e) { } }; loadCrew();
+  const loadCrew = async () => { if (!CREW.account) return; const me = await CR.authMe(CREW.account); if (me === 'expired') { CR.signOut(); CREW.account = null; setTimeout(() => { try { hud.toast('SESSION EXPIRED · SIGN IN AGAIN IN THE WARDROBE'); } catch (e) { } }, 0); return; } CREW.basePending = loadBase(); try { const r = await CR.readCrew(CREW.account); if (r) { CREW.xp = r.xp; if (r.fit.top || r.fit.outer || r.fit.legs) applyFit(r.fit); } } catch (e) { } }; loadCrew();
   const P = { x: ext.spawn.x, z: ext.spawn.z, heading: 0, speed: 0, dancing: false }; window.__rw.P = P; window.__rw.grid = () => city.grid;
   { const dx = ext.doorPos.x - P.x, dz = ext.doorPos.z - P.z; P.heading = Math.atan2(dx, dz); }
   // footstep dust puffs when sprinting
@@ -357,7 +358,7 @@ async function start() {
     if (k === 'm') { if (hud.isOpen()) return hud.close(); return hud.openMap(mapCtx()); }
     if (k === 'o') { if (hud.isOpen()) return hud.close(); const reopen = () => { hud.close(); app.key('o'); };
       return hud.openWardrobe(CR, { fit: { ...CREW.fit }, xp: CREW.xp, account: CREW.account, email: EV.getEmail(), setEmail: EV.setEmail, apply: applyFit,
-        signIn: async (e) => { CREW.account = await CR.signIn(e); await loadCrew(); reopen(); }, base: CREW.base, baseFromApp: CREW.baseFromApp, setBase: (b) => setBase(b), signOut: () => { CR.signOut(); CREW.account = null; CREW.xp = null; CREW.baseFromApp = false; if (CR.getLocalBase()) setBase(CR.getLocalBase()); applyFit(CREW.fit); reopen(); } }); }
+        signIn: async (e, pin) => { CREW.account = await CR.signIn(e, pin); await loadCrew(); reopen(); }, base: CREW.base, baseFromApp: CREW.baseFromApp, setBase: (b) => setBase(b), signOut: () => { CR.signOut(); CREW.account = null; CREW.xp = null; CREW.baseFromApp = false; if (CR.getLocalBase()) setBase(CR.getLocalBase()); applyFit(CREW.fit); reopen(); } }); }
     if (k === 'f') { if (app.inside && T.mode === 'rave' && T.danceFloor(P) && DANCE && !DANCE.active()) { standUp(); return DANCE.start({ venue: T.name, t }); } P.dancing = !P.dancing; return; }
     if (k === 'l' && app.inside) { setMode(T.mode === 'day' ? 'rave' : 'day'); hud.interior(true, T.mode); return; }
     if (k === 'p') return photo();

@@ -5,8 +5,9 @@
 //   poster_placed: ingest event_id = wp:<spot_id>:<h> (rebuilt by the flusher). The local queue id adds :<London day> so a spot
 //     whose event hit the cap can be re-sent on a later day (crew_config: over cap = spot not consumed).  h = sha256(trimmed lowercased email)[:12]. Guest play queues nothing.
 //   poster_placed:         + spot_id
-// The client NEVER awards XP or codes and never calls the Crew API. It only queues test events locally.
+// The client NEVER awards XP or codes. It queues test events locally; the live crew event routes are wired in crewapi.js behind EVENTS_LIVE (OFF).
 import { CREW_RULES } from './crew.js';
+import * as CAPI from './crewapi.js'; // live routes, flag OFF (no-ops) until Luke says switch
 const KEY = 'rw.eventQueue.v1', EMAIL = 'rw.email', LOG = 'rw.limitLog.v1';
 // ---- client-side mirror of the crew game limits (crew_config xp_rates.game). Display/queue hygiene only: the Crew
 // server is the authority; the game never awards XP. Per-day local record only: spots are never marked used for good here.
@@ -51,15 +52,15 @@ async function push(type, extra, meta) {
   q.push(meta ? { ...ev, _meta: meta } : ev); save(q); record(type, email, extra.spot_id); window.dispatchEvent(new CustomEvent('rw-event', { detail: ev })); return ev;
 }
 let session = null;
-export function raveEnter(venue) { session = { venue, session_id: 'temple-' + uid().slice(0, 18), enter_ms: Date.now(), queued: false }; return session; }
+export function raveEnter(venue) { CAPI.raveStart(String(venue || 'temple').replace(/[^A-Za-z0-9_.:-]/g, '').slice(0, 64) || 'temple'); session = { venue, session_id: 'temple-' + uid().slice(0, 18), enter_ms: Date.now(), queued: false }; return session; }
 export const dwell = () => (session ? (Date.now() - session.enter_ms) / 1000 : 0);
 // call every frame while inside: queues the attendance once the stay passes 10 minutes
 export async function raveTick() {
   if (!session || session.queued || dwell() < MIN_DWELL) return null; session.queued = true;
   return push('digital_rave_attended', { venue: session.venue, session_id: session.session_id, dwell_seconds: Math.floor(dwell()) }, { enter_ts: isoZ(new Date(session.enter_ms)), mark_ts: isoZ(new Date()) });
 }
-export async function raveExit() { const ev = await raveTick(); session = null; return ev; }
-export async function posterPlaced(spot_id) { return push('poster_placed', { spot_id }); }
+export async function raveExit() { CAPI.raveFinish(); const ev = await raveTick(); session = null; return ev; }
+export async function posterPlaced(spot_id) { CAPI.posterPlaced(String(spot_id)); return push('poster_placed', { spot_id }); }
 export function exportQueue() { // download as JSONL for tools/flush-events.mjs
   const text = queue().map(e => JSON.stringify(e)).join('\n') + '\n';
   const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: 'application/x-ndjson' })); a.download = 'rw-queued-events.jsonl'; a.click();

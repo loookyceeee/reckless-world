@@ -38,7 +38,7 @@
 .is-touch .btns{bottom:auto;top:110px}
 .is-touch .mapwrap{width:150px}.is-touch #minimap{width:150px;height:150px}
 .overlay{position:fixed;inset:0;background:#000d;z-index:30;display:flex;align-items:center;justify-content:center;text-transform:uppercase}
-.overlay.hidden{display:none}
+.overlay.hidden{display:none}.overlay .row.hidden{display:none}
 .panel{background:#000;border:2px solid #fff;padding:26px 28px;max-width:min(940px,94vw);max-height:92vh;overflow:auto;font-size:13px;line-height:1.5}
 .panel h2{font-family:var(--f1);font-weight:800;font-size:28px;margin:0 0 10px}.panel h3{font-family:var(--f1);font-size:12px;margin:18px 0 8px}
 .panel p{text-transform:none;opacity:.9}.panel a{color:#fff}.panel .fine{font-size:10px;opacity:.6;text-transform:uppercase}.panel .sub{font-family:var(--f1);font-size:10px;letter-spacing:.2em;opacity:.7;text-transform:uppercase}

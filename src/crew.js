@@ -105,11 +105,21 @@ export const saveFit = (f) => localStorage.setItem('rw.fit', JSON.stringify(f));
 export const toggle = (fit, piece) => ({ ...fit, [piece.slot]: fit[piece.slot] === piece.id ? null : piece.id });
 // ---- signed-in crew (same endpoints the app uses; read-only) ----
 export const getAccount = () => { try { return JSON.parse(localStorage.getItem('rw.crewAccount') || 'null'); } catch (e) { return null; } };
-export async function signIn(email) {
-  const r = await fetch(API + '/api/auth/request', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }) });
+// APP DEV auth: POST /api/auth/request {email, pin?} -> {ok,email,token} (30-day bearer). 426 UPDATE_APP = this account needs a PIN.
+const DAY30 = 30 * 864e5;
+export async function signIn(email, pin) {
+  const body = { email }; if (pin) body.pin = String(pin).trim();
+  const r = await fetch(API + '/api/auth/request', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   const p = await r.json().catch(() => ({}));
-  if (!r.ok || typeof p.token !== 'string') throw new Error(p.error || 'EMAIL');
-  const a = { token: p.token, email: p.email }; localStorage.setItem('rw.crewAccount', JSON.stringify(a)); return a;
+  if (r.status === 426) throw new Error(pin ? 'PIN_WRONG' : 'PIN');
+  if (r.status === 429) throw new Error('RATE');
+  if (!r.ok || typeof p.token !== 'string') throw new Error(r.status === 401 || r.status === 403 ? (pin ? 'PIN_WRONG' : 'EMAIL') : (p.error || 'EMAIL'));
+  const a = { token: p.token, email: p.email || email, exp: Date.now() + DAY30 }; localStorage.setItem('rw.crewAccount', JSON.stringify(a)); return a;
+}
+/** GET /api/auth/me with the stored bearer. 'ok' | 'expired' (401: sign in again) | 'offline' (keep the account, try later) */
+export async function authMe(acct = getAccount()) {
+  if (!acct) return 'expired'; if (acct.exp && Date.now() > acct.exp) return 'expired';
+  try { const r = await fetch(API + '/api/auth/me', { headers: { Authorization: 'Bearer ' + acct.token }, cache: 'no-cache' }); if (r.status === 401) return 'expired'; return r.ok ? 'ok' : 'offline'; } catch (e) { return 'offline'; }
 }
 export const signOut = () => localStorage.removeItem('rw.crewAccount');
 export async function readCrew(acct = getAccount()) {
