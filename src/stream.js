@@ -14,11 +14,11 @@ function roadRibbons(scene, runs, mat, name) {
       let dx = r[1 + b * 2] - r[1 + a * 2], dz = r[2 + b * 2] - r[2 + a * 2]; const L = Math.hypot(dx, dz) || 1; dx /= L; dz /= L;
       P.push(x - dz * w, 0.012, z + dx * w, x + dz * w, 0.012, z - dx * w); N.push(0, 1, 0, 0, 1, 0);
       if (i) { const k = base + i * 2; I.push(k - 2, k - 1, k, k - 1, k + 1, k); } } }
-  if (!I.length) return null; const vd = new VertexData(); vd.positions = P; vd.normals = N; vd.indices = I;
+  if (!I.length) return null; const vd = new VertexData(); vd.positions = new Float32Array(P); vd.normals = new Float32Array(N); vd.indices = P.length / 3 > 65535 ? new Uint32Array(I) : new Uint16Array(I);
   const m = new Mesh(name + 'roads', scene); vd.applyToMesh(m); m.material = mat; m.isPickable = false; return m;
 }
 let RM = null;
-export async function createStream(scene, city, { base = '/', radius = 650, drop = 950 } = {}) {
+export async function createStream(scene, city, { base = '/', radius = 650, drop = 950, lite = false } = {}) {
   const idx = await (await fetch(base + 'data/stream/index.json')).json(); const SZ = idx.size;
   const C = idx.chunks.map(([ix, iz, n]) => ({ ix, iz, n, st: 0, m: null, data: null, col: false }));
   let busy = false, acc = 0; const api = { chunks: C, radius, drop, loaded: () => C.filter(c => c.st === 2).length, buildings: () => C.reduce((a, c) => a + (c.st === 2 ? c.n : 0), 0) };
@@ -39,7 +39,7 @@ export async function createStream(scene, city, { base = '/', radius = 650, drop
   }
   api.update = (dt, x, z) => {
     acc += dt; if (acc < 0.4) return; acc = 0;
-    for (const c of C) if (c.st === 2 && dist(c, x, z) > api.drop) { if (c.m) for (const k of ['walls', 'roofs', 'roads']) if (c.m[k]) c.m[k].dispose(); c.m = null; c.st = 0; }
+    for (const c of C) if (c.st === 2 && dist(c, x, z) > api.drop) { if (c.m) for (const k of ['walls', 'roofs', 'roads']) if (c.m[k]) c.m[k].dispose(); c.m = null; c.st = 0; if (lite) c.data = null; } // LITE: also drop the parsed JSON (refetched from the HTTP cache if needed)
     if (busy) return;
     let best = null, bd = 1e9; for (const c of C) { if (c.st !== 0) continue; const d = dist(c, x, z); if (d < api.radius && d < bd) { bd = d; best = c; } }
     if (best) load(best);

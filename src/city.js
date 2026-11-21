@@ -92,6 +92,7 @@ export function obb(pts) {
   return best;
 }
 function polyArea(pts) { let a = 0; for (let i = 0; i < pts.length; i++) { const p = pts[i], q = pts[(i + 1) % pts.length]; a += p[0] * q[1] - q[0] * p[1]; } return Math.abs(a) / 2; }
+let LITE_GEO = false; // LITE (iOS / app / safe): no chimneys or parapets (~half the roof vertices)
 function roofGeom(pts, h, b, rc, wallCol, Rf, R) {
   const rf = b.rf; if (!rf || rf === 'flat' || h > 40) return false;
   const o = obb(pts); if (!o) return false;
@@ -113,7 +114,7 @@ function roofGeom(pts, h, b, rc, wallCol, Rf, R) {
     tri3(Rf, P(o.u0, h, o.v0), P(o.u0, h, o.v1), P(o.u0, top, vm), gc); tri3(Rf, P(o.u1, h, o.v1), P(o.u1, h, o.v0), P(o.u1, top, vm), gc);
   }
   // chimneys: brick stacks on the ridge at party walls of terraces (~ every 2nd house)
-  if (W < 14 && h < 16) {
+  if (LITE_GEO) { } else if (W < 14 && h < 16) {
     const brick = hex('#7a3e2c'), step = 5.4 * 2; const ang = Math.atan2(o.uz, o.ux);
     for (let u = o.u0 + 0.8 + (R() * 2); u < o.u1 - 0.6; u += step) {
       const c = P(u, 0, vm); boxAt(Rf, c[0], top - 1.0, c[2], 0.7, 2.1, 1.3, ang, brick);
@@ -155,14 +156,15 @@ function extrudeOne(b, W, Rf, grid, R) {
       const flat = pts.flat(); const tri = earcut(flat); const base = Rf.p.length / 3;
       for (const p of pts) { Rf.p.push(p[0], h, p[1]); Rf.n.push(0, 1, 0); Rf.c.push(rc.r, rc.g, rc.b, 1); }
       for (let i = 0; i < tri.length; i += 3) Rf.i.push(base + tri[i], base + tri[i + 1], base + tri[i + 2]);
-      if (pts.length < 40) parapet(pts, h, Color3.Lerp(col, hex('#000000'), 0.15), Rf);
+      if (pts.length < 40 && !LITE_GEO) parapet(pts, h, Color3.Lerp(col, hex('#000000'), 0.15), Rf);
     }
     return { ...b, pts, h };
 }
 function blockMeshes(scene, W, Rf, wm, rm, name) {
-  const wv = new VertexData(); wv.positions = W.p; wv.normals = W.n; wv.uvs = W.u; wv.colors = W.c; wv.indices = W.i;
+  const F = (a) => new Float32Array(a), IX = (a, n) => n > 65535 ? new Uint32Array(a) : new Uint16Array(a); // typed: Babylon keeps these arrays
+  const wv = new VertexData(); wv.positions = F(W.p); wv.normals = F(W.n); wv.uvs = F(W.u); wv.colors = F(W.c); wv.indices = IX(W.i, W.p.length / 3);
   const walls = toMesh(name + 'walls', wv, scene, wm); walls.isPickable = false;
-  const rv = new VertexData(); rv.positions = Rf.p; Rf.n = []; VertexData.ComputeNormals(Rf.p, Rf.i, Rf.n); rv.normals = Rf.n; rv.colors = Rf.c; rv.indices = Rf.i;
+  const rv = new VertexData(); rv.positions = Rf.p; Rf.n = []; VertexData.ComputeNormals(Rf.p, Rf.i, Rf.n); rv.positions = F(Rf.p); rv.normals = F(Rf.n); rv.colors = F(Rf.c); rv.indices = IX(Rf.i, Rf.p.length / 3);
   const roofs = toMesh(name + 'roofs', rv, scene, rm); roofs.isPickable = false; return { walls, roofs };
 }
 /** Build one streamed chunk's buildings (same look as the base city). Adds collision segments to the city grid once. */
@@ -173,7 +175,8 @@ export function buildChunkBuildings(scene, city, list, name, addCollision) {
   if (!W.i.length) return null;
   const m = blockMeshes(scene, W, Rf, city.mats.wm, city.mats.rm, name); return { ...m, buildings: out };
 }
-export async function buildCity(scene, { low = false } = {}) {
+export async function buildCity(scene, { low = false, lite = false } = {}) {
+  LITE_GEO = lite;
   const data = await (await fetch(import.meta.env.BASE_URL + 'data/city.json')).json();
   const root = new TransformNode('city', scene);
   const grid = new SegGrid(16);
@@ -344,7 +347,7 @@ export async function buildCity(scene, { low = false } = {}) {
       const wm = new StandardMaterial('festoonWire', scene); wm.diffuseColor = hex('#151515'); wm.specularColor = Color3.Black();
       for (let i = 0; i < WI.length; i += 3000) { const w = toMesh('festoonWire', merge(WI.slice(i, i + 3000)), scene, wm); w.parent = root; w.isPickable = false; } } }
   // puddles: glossy dark patches near the kerbs that catch lamp and moon highlights (wet Belfast night)
-  { const pud = []; const rr = rng(31); for (const r of roadsOut) { if (!r.d || r.t === 'service') continue; for (let i = 0; i < r.pts.length - 1; i++) { const a = r.pts[i], b = r.pts[i + 1]; const L = Math.hypot(b[0] - a[0], b[1] - a[1]); if (!(L > 0.05)) continue; const ux = (b[0] - a[0]) / L, uz = (b[1] - a[1]) / L; // zero-length segments gave NaN matrices = screen-filling wedges/bands
+  if (!lite) { const pud = []; const rr = rng(31); for (const r of roadsOut) { if (!r.d || r.t === 'service') continue; for (let i = 0; i < r.pts.length - 1; i++) { const a = r.pts[i], b = r.pts[i + 1]; const L = Math.hypot(b[0] - a[0], b[1] - a[1]); if (!(L > 0.05)) continue; const ux = (b[0] - a[0]) / L, uz = (b[1] - a[1]) / L; // zero-length segments gave NaN matrices = screen-filling wedges/bands
       for (let s = rr() * 25; s < L; s += 18 + rr() * 30) { const sd = rr() < 0.5 ? -1 : 1, off = (r.w / 2 - 0.6 - rr() * 1.2) * sd; pud.push([a[0] + ux * s - uz * off, a[1] + uz * s + ux * off, Math.atan2(ux, uz), 0.8 + rr() * 1.6]); } } }
     const pm = new StandardMaterial('puddle', scene); pm.diffuseColor = hex('#0e1016'); pm.specularColor = new Color3(1, 1, 1.05); pm.specularPower = 180; pm.emissiveColor = hex('#141a2a'); // opaque: a transparent thin-instance puddle broke the SSAO/prepass depth = dark wedges + bands across the screen
     const parts = [];

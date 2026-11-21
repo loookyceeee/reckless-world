@@ -15,10 +15,10 @@ export function splitMesh(mesh, cell) {
   if (groups.size < 2) return [mesh];
   const out = [];
   for (const [k, idx] of groups) {
-    const map = new Map(), p = [], n = [], u = [], c = [], ni = [];
-    for (const v of idx) { let m = map.get(v); if (m == null) { m = map.size; map.set(v, m); p.push(P[v * 3], P[v * 3 + 1], P[v * 3 + 2]); if (N) n.push(N[v * 3], N[v * 3 + 1], N[v * 3 + 2]); if (U) u.push(U[v * 2], U[v * 2 + 1]); if (C) c.push(C[v * 4], C[v * 4 + 1], C[v * 4 + 2], C[v * 4 + 3]); } ni.push(m); }
-    const F = (x) => new Float32Array(x); // typed arrays: Babylon keeps the CPU copy, plain JS arrays cost 2-3x the memory
-    const vd = new VertexData(); vd.positions = F(p); vd.indices = map.size > 65535 ? new Uint32Array(ni) : new Uint16Array(ni); if (N) vd.normals = F(n); if (U) vd.uvs = F(u); if (C) vd.colors = F(c);
+    // typed scratch sized to the worst case (every index a new vertex), then compacted: no plain JS arrays (8 B/number + growth) at peak
+    const L = idx.length, map = new Map(), p = new Float32Array(L * 3), n = N ? new Float32Array(L * 3) : null, u = U ? new Float32Array(L * 2) : null, c = C ? new Float32Array(L * 4) : null, ni = new Uint32Array(L);
+    for (let t = 0; t < L; t++) { const v = idx[t]; let m = map.get(v); if (m == null) { m = map.size; map.set(v, m); p[m * 3] = P[v * 3]; p[m * 3 + 1] = P[v * 3 + 1]; p[m * 3 + 2] = P[v * 3 + 2]; if (n) { n[m * 3] = N[v * 3]; n[m * 3 + 1] = N[v * 3 + 1]; n[m * 3 + 2] = N[v * 3 + 2]; } if (u) { u[m * 2] = U[v * 2]; u[m * 2 + 1] = U[v * 2 + 1]; } if (c) { c[m * 4] = C[v * 4]; c[m * 4 + 1] = C[v * 4 + 1]; c[m * 4 + 2] = C[v * 4 + 2]; c[m * 4 + 3] = C[v * 4 + 3]; } } ni[t] = m; }
+    const nv = map.size; const vd = new VertexData(); vd.positions = p.slice(0, nv * 3); vd.indices = nv > 65535 ? ni : new Uint16Array(ni); if (n) vd.normals = n.slice(0, nv * 3); if (u) vd.uvs = u.slice(0, nv * 2); if (c) vd.colors = c.slice(0, nv * 4);
     const m = new Mesh(mesh.name + '@' + k, mesh.getScene()); vd.applyToMesh(m, false); m.material = mesh.material; m.parent = mesh.parent; m.isPickable = mesh.isPickable; m.receiveShadows = mesh.receiveShadows; m.renderingGroupId = mesh.renderingGroupId; m.visibility = mesh.visibility; m.hasVertexAlpha = mesh.hasVertexAlpha; m.alphaIndex = mesh.alphaIndex;
     m.metadata = { chunkOf: mesh.name }; out.push(m);
   }
@@ -108,4 +108,15 @@ function bakeByMaterial(parts, expand = true) {
     g.forEach(p => p.dispose(false, false)); out.push(m);
   }
   return out;
+}
+
+// LITE: drop the CPU copies of static chunk geometry once it is on the GPU (the game never picks or re-reads it).
+// Saves ~200 MB on the phone city. Trade-off: after a WebGL context loss these meshes can't be rebuilt, so the boot guard asks for RETRY.
+export function releaseCPU(chunks) {
+  let freed = 0; const seen = new Set();
+  for (const { m } of chunks) { const g = m.geometry; if (!g || seen.has(g)) continue; seen.add(g);
+    try { const vbs = g.getVertexBuffers() || {}; for (const k in vbs) { const b = vbs[k] && vbs[k]._buffer; if (b && b._data && !b.isUpdatable()) { freed += (b._data.byteLength || 0); b._data = null; } }
+      if (g._indices && g._indices.length) { g._totalIndices = g._indices.length; freed += g._indices.byteLength || g._indices.length * 4; g._indices = []; } } catch (e) { } }
+  if (typeof window !== 'undefined') window.__rwLiteFreed = (window.__rwLiteFreed || 0) + freed;
+  return freed;
 }

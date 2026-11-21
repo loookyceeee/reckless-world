@@ -32,7 +32,7 @@ import '@babylonjs/core/Engines/WebGPU/Extensions/engine.dynamicTexture'; import
 import '@babylonjs/core/Rendering/edgesRenderer';
 import '@babylonjs/core/Animations/animatable';
 import { buildCity, updateCity } from './city.js';
-import { chunkStatic, freezeMaterials, TIERS } from './perf.js';
+import { chunkStatic, freezeMaterials, TIERS, releaseCPU } from './perf.js';
 import { buildSky, applyWet, applyWetAsphalt } from './sky.js';
 import { buildMidkit } from './midkit.js';
 import { createStream } from './stream.js';
@@ -70,7 +70,11 @@ const Q = new URLSearchParams(location.search);
 const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
 // ?safe=1: lowest settings, no post-processing at all (for devices that show a black screen)
 const SAFE = Q.has('safe') || !!window.__rwAutoSafe; // __rwAutoSafe: index.html boot guard saw the last load on this phone never finish
-const LOW = SAFE || Q.has('low') || (isTouch && Math.min(screen.width, screen.height) < 900);
+// LITE (docs/PERF.md): hard low-memory profile for iOS (WKWebView / Safari jetsam limit), the app WebView (?app=1) and safe mode.
+// ?full opts out, ?lite forces it. Desktop and Android web keep their tiers.
+const IOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const LITE = !Q.has('full') && (SAFE || Q.get('app') === '1' || IOS || Q.has('lite'));
+const LOW = SAFE || LITE || Q.has('low') || (isTouch && Math.min(screen.width, screen.height) < 900);
 const HIQ_K = !isTouch && !LOW;
 const app = { title: true, paused: false, inside: false, live: !Q.has('nolive'), keys: new Set(), key: null };
 window.__rw = { ready: false, app };
@@ -98,7 +102,7 @@ async function start() {
   DG.info.stage = 'engine'; const engine = await makeEngine(canvas); if (Q.has('novao')) engine.disableVertexArrayObjects = true; bar(15); DG.info.engine = engine.__kind; DG.info.gpu = gpuName(engine); DG.log('engine', engine.__kind, DG.info.gpu);
   engine.onContextLostObservable && engine.onContextLostObservable.add(() => { console.error('WebGL context lost'); DG.show('graphics context lost'); });
   engine.setHardwareScalingLevel(SAFE ? 2 : LOW ? 1.5 : 1 / Math.min(1.5, devicePixelRatio || 1));
-  if (isTouch) try { const caps = engine.getCaps(); caps.maxTextureSize = Math.min(caps.maxTextureSize, 1024); caps.maxCubemapTextureSize = Math.min(caps.maxCubemapTextureSize, 512); } catch (e) {} // G: phones resize anything bigger than 1024 px on upload (GPU memory guard for future packs)
+  if (isTouch || LITE) try { const caps = engine.getCaps(); caps.maxTextureSize = Math.min(caps.maxTextureSize, LITE ? 512 : 1024); caps.maxCubemapTextureSize = Math.min(caps.maxCubemapTextureSize, LITE ? 256 : 512); } catch (e) {} // G: phones resize anything bigger than 1024 px on upload (GPU memory guard for future packs)
   const scene = new Scene(engine); scene.skipPointerMovePicking = true;
   const NIGHT = new Color4(0.07, 0.075, 0.14, 1);
   scene.clearColor = NIGHT; scene.ambientColor = new Color3(0.2, 0.2, 0.25);
@@ -110,7 +114,7 @@ async function start() {
   let glow = null; if (!LOW && !Q.has('noglow')) { try { glow = new GlowLayer('glow', scene, { mainTextureRatio: 0.35, blurKernelSize: 32 }); glow.intensity = 0.5; } catch (e) { console.warn('glow off', e); glow = null; } }
   // cinematic pipeline: gentle bloom, ACES filmic tone mapping, contrast grade, vignette, light grain, FXAA (+ SSAO on ?ssao)
   let pipe = null, SSAO = null;
-  if (!SAFE && !Q.has('nopost')) try {
+  if (!SAFE && !LITE && !Q.has('nopost')) try {
     pipe = new DefaultRenderingPipeline('cine', true, scene, [cam0]);
     pipe.fxaaEnabled = true; pipe.bloomEnabled = !LOW; pipe.bloomThreshold = 0.72; pipe.bloomWeight = 0.32; pipe.bloomKernel = 48; pipe.bloomScale = 0.5;
     pipe.imageProcessingEnabled = true; const ip = pipe.imageProcessing; ip.toneMappingEnabled = true; ip.toneMappingType = ImageProcessingConfiguration.TONEMAPPING_ACES; ip.exposure = 1.4; ip.contrast = 1.1;
@@ -127,19 +131,20 @@ async function start() {
   await loadAnims(import.meta.env.BASE_URL + 'data/anims.json').catch(e => console.warn('anims', e));
 
   const crewCfgP = CR.loadCrewConfig(); CR.loadAvatarManifest(); window.__rw.crewArt = () => CR.avatarArtSource(); window.__rw.CR = CR; // loyalty's ranks/unlocks/starter fit, fetched while the city builds
-  const city = await buildCity(scene, { low: LOW }); bar(55);
+  const city = await buildCity(scene, { low: LOW, lite: LITE }); bar(55);
   const MID = HIQ_K && !Q.has('nomid') ? await buildMidkit(scene, city.root, { base: import.meta.env.BASE_URL }).catch(e => { console.warn('midkit', e); return null; }) : null; window.__rw.mid = MID; // desktop: Kenney mid-distance street fill (chunked + culled with the city)
   const HIQ = !isTouch && !LOW && !Q.has('nowet'); const SKY = buildSky(scene, { low: LOW, hi: HIQ }); scene.__env = SKY.env; if (HIQ) applyWetAsphalt(scene);
   applyWet(scene, SKY.env, { roads: [0.5, 0.02, 0.04, 2.5], puddle: [1.0, 0.4, 0.3, 1.6], markings: [0.3, 0.02], pavement: [0.12, 0.0, 0.02, 3.5] });
   // perf: split merged + thin-instanced static city meshes into 96 m cells, freeze them, distance-cull per tier
-  const STREAM = Q.has('nostream') ? null : await createStream(scene, city, { base: import.meta.env.BASE_URL }).catch(e => { console.warn('stream', e); return null; }); window.__rw.STREAM = STREAM;
+  const STREAM = Q.has('nostream') ? null : await createStream(scene, city, { base: import.meta.env.BASE_URL, lite: LITE, radius: LITE ? 150 : 650, drop: LITE ? 400 : 950 }).catch(e => { console.warn('stream', e); return null; }); window.__rw.STREAM = STREAM;
   const culler = Q.has('nochunk') ? null : chunkStatic(city.root, { expand: !(isTouch || Q.has('noexpand')) || Q.has('expand'), cell: Number(Q.get('cell')) || 128, skip: [...city.beacons.map(b => b.m.name), /^midkit/] });
+  if (LITE && culler && !Q.has('keepcpu')) setTimeout(() => { try { releaseCPU(culler.chunks); } catch (e) { console.warn('releaseCPU', e); } }, 0); // after the first upload
   // sharper ground/facade textures at grazing angles: anisotropic filtering (8x desktop, 4x phones, off in safe mode)
   { const af = SAFE || /swiftshader|llvmpipe|software/i.test(DG.info.gpu) ? 1 : LOW ? 4 : 8; for (const t of scene.textures) if (t && 'anisotropicFilteringLevel' in t && !t.isCube) t.anisotropicFilteringLevel = af; }
   freezeMaterials(scene, ['trunk', 'leaf', 'furn', 'lampPoleM', 'pave', 'roads', 'pavement', 'markings']);
   const templeB = city.buildings.find(b => b.temple);
   const ext = buildTempleExterior(scene, templeB, city.grid); ext.root.parent = city.root;
-  const TEMPLE = buildTempleInterior(scene, { glow, low: LOW, bakeCrowd: () => bakeCrowdVariants(scene, { lod: LOW ? 0.28 : isTouch ? 0.26 : 0.33, simplify: Q.has('nosimp') ? 0 : 0.3 }), makeDancer: (i) => { const a = createAvatar(scene, { name: 'dancer' + i, outfit: ['skate', 'stan', 'stanfull', 'stanfull', 'skate', 'stan'][i], decals: true, lod: 0.5 }); return a; } });
+  const TEMPLE = buildTempleInterior(scene, { glow, low: LOW, bakeCrowd: () => bakeCrowdVariants(scene, { lod: LOW ? 0.28 : isTouch ? 0.26 : 0.33, simplify: Q.has('nosimp') || LITE ? 0 : 0.3 }), makeDancer: (i) => { const a = createAvatar(scene, { name: 'dancer' + i, outfit: ['skate', 'stan', 'stanfull', 'stanfull', 'skate', 'stan'][i], decals: true, lod: 0.5 }); return a; } });
   let T = TEMPLE; // the live interior (Temple or one of the clubs built on first entry)
   T.cam = cam; T.name = 'THE TEMPLE'; T.sub = '8 CARLISLE CIRCUS'; T.exitLabel = 'CARLISLE CIRCUS';
   T.root.setEnabled(false);
@@ -241,7 +246,8 @@ async function start() {
   if (glow) for (const me of T.glowSkip()) glow.addExcludedMesh(me);
   if (glow) for (const ps of posters) glow.addExcludedMesh(ps.mesh); // photo posters: no bloom wash
   let mapBase = buildMinimapBase(city);
-  try { const meta = await (await fetch(import.meta.env.BASE_URL + 'data/minimap_meta.json')).json(); const im = await loadMinimapImage(import.meta.env.BASE_URL + 'data/' + meta.file, meta); if (im) mapBase = Object.assign(im, { bounds: mapBase.bounds, proc: mapBase }); } catch (e) { console.warn('minimap', e); }
+  try { const meta = await (await fetch(import.meta.env.BASE_URL + 'data/minimap_meta.json')).json(); const im = await loadMinimapImage(import.meta.env.BASE_URL + 'data/' + meta.file, meta); if (im && LITE) { const k = 0.5, cv = document.createElement('canvas'); cv.width = Math.round(im.canvas.width * k); cv.height = Math.round(im.canvas.height * k); cv.getContext('2d').drawImage(im.canvas, 0, 0, cv.width, cv.height); const S = im.S * k; Object.assign(im, { canvas: cv, S, tx: (x) => (x - im.x0) * S, ty: (z) => (im.ztop - z) * S }); } // LITE: half-res minimap (36 MB decoded -> 9 MB)
+  if (im) mapBase = Object.assign(im, { bounds: mapBase.bounds, proc: mapBase }); } catch (e) { console.warn('minimap', e); }
   app.mapBase = mapBase;
   const hud = createHUD(app);
   const RB = createRapid({ scene, traffic, hud, app, grid: city.grid }); window.__rw.RB = RB; window.__rw.traffic = traffic; const DRV = createDrive(traffic); window.__rw.DRV = DRV; traffic.drv = DRV; DRV.horn = () => { AU.horn(); traffic.honked = performance.now(); }; traffic.onHonk = () => AU.horn(0.5); const CAB = createCabs({ scene, traffic, hud, app, city, player: { get root() { return player.root; } } }); window.__rw.CAB = CAB; const wrapA = (a) => { while (a > Math.PI) a -= 2 * Math.PI; while (a < -Math.PI) a += 2 * Math.PI; return a; };
@@ -354,7 +360,7 @@ async function start() {
     T = TEMPLE; await EV.raveExit();
   });
   const AU = createAudio();
-  const WX = Q.has('noweather') ? null : createWeather(scene, { low: LOW, force: Q.has('rain') ? 'rain' : Q.has('norain') ? 'dry' : null, AU }); window.__rw.weather = WX;
+  const WX = Q.has('noweather') ? null : createWeather(scene, { low: LOW, lite: LITE, force: Q.has('rain') ? 'rain' : Q.has('norain') ? 'dry' : null, AU }); window.__rw.weather = WX;
   let npLast = '', muS = {};
   const MU = createMusic({ onState: (m) => { muS = m; if (m.playing && m.title && m.title !== npLast) { npLast = m.title; if (!app.title) hud.note({ kicker: 'NOW PLAYING · RECKLESS FM', title: m.title.toUpperCase(), body: 'Reckless Raves on SoundCloud', type: 'radio' }); } AU.beatOff = m.playing; const np = document.getElementById('np'); if (np) { np.innerHTML = m.playing && m.title ? `♪ ${m.title.toUpperCase()} · RECKLESS RAVES ON SOUNDCLOUD` : (m.failed ? '♪ RECKLESS BEAT (SOUNDCLOUD UNAVAILABLE)' : ''); np.href = m.link; } } });
   DANCE = createDance({ hud, AU, MU, isTouch, onPunch: (k) => { punch = Math.max(punch, k); buzz(k > 0.8 ? 18 : 8); } }); window.__rw.dance = DANCE;
@@ -401,11 +407,11 @@ async function start() {
   const KP = [[420, 120, -520], [250, 55, -330], [60, 34, -120], [-70, 20, 20], [-200, 32, 130], [dX + fwx * 120, 38, dZ + fwz * 120], [dX + fwx * 44, 7.5, dZ + fwz * 44]].map(a => new Vector3(...a));
   const KT = [[146, 30, -249], [146, 45, -249], [-40, 6, -10], [-200, 6, 120], [dX, 6, dZ], [dX, 8, dZ], [dX, 8.5, dZ]].map(a => new Vector3(...a));
   // auto quality tier (low/med/high): ?q=low|med|high pins it, otherwise start med on phones / high on desktop and adapt to measured FPS
-  let tier = Q.get('q') || (isTouch ? 'med' : 'high'); if (!TIERS[tier]) tier = 'high'; const autoTier = Q.has('auto') || (!Q.get('q') && !Q.has('webgl')); let tierT = 0, tierF = [], tierUp = false, cullT = 0;
+  let tier = Q.get('q') || (LITE ? 'low' : isTouch ? 'med' : 'high'); if (!TIERS[tier]) tier = 'high'; const autoTier = Q.has('auto') || (!Q.get('q') && !Q.has('webgl')); let tierT = 0, tierF = [], tierUp = false, cullT = 0;
   const baseScale = 1 / Math.min(1.5, devicePixelRatio || 1);
-  function setTier(n) { tier = n; const T0 = TIERS[n]; const dprE = Math.min(2.5, devicePixelRatio || 1); engine.setHardwareScalingLevel(isTouch ? T0.scale / dprE : T0.scale === 1 ? baseScale : Math.min(T0.scale, 1.25) / Math.min(1.5, dprE)); // phones: native px / scale (1.5x down on med)
+  function setTier(n) { tier = n; const T0 = TIERS[n]; const dprE = Math.min(2.5, devicePixelRatio || 1); engine.setHardwareScalingLevel(LITE ? (SAFE ? 1.25 : 1) : isTouch ? T0.scale / dprE : T0.scale === 1 ? baseScale : Math.min(T0.scale, 1.25) / Math.min(1.5, dprE)); // phones: native px / scale (1.5x down on med)
     if (pipe) { pipe.bloomEnabled = T0.bloom; pipe.grainEnabled = T0.grain; try { pipe.samples = n === 'high' && !isTouch ? 4 : 1; } catch (e) { } }
-    if (SSAO) { const on = n === 'high'; const M = scene.postProcessRenderPipelineManager; if (on && !SSAO._rwOn) M.attachCamerasToRenderPipeline('ssao', cam0); if (!on && SSAO._rwOn !== false) M.detachCamerasFromRenderPipeline('ssao', cam0); SSAO._rwOn = on; } if (glow) glow.isEnabled = T0.glow; if (typeof STREAM !== 'undefined' && STREAM) { STREAM.radius = isTouch ? Math.min(300, T0.stream) : T0.stream; STREAM.drop = STREAM.radius + 300; } if (typeof T !== 'undefined' && T) { T.crowdMax = T0.crowd; T.crowdFar = T0.far; } TEMPLE.crowdMax = T0.crowd; TEMPLE.crowdFar = T0.far; for (const k in CLUBS) { CLUBS[k].crowdMax = T0.crowd; CLUBS[k].crowdFar = T0.far; } window.__rw.tier = n; console.log('[rw] quality tier', n); }
+    if (SSAO) { const on = n === 'high'; const M = scene.postProcessRenderPipelineManager; if (on && !SSAO._rwOn) M.attachCamerasToRenderPipeline('ssao', cam0); if (!on && SSAO._rwOn !== false) M.detachCamerasFromRenderPipeline('ssao', cam0); SSAO._rwOn = on; } if (glow) glow.isEnabled = T0.glow; if (typeof STREAM !== 'undefined' && STREAM) { STREAM.radius = LITE ? 150 : isTouch ? Math.min(300, T0.stream) : T0.stream; STREAM.drop = STREAM.radius + (LITE ? 250 : 300); } if (typeof T !== 'undefined' && T) { T.crowdMax = T0.crowd; T.crowdFar = T0.far; } TEMPLE.crowdMax = T0.crowd; TEMPLE.crowdFar = T0.far; for (const k in CLUBS) { CLUBS[k].crowdMax = T0.crowd; CLUBS[k].crowdFar = T0.far; } window.__rw.tier = n; console.log('[rw] quality tier', n); }
   setTier(tier);
   const FLY = 26; let titleT0 = 0;
   const flyover = (s) => { const u = Math.min(1, Math.max(0, s / FLY)); const e = u < 0.5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2; const n = KP.length - 1, x = e * n, i = Math.min(n - 1, Math.floor(x)), f = x - i;
@@ -530,7 +536,7 @@ async function start() {
     if (STREAM && !app.inside) { const sp = app.title ? cam.position : P; STREAM.update(dt, sp.x, sp.z); }
     cullT -= dt; if (culler && cullT <= 0 && !app.inside) { cullT = 0.25; culler.setDist(app.title ? 900 : TIERS[tier].dist); culler.update(cam.position); if (MID) MID.update(cam.position, app.title ? 700 : TIERS[tier].mid); WET.update(cam.position); const pd = TIERS[tier].dist * 0.3; for (const p of traffic.peds) { const on = Math.hypot(p.av.root.position.x - cam.position.x, p.av.root.position.z - cam.position.z) < pd; if (p._on !== on) { p._on = on; p.av.root.setEnabled(on); } } }
     if (!app.title && !app.inside && autoTier) { tierT += engine.getDeltaTime() / 1000; tierF.push(engine.getFps()); if (tierT > 4) { const avg = tierF.reduce((a, b) => a + b, 0) / tierF.length; tierF = []; tierT = 0;
-      const order = ['low', 'med', 'high'], i = order.indexOf(tier); if (avg < 24 && i > 0) setTier(order[i - 1]); else if (avg > 55 && i < 2 && !tierUp) { tierUp = true; setTier(order[i + 1]); } } }
+      const order = ['low', 'med', 'high'], i = order.indexOf(tier); if (avg < 24 && i > 0) setTier(order[i - 1]); else if (avg > 55 && i < (LITE ? 1 : 2) && !tierUp) { tierUp = true; setTier(order[i + 1]); } } }
   });
   window.__rw.setTier = setTier; window.__rw.culler = culler; window.__rw.FL = FL;
   window.__rw.manual = (on) => { if (on) engine.stopRenderLoop(); else engine.runRenderLoop(() => scene.render()); }; window.__rw.renderFrame = (n = 1) => { for (let i = 0; i < n; i++) scene.render(); return true; };

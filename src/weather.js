@@ -5,9 +5,9 @@ import { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTextur
 import { Vector3 } from '@babylonjs/core/Maths/math.vector';
 import { Color4 } from '@babylonjs/core/Maths/math.color';
 
-export function createWeather(scene, { low = false, force = null, AU = null } = {}) {
+export function createWeather(scene, { low = false, lite = false, force = null, AU = null } = {}) {
   const T = new DynamicTexture('rainT', { width: 8, height: 64 }, scene, true); { const g = T.getContext(); const gr = g.createLinearGradient(0, 0, 0, 64); gr.addColorStop(0, 'rgba(210,220,255,0)'); gr.addColorStop(0.6, 'rgba(210,220,255,0.55)'); gr.addColorStop(1, 'rgba(230,235,255,0.9)'); g.fillStyle = gr; g.fillRect(3, 0, 2, 64); T.hasAlpha = true; T.update(); }
-  const N = low ? 900 : 2600;
+  const N = lite ? 300 : low ? 900 : 2600;
   const ps = new ParticleSystem('rain', N, scene); ps.particleTexture = T; ps.emitter = new Vector3(0, 0, 0);
   ps.minEmitBox = new Vector3(-16, 1, -16); ps.maxEmitBox = new Vector3(16, 13, 16);
   ps.direction1 = new Vector3(-0.6, -16, -0.3); ps.direction2 = new Vector3(0.4, -19, 0.5); ps.minEmitPower = 1; ps.maxEmitPower = 1;
