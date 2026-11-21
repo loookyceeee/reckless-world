@@ -41,4 +41,13 @@ House rules: zero spend · the game never awards XP and never PUTs · `test:true
 - [ ] Stage 11: mechanics QA (look-behind, gamepad, sensitivity, collisions, stamina, heat edge cases), with a written test list.
 - [~] Stage 12: polish plus perf tiers. Perf tiers exist (perf.js low/med/high). No KTX2, LODs are partial, and mobile profiling isn't done.
 
-- [~] Temple pass from temple_brief.md (2026-11-20): LiDAR-sized brick exterior (eaves 13.1 m, ridge 23.2 m, #9a4a32, gabled), near-black timber roof, grey-blue flags, two cream fire exits in the south aisle. Stage stays at the east end with the red lancet uplight in rave mode only; the bar stays in the south aisle by the entrance (not in front of the east window). Not yet shot.
+- [~] Temple pass from temple_brief.md (2026-11-20): LiDAR-sized brick exterior (eaves 13.1 m, ridge 23.2 m, #9a4a32, gabled), near-black timber roof, grey-blue flags, two cream fire exits in the south aisle. Stage stays at the east end with the red lancet uplight in rave mode only; the bar is now in the NORTH aisle by the entrance (on the left as you walk in from the west, per Luke, 350d092): counter, back shelf and a soft warm wash, nothing in front of the east window.
+## Queue after stage 12 (Luke: "do it all", 2026-11-21; ship over perfect)
+- [ ] Game sign-in with APP DEV's email + PIN flow: POST /api/auth/request {email, pin?} -> {ok,email,token}; 426 UPDATE_APP = PIN needed (show a PIN field). Store the 30-day bearer, check with GET /api/auth/me, sign-out. ALL CAPS UI. Event calls prepared behind a flag (OFF): POST /api/crew/events/rave/start {raveId} -> {sessionId}, /rave/finish {sessionId}, POST /api/crew/events {type:'poster_placed', posterId}, Bearer auth. Never send XP amounts; test:true and the local event log stay until Luke says switch.
+- [ ] A) Story missions: a 5-8 mission GTA-style chain on existing mechanics (glider, poster run, heat evade, driving, cab, dance, photo hunt) that takes a non-raver to their first Temple rave; a 2-3 min skippable first-time onboarding. ALL CAPS UI. No XP in game.
+- [ ] B) "Unreal" UI polish: motion, typography, consistent panels across HUD, phone, map and menus.
+- [ ] C) City: chunk streaming for more of Belfast; street lights and trees from open council data (assets_incoming/city_data/, prepped by the other worker); better roofs and facades.
+- [ ] D) Close-up pass on venue frontages; in-game check of every poster wall (unmirrored).
+- [ ] E) Cars: less toy-like proportions, materials and wheels; LODs.
+- [ ] F) Street extras: drains, barriers, road signs (no real Translink or PSNI marks).
+- [ ] G) Phone profiling, KTX2 textures, LODs.
