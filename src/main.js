@@ -32,7 +32,7 @@ import '@babylonjs/core/Rendering/edgesRenderer';
 import '@babylonjs/core/Animations/animatable';
 import { buildCity, updateCity } from './city.js';
 import { chunkStatic, freezeMaterials, TIERS } from './perf.js';
-import { buildSky, applyWet } from './sky.js';
+import { buildSky, applyWet, applyWetAsphalt } from './sky.js';
 import { createAudio } from './audio.js';
 import { buildFlavour, buildWetStreaks } from './flavour.js';
 import { buildTempleExterior, updateTempleExterior, buildTempleInterior, setTempleMode, updateTempleInterior, INTERIOR_ORIGIN } from './temple.js';
@@ -118,7 +118,7 @@ async function start() {
 
   const crewCfgP = CR.loadCrewConfig(); CR.loadAvatarManifest(); window.__rw.crewArt = () => CR.avatarArtSource(); window.__rw.CR = CR; // loyalty's ranks/unlocks/starter fit, fetched while the city builds
   const city = await buildCity(scene, { low: LOW }); bar(55);
-  const SKY = buildSky(scene, { low: LOW }); scene.__env = SKY.env;
+  const HIQ = !isTouch && !LOW && !Q.has('nowet'); const SKY = buildSky(scene, { low: LOW, hi: HIQ }); scene.__env = SKY.env; if (HIQ) applyWetAsphalt(scene);
   applyWet(scene, SKY.env, { roads: [0.5, 0.02, 0.04, 2.5], puddle: [1.0, 0.4, 0.3, 1.6], markings: [0.3, 0.02], pavement: [0.12, 0.0, 0.02, 3.5] });
   // perf: split merged + thin-instanced static city meshes into 96 m cells, freeze them, distance-cull per tier
   const culler = Q.has('nochunk') ? null : chunkStatic(city.root, { cell: Number(Q.get('cell')) || 128, skip: city.beacons.map(b => b.m.name) });

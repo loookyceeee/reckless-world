@@ -14,7 +14,7 @@ import { Color3 } from '@babylonjs/core/Maths/math.color';
 
 function rng(s) { return () => { s = (s * 16807) % 2147483647; return (s - 1) / 2147483646; }; }
 
-export function buildSky(scene, { low = false } = {}) {
+export function buildSky(scene, { low = false, hi = false } = {}) {
   const W = low ? 1024 : 2048, H = W / 2; const tex = new DynamicTexture('skyTex', { width: W, height: H }, scene, true); const g = tex.getContext(); const R = rng(7);
   // rows: y=0 top (zenith) .. y=H/2 horizon .. y=H nadir
   const gr = g.createLinearGradient(0, 0, 0, H);
@@ -44,7 +44,8 @@ export function buildSky(scene, { low = false } = {}) {
       const asp = scene.getEngine().getAspectRatio(cam), vf = cam.fov, hf = 2 * Math.atan(Math.tan(vf / 2) * asp);
       tex.uScale = hf / (2 * Math.PI); tex.uOffset = yaw / (2 * Math.PI) - tex.uScale / 2; tex.vScale = vf / Math.PI; tex.vOffset = 0.5 + pitch / Math.PI - tex.vScale / 2; } };
   let env = null;
-  try { env = new HDRCubeTexture(import.meta.env.BASE_URL + 'data/env_night_512.hdr', scene, low ? 64 : 128, false, false, false, false); env.level = 0.4; } catch (e) { console.warn('env', e); }
+  // desktop: the 1K HDRI (1024x512) into a 256 cube for sharper wet reflections; phones keep the 512 px copy
+  try { env = new HDRCubeTexture(import.meta.env.BASE_URL + (hi ? 'data/env_night_1k.hdr' : 'data/env_night_512.hdr'), scene, low ? 64 : hi ? 256 : 128, false, false, false, false); env.level = 0.4; } catch (e) { console.warn('env', e); }
   return { sky, env, mat: m, update: sky.update };
 }
 
@@ -53,4 +54,14 @@ export function applyWet(scene, env, spec) {
   if (!env) return;
   for (const mt of scene.materials) { const k = spec[mt.name]; if (!k) continue;
     mt.reflectionTexture = env; const f = new FresnelParameters(); f.bias = k[2] || 0.1; f.power = k[3] || 2.2; f.leftColor = new Color3(k[0], k[0], k[0] * 1.05); f.rightColor = new Color3(k[1], k[1], k[1]); mt.reflectionFresnelParameters = f; }
+}
+
+// desktop wet asphalt: CC0 Poly Haven asphalt_02 wet derivative (normal + inverted roughness as a specular map) layered on the procedural tarmac
+export function applyWetAsphalt(scene, { tile = 3 } = {}) {
+  const mt = scene.getMaterialByName('roads'); if (!mt) return;
+  const B = import.meta.env.BASE_URL + 'img/';
+  const n = new Texture(B + 'wet_asph_nor.jpg', scene); n.uScale = n.vScale = tile; n.level = 0.45; n.anisotropicFilteringLevel = 8;
+  const sp = new Texture(B + 'wet_asph_spec.jpg', scene); sp.uScale = sp.vScale = tile; sp.anisotropicFilteringLevel = 8;
+  mt.bumpTexture = n; mt.invertNormalMapY = false; mt.specularTexture = sp; mt.specularColor = new Color3(0.62, 0.64, 0.74); mt.specularPower = 96;
+  return mt;
 }
