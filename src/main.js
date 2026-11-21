@@ -312,16 +312,18 @@ async function start() {
   let interact = null;
   const fadeTo = async (fn) => { hud.fade(true); await new Promise(r => setTimeout(r, 380)); await fn(); await new Promise(r => setTimeout(r, 120)); hud.fade(false); };
   const cityLights = [hemi, moon, ext.light];
+  // vehicle source meshes (always-active, parked at y=-500) cost draws/indices even when every car is hidden indoors
+  const carSrc = (on) => { for (const m of scene.meshes) if (m.position.y === -500 && /^(car-|carL-|busDecal|busGlass|hlBeam)/.test(m.name)) m.setEnabled(on); };
   const CLUBS = {}; const CLUB_ORDER = ['warehousexl', 'terminus', 'thompsons', 'warehouse', 'locationx'];
   const getClub = (id) => { if (CLUBS[id]) return CLUBS[id]; const v = VENUES.find(q => q.id === id);
     const c = buildClub(scene, id, { index: CLUB_ORDER.indexOf(id), low: LOW, posters: [...upP, ...pastP], venue: v }); c.cam = cam; c.root.setEnabled(false);
     c.grid = new SegGrid(8); for (const sg of c.segs) c.grid.add(sg[0], sg[1], sg[2], sg[3], 99);
     c.exitLabel = ({ warehousexl: 'DUNBAR STREET', terminus: 'GLENGALL STREET', thompsons: "PATTERSON'S PLACE", warehouse: 'BANKMORE SQUARE', locationx: 'LISBURN ROAD' })[id];
-    if (glow) for (const me of c.glowSkip()) glow.addExcludedMesh(me); c.crowdMax = TEMPLE.crowdMax; return (CLUBS[id] = c); };
+    if (glow) for (const me of c.glowSkip()) glow.addExcludedMesh(me); c.crowdMax = TEMPLE.crowdMax; c.crowdFar = TEMPLE.crowdFar; return (CLUBS[id] = c); };
   const setMode = (m) => T.club ? setClubMode(T, scene, m) : setTempleMode(T, scene, m);
   let DOOR = null; // where to come back out
   const enterVenue = async (V, door) => fadeTo(() => {
-    app.inside = true; city.root.setEnabled(false); SKY.sky.setEnabled(false); FL.setEnabled(false); WET.setEnabled(false); traffic.cars.forEach(c => c.node.setEnabled(false)); traffic.parked.forEach(c => c.node.setEnabled(false)); traffic.peds.forEach(p => p.av.root.setEnabled(false));
+    app.inside = true; city.root.setEnabled(false); carSrc(false); SKY.sky.setEnabled(false); FL.setEnabled(false); WET.setEnabled(false); traffic.cars.forEach(c => c.node.setEnabled(false)); traffic.parked.forEach(c => c.node.setEnabled(false)); traffic.peds.forEach(p => p.av.root.setEnabled(false));
     T = V; DOOR = door; if (TEMPLE.CV) for (const it of TEMPLE.CV.list) for (const m of [it.body, it.head, it.far]) if (m) { m.parent = V.root; m.thinInstanceCount = 0; }
     cityLights.forEach(l => l.setEnabled(false)); Object.values(T.lights).forEach(l => l.setEnabled(true)); T.root.setEnabled(true); if (glow) glow.intensity = 0.55; if (pipe) pipe.imageProcessing.exposure = T.club ? 1.7 : 2.0;
     setMode(Q.get('lights') === 'day' ? 'day' : 'rave'); hud.interior(true, T.mode);
@@ -332,7 +334,7 @@ async function start() {
   const enterClub = async (id, d) => enterVenue(getClub(id), { x: d.x + (d.nx || 0) * 0.8, z: d.z + (d.nz || 0) * 0.8, heading: d.nx !== undefined ? Math.atan2(d.nx, d.nz) : 0 });
   const exitTemple = async () => fadeTo(async () => {
     app.inside = false; T.root.setEnabled(false); Object.values(T.lights).forEach(l => l.setEnabled(false)); cityLights.forEach(l => l.setEnabled(true)); if (glow) glow.intensity = 0.5; if (pipe) pipe.imageProcessing.exposure = 1.4;
-    city.root.setEnabled(true); SKY.sky.setEnabled(true); FL.setEnabled(true); WET.setEnabled(true); traffic.cars.forEach(c => c.node.setEnabled(true)); traffic.parked.forEach(c => c.node.setEnabled(true)); traffic.peds.forEach(p => { p.av.root.setEnabled(true); p._on = undefined; });
+    city.root.setEnabled(true); carSrc(true); SKY.sky.setEnabled(true); FL.setEnabled(true); WET.setEnabled(true); traffic.cars.forEach(c => c.node.setEnabled(true)); traffic.parked.forEach(c => c.node.setEnabled(true)); traffic.peds.forEach(p => { p.av.root.setEnabled(true); p._on = undefined; });
     scene.clearColor = NIGHT; scene.fogDensity = 0.0028; scene.fogColor = new Color3(0.1, 0.105, 0.17); hud.interior(false);
     const d = DOOR || { x: ext.doorPos.x - Math.sin(ext.yaw) * 2.5, z: ext.doorPos.z - Math.cos(ext.yaw) * 2.5, heading: ext.yaw + Math.PI };
     P.x = d.x; P.z = d.z; P.heading = d.heading; C.yaw = P.heading; C.pitch = 0.2; C.dist = 5.8;
@@ -390,7 +392,7 @@ async function start() {
   const baseScale = 1 / Math.min(1.5, devicePixelRatio || 1);
   function setTier(n) { tier = n; const T0 = TIERS[n]; const dprE = Math.min(2.5, devicePixelRatio || 1); engine.setHardwareScalingLevel(isTouch ? T0.scale / dprE : T0.scale === 1 ? baseScale : Math.min(T0.scale, 1.25) / Math.min(1.5, dprE)); // phones: native px / scale (1.5x down on med)
     if (pipe) { pipe.bloomEnabled = T0.bloom; pipe.grainEnabled = T0.grain; try { pipe.samples = n === 'high' && !isTouch ? 4 : 1; } catch (e) { } }
-    if (SSAO) { const on = n === 'high'; const M = scene.postProcessRenderPipelineManager; if (on && !SSAO._rwOn) M.attachCamerasToRenderPipeline('ssao', cam0); if (!on && SSAO._rwOn !== false) M.detachCamerasFromRenderPipeline('ssao', cam0); SSAO._rwOn = on; } if (glow) glow.isEnabled = T0.glow; if (typeof T !== 'undefined' && T) T.crowdMax = T0.crowd; window.__rw.tier = n; console.log('[rw] quality tier', n); }
+    if (SSAO) { const on = n === 'high'; const M = scene.postProcessRenderPipelineManager; if (on && !SSAO._rwOn) M.attachCamerasToRenderPipeline('ssao', cam0); if (!on && SSAO._rwOn !== false) M.detachCamerasFromRenderPipeline('ssao', cam0); SSAO._rwOn = on; } if (glow) glow.isEnabled = T0.glow; if (typeof T !== 'undefined' && T) { T.crowdMax = T0.crowd; T.crowdFar = T0.far; } TEMPLE.crowdMax = T0.crowd; TEMPLE.crowdFar = T0.far; for (const k in CLUBS) { CLUBS[k].crowdMax = T0.crowd; CLUBS[k].crowdFar = T0.far; } window.__rw.tier = n; console.log('[rw] quality tier', n); }
   setTier(tier);
   const FLY = 26; let titleT0 = 0;
   const flyover = (s) => { const u = Math.min(1, Math.max(0, s / FLY)); const e = u < 0.5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2; const n = KP.length - 1, x = e * n, i = Math.min(n - 1, Math.floor(x)), f = x - i;

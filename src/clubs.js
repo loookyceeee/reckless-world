@@ -307,7 +307,7 @@ export function updateClub(T, t, dt, CV) {
   const beat = t * 140 / 60, ph = beat % 1, kick = Math.exp(-ph * 5), S = T.S, M = T.mats;
   if (CV && T.mode === 'rave') {
     for (const it of CV.list) { it.n = 0; it.fn = 0; it.hn2 = 0; }
-    const cp = T.cam ? T.cam.position : null, rp = T.root.position, FAR2 = 12 * 12, cmax = Math.min(T.crowdMax || 1e9, CV.cap || 1e9);
+    const cp = T.cam ? T.cam.position : null, rp = T.root.position, FAR2 = (T.crowdFar || 12) ** 2, cmax = Math.min(T.crowdMax || 1e9, CV.cap || 1e9);
     T.crowd.forEach((c, ci) => {
       if (ci >= cmax) return; const it = CV.list[c.v * CV.poses + (Math.floor(beat * 2 + c.ph) % CV.poses)];
       const b = Math.max(0, Math.sin((beat + c.ph) * Math.PI)); const sway = Math.sin(beat * 0.5 * Math.PI + c.ph) * 0.12;

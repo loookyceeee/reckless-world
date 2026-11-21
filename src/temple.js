@@ -433,7 +433,7 @@ export function updateTempleInterior(T, t, dt) {
   // crowd: pick the baked pose on the half-beat, bounce on the kick
   if (M.CVL) {
     for (const it of M.CVL) { it.n = 0; it.fn = 0; }
-    const cp = T.cam ? T.cam.position : null, rp = T.root.position, FAR2 = 13 * 13;
+    const cp = T.cam ? T.cam.position : null, rp = T.root.position, FAR2 = (T.crowdFar || 13) ** 2;
     const cmax = T.crowdMax || 1e9; T.crowd.forEach((c, ci) => {
       if (ci >= cmax) return; const pose = Math.floor(beat * 2 + c.ph) % T.CV.poses; const it = T.CV.list[c.v * T.CV.poses + pose];
       const b = Math.max(0, Math.sin((beat + c.ph) * Math.PI)); const sway = Math.sin(beat * 0.5 * Math.PI + c.ph) * 0.12;
