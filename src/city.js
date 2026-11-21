@@ -126,26 +126,11 @@ function parapet(pts, h, col, Rf) {
     quad3(Rf, [a[0], h + 0.7, a[1]], [c[0], h + 0.7, c[1]], [c[0] - nx, h + 0.7, c[1] - nz], [a[0] - nx, h + 0.7, a[1] - nz], col); }
 }
 
-export async function buildCity(scene, { low = false } = {}) {
-  const data = await (await fetch(import.meta.env.BASE_URL + 'data/city.json')).json();
-  const root = new TransformNode('city', scene);
-  const grid = new SegGrid(16);
-  const R = rng(42);
-  // ---------- ground ----------
-  const gm = new StandardMaterial('ground', scene); gm.diffuseColor = hex('#2b2f2a'); gm.specularColor = new Color3(0.05, 0.05, 0.08);
-  const ground = toMesh('ground', xf(box(2200, 0.2, 3560), { t: [-85, -0.205, -760] }), scene, gm); ground.parent = root;
-  // ---------- buildings ----------
-  const { d, e } = windowTextures(scene);
-  const wm = new StandardMaterial('walls', scene); wm.diffuseTexture = d; wm.emissiveTexture = e; wm.specularColor = new Color3(0.12, 0.12, 0.14); wm.specularPower = 24; wm.backFaceCulling = false;
-  const rm = new StandardMaterial('roofs', scene); rm.diffuseColor = new Color3(1, 1, 1); rm.specularColor = new Color3(0.05, 0.05, 0.05); rm.backFaceCulling = false; rm.twoSidedLighting = true;
-  const W = { p: [], n: [], u: [], c: [], i: [] }, Rf = { p: [], n: [], c: [], i: [] };
-  const buildings = [];
-  for (const b of data.buildings) {
-    if (b.id === TEMPLE_OSM_ID) { buildings.push({ ...b, temple: true }); continue; }
-    if (b.id === 267251302 || b.id === 298832670) { const lp = []; for (let i = 0; i < b.p.length; i += 2) lp.push([b.p[i], b.p[i + 1]]); buildings.push({ ...b, pts: lp, landmark: true }); continue; }
+// extrude OSM footprints (city.json format) into wall + roof buffers; shared by the base city and the chunk streamer
+function extrudeOne(b, W, Rf, grid, R) {
     const pts = []; for (let i = 0; i < b.p.length; i += 2) pts.push([b.p[i], b.p[i + 1]]);
     let area = 0; for (let i = 0; i < pts.length; i++) { const a = pts[i], c = pts[(i + 1) % pts.length]; area += a[0] * c[1] - c[0] * a[1]; }
-    if (Math.abs(area) < 8) continue;
+    if (Math.abs(area) < 8) return null;
     if (area < 0) pts.reverse(); // CCW
     const h = b.h; const col = b.c ? Color3.Lerp(hex(b.c), hex('#d8cfc0'), 0.18) : b.k === 'church' ? hex('#b89b7a') : PALETTE[Math.floor(R() * PALETTE.length)];
     const tint = 0.9 + R() * 0.2;
@@ -168,12 +153,43 @@ export async function buildCity(scene, { low = false } = {}) {
       for (let i = 0; i < tri.length; i += 3) Rf.i.push(base + tri[i], base + tri[i + 1], base + tri[i + 2]);
       if (pts.length < 40) parapet(pts, h, Color3.Lerp(col, hex('#000000'), 0.15), Rf);
     }
-    buildings.push({ ...b, pts, h });
-  }
+    return { ...b, pts, h };
+}
+function blockMeshes(scene, W, Rf, wm, rm, name) {
   const wv = new VertexData(); wv.positions = W.p; wv.normals = W.n; wv.uvs = W.u; wv.colors = W.c; wv.indices = W.i;
-  const walls = toMesh('walls', wv, scene, wm); walls.parent = root; walls.freezeWorldMatrix(); walls.isPickable = false;
+  const walls = toMesh(name + 'walls', wv, scene, wm); walls.isPickable = false;
   const rv = new VertexData(); rv.positions = Rf.p; Rf.n = []; VertexData.ComputeNormals(Rf.p, Rf.i, Rf.n); rv.normals = Rf.n; rv.colors = Rf.c; rv.indices = Rf.i;
-  const roofs = toMesh('roofs', rv, scene, rm); roofs.parent = root; roofs.freezeWorldMatrix(); roofs.isPickable = false;
+  const roofs = toMesh(name + 'roofs', rv, scene, rm); roofs.isPickable = false; return { walls, roofs };
+}
+/** Build one streamed chunk's buildings (same look as the base city). Adds collision segments to the city grid once. */
+export function buildChunkBuildings(scene, city, list, name, addCollision) {
+  const W = { p: [], n: [], u: [], c: [], i: [] }, Rf = { p: [], n: [], c: [], i: [] }; const R = rng(name.length * 977 + list.length);
+  const g = addCollision ? city.grid : { add() { } }; const out = [];
+  for (const b of list) { const o = extrudeOne(b, W, Rf, g, R); if (o) out.push(o); }
+  if (!W.i.length) return null;
+  const m = blockMeshes(scene, W, Rf, city.mats.wm, city.mats.rm, name); return { ...m, buildings: out };
+}
+export async function buildCity(scene, { low = false } = {}) {
+  const data = await (await fetch(import.meta.env.BASE_URL + 'data/city.json')).json();
+  const root = new TransformNode('city', scene);
+  const grid = new SegGrid(16);
+  const R = rng(42);
+  // ---------- ground ----------
+  const gm = new StandardMaterial('ground', scene); gm.diffuseColor = hex('#2b2f2a'); gm.specularColor = new Color3(0.05, 0.05, 0.08);
+  const ground = toMesh('ground', xf(box(2200, 0.2, 3560), { t: [-85, -0.205, -760] }), scene, gm); ground.parent = root;
+  // ---------- buildings ----------
+  const { d, e } = windowTextures(scene);
+  const wm = new StandardMaterial('walls', scene); wm.diffuseTexture = d; wm.emissiveTexture = e; wm.specularColor = new Color3(0.12, 0.12, 0.14); wm.specularPower = 24; wm.backFaceCulling = false;
+  const rm = new StandardMaterial('roofs', scene); rm.diffuseColor = new Color3(1, 1, 1); rm.specularColor = new Color3(0.05, 0.05, 0.05); rm.backFaceCulling = false; rm.twoSidedLighting = true;
+  const W = { p: [], n: [], u: [], c: [], i: [] }, Rf = { p: [], n: [], c: [], i: [] };
+  const buildings = [];
+  for (const b of data.buildings) {
+    if (b.id === TEMPLE_OSM_ID) { buildings.push({ ...b, temple: true }); continue; }
+    if (b.id === 267251302 || b.id === 298832670) { const lp = []; for (let i = 0; i < b.p.length; i += 2) lp.push([b.p[i], b.p[i + 1]]); buildings.push({ ...b, pts: lp, landmark: true }); continue; }
+    const o = extrudeOne(b, W, Rf, grid, R); if (o) buildings.push(o);
+  }
+  const { walls, roofs } = blockMeshes(scene, W, Rf, wm, rm, '');
+  walls.parent = root; walls.freezeWorldMatrix(); roofs.parent = root; roofs.freezeWorldMatrix();
 
   // ---------- roads: textured asphalt, raised kerbed pavements, UK markings, crossings, street furniture ----------
   const mkTex = (name, N, draw, rep) => { const t = new DynamicTexture(name, N, scene, true); const g = t.getContext(); draw(g, N); t.update(); t.wrapU = t.wrapV = Texture.WRAP_ADDRESSMODE; t.anisotropicFilteringLevel = 8; return t; };
@@ -354,6 +370,8 @@ export async function buildCity(scene, { low = false } = {}) {
   const pole = toMesh('lampPole', merge([xf(cyl(7.5, 0.07, 0.11, 8), { t: [0, 3.75, 0] }), xf(box(1.3, 0.1, 0.1), { t: [0.6, 7.4, 0] })]), scene, poleM);
   // Real DfI lamp positions (OGL) when available: arm faces the nearest carriageway, LED white vs SON-T sodium orange
   let SF = null; try { SF = await (await fetch(import.meta.env.BASE_URL + 'data/streetfurniture.json')).json(); } catch (e) { }
+  // full DfI lights + BCC trees (OGL v3.0, assets_incoming/city_data via tools/gen_stream.py): the ones streetfurniture.json lacked; phones keep every 2nd
+  if (SF) try { const X = await (await fetch(import.meta.env.BASE_URL + 'data/stream/extras.json')).json(); const keep = (_, i) => !low || i % 2 === 0; SF.lamps = SF.lamps.concat(X.l.filter(keep)); SF.trees = SF.trees.concat(X.t.filter(keep)); } catch (e) { }
   if (SF && SF.lamps && SF.lamps.length) {
     const segs = new Map(); const key = (x, z) => Math.floor(x / 25) + ',' + Math.floor(z / 25);
     for (const r of roadsOut) if (r.d) for (let i = 0; i < r.pts.length - 1; i++) { const a = r.pts[i], b = r.pts[i + 1]; const k = key((a[0] + b[0]) / 2, (a[1] + b[1]) / 2); if (!segs.has(k)) segs.set(k, []); segs.get(k).push([a, b]); }
@@ -425,7 +443,7 @@ export async function buildCity(scene, { low = false } = {}) {
       b.position.set(v.x, 12, v.z); b.parent = root; b.isPickable = false; beacons.push({ m: b, k, v });
     }
   }
-  return { root, grid, buildings, roads: roadsOut, lamps, beacons, data, walls, roofs, sf: SF };
+  return { root, grid, buildings, roads: roadsOut, lamps, beacons, data, walls, roofs, sf: SF, mats: { wm, rm } };
 }
 export function updateCity(city, t) {
   for (const b of city.beacons) { b.m.rotation.z = Math.sin(t * 0.4 + b.k * 2) * 0.35; b.m.rotation.x = Math.cos(t * 0.33 + b.k) * 0.3; }

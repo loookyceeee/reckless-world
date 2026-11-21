@@ -64,9 +64,9 @@ export function freezeMaterials(scene, names) { for (const mt of scene.materials
 
 // quality tiers
 export const TIERS = {
-  low: { scale: 2.0, dist: 200, mid: 0, bloom: false, glow: false, grain: false, ssao: false, crowd: 70, far: 5 },
-  med: { scale: 1.5, dist: 300, mid: 220, bloom: true, glow: true, grain: false, ssao: false, crowd: 110, far: 6.5 },
-  high: { scale: 1.0, dist: 440, mid: 360, bloom: true, glow: true, grain: true, ssao: false, crowd: 999, far: 13 },
+  low: { scale: 2.0, dist: 200, mid: 0, bloom: false, glow: false, grain: false, ssao: false, crowd: 70, far: 5, stream: 300 },
+  med: { scale: 1.5, dist: 300, mid: 220, bloom: true, glow: true, grain: false, ssao: false, crowd: 110, far: 6.5, stream: 450 },
+  high: { scale: 1.0, dist: 440, mid: 360, bloom: true, glow: true, grain: true, ssao: false, crowd: 999, far: 13, stream: 600 },
 };
 
 // bake every chunk that shares a cell + material + vertex layout into ONE mesh (thin instances expanded) -> far fewer draw calls

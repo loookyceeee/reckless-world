@@ -14,6 +14,11 @@ bl = Image.new('L', (W, H), 0); dr = ImageDraw.Draw(bl)
 for b in city['buildings']:
     p = b['p']; pts = [uv(p[i], p[i + 1]) for i in range(0, len(p), 2)]
     if len(pts) >= 3: dr.polygon(pts, fill=255)
+import glob  # streamed chunk buildings (tools/gen_stream.py) count as occupied too
+for f in glob.glob(D + 'stream/c_*.json'):
+    for b in json.load(open(f))['b']:
+        p = b['p']; pts = [uv(p[i], p[i + 1]) for i in range(0, len(p), 2)]
+        if len(pts) >= 3: dr.polygon(pts, fill=255)
 bl = np.asarray(bl.filter(ImageFilter.MaxFilter(7))) > 0
 rd = Image.new('L', (W, H), 0); dr = ImageDraw.Draw(rd); ROADS = []
 for r in city['roads']:

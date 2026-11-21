@@ -34,6 +34,7 @@ import { buildCity, updateCity } from './city.js';
 import { chunkStatic, freezeMaterials, TIERS } from './perf.js';
 import { buildSky, applyWet, applyWetAsphalt } from './sky.js';
 import { buildMidkit } from './midkit.js';
+import { createStream } from './stream.js';
 import { createWeather } from './weather.js';
 import { createAudio } from './audio.js';
 import { buildFlavour, buildWetStreaks } from './flavour.js';
@@ -126,6 +127,7 @@ async function start() {
   const HIQ = !isTouch && !LOW && !Q.has('nowet'); const SKY = buildSky(scene, { low: LOW, hi: HIQ }); scene.__env = SKY.env; if (HIQ) applyWetAsphalt(scene);
   applyWet(scene, SKY.env, { roads: [0.5, 0.02, 0.04, 2.5], puddle: [1.0, 0.4, 0.3, 1.6], markings: [0.3, 0.02], pavement: [0.12, 0.0, 0.02, 3.5] });
   // perf: split merged + thin-instanced static city meshes into 96 m cells, freeze them, distance-cull per tier
+  const STREAM = Q.has('nostream') ? null : await createStream(scene, city, { base: import.meta.env.BASE_URL }).catch(e => { console.warn('stream', e); return null; }); window.__rw.STREAM = STREAM;
   const culler = Q.has('nochunk') ? null : chunkStatic(city.root, { cell: Number(Q.get('cell')) || 128, skip: [...city.beacons.map(b => b.m.name), /^midkit/] });
   // sharper ground/facade textures at grazing angles: anisotropic filtering (8x desktop, 4x phones, off in safe mode)
   { const af = SAFE || /swiftshader|llvmpipe|software/i.test(DG.info.gpu) ? 1 : LOW ? 4 : 8; for (const t of scene.textures) if (t && 'anisotropicFilteringLevel' in t && !t.isCube) t.anisotropicFilteringLevel = af; }
@@ -394,7 +396,7 @@ async function start() {
   const baseScale = 1 / Math.min(1.5, devicePixelRatio || 1);
   function setTier(n) { tier = n; const T0 = TIERS[n]; const dprE = Math.min(2.5, devicePixelRatio || 1); engine.setHardwareScalingLevel(isTouch ? T0.scale / dprE : T0.scale === 1 ? baseScale : Math.min(T0.scale, 1.25) / Math.min(1.5, dprE)); // phones: native px / scale (1.5x down on med)
     if (pipe) { pipe.bloomEnabled = T0.bloom; pipe.grainEnabled = T0.grain; try { pipe.samples = n === 'high' && !isTouch ? 4 : 1; } catch (e) { } }
-    if (SSAO) { const on = n === 'high'; const M = scene.postProcessRenderPipelineManager; if (on && !SSAO._rwOn) M.attachCamerasToRenderPipeline('ssao', cam0); if (!on && SSAO._rwOn !== false) M.detachCamerasFromRenderPipeline('ssao', cam0); SSAO._rwOn = on; } if (glow) glow.isEnabled = T0.glow; if (typeof T !== 'undefined' && T) { T.crowdMax = T0.crowd; T.crowdFar = T0.far; } TEMPLE.crowdMax = T0.crowd; TEMPLE.crowdFar = T0.far; for (const k in CLUBS) { CLUBS[k].crowdMax = T0.crowd; CLUBS[k].crowdFar = T0.far; } window.__rw.tier = n; console.log('[rw] quality tier', n); }
+    if (SSAO) { const on = n === 'high'; const M = scene.postProcessRenderPipelineManager; if (on && !SSAO._rwOn) M.attachCamerasToRenderPipeline('ssao', cam0); if (!on && SSAO._rwOn !== false) M.detachCamerasFromRenderPipeline('ssao', cam0); SSAO._rwOn = on; } if (glow) glow.isEnabled = T0.glow; if (typeof STREAM !== 'undefined' && STREAM) { STREAM.radius = isTouch ? Math.min(300, T0.stream) : T0.stream; STREAM.drop = STREAM.radius + 300; } if (typeof T !== 'undefined' && T) { T.crowdMax = T0.crowd; T.crowdFar = T0.far; } TEMPLE.crowdMax = T0.crowd; TEMPLE.crowdFar = T0.far; for (const k in CLUBS) { CLUBS[k].crowdMax = T0.crowd; CLUBS[k].crowdFar = T0.far; } window.__rw.tier = n; console.log('[rw] quality tier', n); }
   setTier(tier);
   const FLY = 26; let titleT0 = 0;
   const flyover = (s) => { const u = Math.min(1, Math.max(0, s / FLY)); const e = u < 0.5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2; const n = KP.length - 1, x = e * n, i = Math.min(n - 1, Math.floor(x)), f = x - i;
@@ -513,6 +515,7 @@ async function start() {
     if (M && !app.title) { M.update(dt); state.patrols = M.blips(); const hk = M.H.level + '|' + (M.H.hidden > 0) + '|' + (M.H.flash > 0); if (hk !== app._hk) { app._hk = hk; hud.heat(M.H.level, M.H.hidden > 0, M.H.flash > 0); } }
     hud.update(dt, { stamina: ST.v, stamFlash: ST.flash, x: P.x, z: P.z, heading: P.heading, camYaw: C.yaw, inside: app.inside, lx: P.x - T.root.position.x, lz: P.z - T.root.position.z, plan: app.inside && T.club ? T.plan : null, ...state });
     fpsT += dt; if (fpsT > 0.5) { fpsT = 0; hud.fps(Math.round(engine.getFps())); }
+    if (STREAM && !app.inside) { const sp = app.title ? cam.position : P; STREAM.update(dt, sp.x, sp.z); }
     cullT -= dt; if (culler && cullT <= 0 && !app.inside) { cullT = 0.25; culler.setDist(app.title ? 900 : TIERS[tier].dist); culler.update(cam.position); if (MID) MID.update(cam.position, app.title ? 700 : TIERS[tier].mid); WET.update(cam.position); const pd = TIERS[tier].dist * 0.3; for (const p of traffic.peds) { const on = Math.hypot(p.av.root.position.x - cam.position.x, p.av.root.position.z - cam.position.z) < pd; if (p._on !== on) { p._on = on; p.av.root.setEnabled(on); } } }
     if (!app.title && !app.inside && autoTier) { tierT += engine.getDeltaTime() / 1000; tierF.push(engine.getFps()); if (tierT > 4) { const avg = tierF.reduce((a, b) => a + b, 0) / tierF.length; tierF = []; tierT = 0;
       const order = ['low', 'med', 'high'], i = order.indexOf(tier); if (avg < 24 && i > 0) setTier(order[i - 1]); else if (avg > 55 && i < 2 && !tierUp) { tierUp = true; setTier(order[i + 1]); } } }
