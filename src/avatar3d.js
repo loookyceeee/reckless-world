@@ -55,6 +55,8 @@ export async function loadAvatar3D(scene, { name = 'player', base = import.meta.
   set('G_briefs', mat('briefs', Color3.FromHexString('#111113'), { rough: 0.8 }));
   set('G_shoes', mat('shoes', Color3.FromHexString('#101012'), { rough: 0.45, t: tex('shoes'), fill: 0.38 }));
   const gm = {}; for (const k of KINDS) { gm[k] = mat('g-' + k, Color3.White(), { rough: k === 'jeans' ? 0.9 : 0.85 }); set('G_' + k, gm[k]); (byName['G_' + k] || []).forEach(x => x.setEnabled(false)); }
+  // shells are drawn two-sided: field-fitted folds can flip a few faces, and with the covered body hidden those would read as holes
+  for (const m of [...Object.values(gm), byName.G_bra?.[0]?.material, byName.G_briefs?.[0]?.material, byName.G_shoes?.[0]?.material].filter(Boolean)) { m.backFaceCulling = false; m.twoSidedLighting = true; }
   const gtex = {}; // per-item garment textures, loaded when first worn
   const wear = (kind, g) => { const m = gm[kind];
     const tint = () => { m.diffuseTexture = null; m.emissiveTexture = null; m.emissiveColor = Color3.Black(); m.diffuseColor = Color3.FromHexString(g.col); };
