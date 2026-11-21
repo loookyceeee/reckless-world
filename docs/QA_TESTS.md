@@ -38,3 +38,8 @@ Manual (real device, before each release). Tick each one.
 - [ ] No XP is awarded or shown as earned in game; events stay `test:true`; the game never PUTs.
 - [ ] No PSNI/Translink marks or crests anywhere; number plates fictional or blank.
 - [ ] LOCATION X is labelled LOCATION X.
+
+## Frontage + poster-wall check (D, 2026-11-21)
+- Every venue frontage from 9 m (tools/snap.mjs, `__rw.allDoors()[i]`, camRel `[Math.PI,5,3,3.5]`): Ware-House XL, Thompsons, Terminus, The Ware-House, LOCATION X, Temple. All read correctly; signage unmirrored. Shot: shots/world_2026-11-21/D_frontages_all6.png
+- All 5 poster walls forced visible and shot from 1.3 m: every poster reads left-to-right (GRAND TOUR, OFFICIAL AFTERPARTY, dates). Shot: D_poster_walls_unmirrored.png
+- Streamed buildings (C) checked against every door and poster spot: none within 4 m.
