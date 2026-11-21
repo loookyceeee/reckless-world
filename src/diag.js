@@ -30,7 +30,7 @@ export function show(why) {
   }
   render();
 }
-export const fatal = (why, e) => { if (e) push('FATAL', [e]); info.stage += ' (failed)'; show(why); };
+export const fatal = (why, e) => { if (e) push('FATAL', [e]); info.stage += ' (failed)'; show(why); try { window.__rwBoot && window.__rwBoot.fail(why, e && e.message); } catch (x) { } }; // branded RETRY / SAFE MODE fallback (index.html), also in ?app=1
 export const log = (...a) => push('INFO', a);
 window.addEventListener('error', (e) => { push('ONERROR', [e.message + ' ' + (e.filename || '').split('/').pop() + ':' + e.lineno]); if (!info.ready) show('script error'); });
 window.addEventListener('unhandledrejection', (e) => { push('REJECT', [e.reason]); if (!info.ready) show('startup error'); });

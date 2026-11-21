@@ -6,6 +6,40 @@
 <script>/* app/embed boot: runs before any module. #token=<bearer> is taken out of the URL at once (never logged, never in history), held in memory for embed.js to verify. */
 (function(){try{var h=location.hash||'',m=h.match(/(?:^#|&)token=([^&]*)/);if(m){var t='';try{t=decodeURIComponent(m[1])}catch(e){}var rest=h.replace(/(^#|&)token=[^&]*/,'').replace(/^#?&?/,'');history.replaceState(history.state,'',location.pathname+location.search+(rest?'#'+rest:''));if(/^[A-Za-z0-9._~+\/=-]{8,4096}$/.test(t))Object.defineProperty(window,'__rwHandoff',{value:t,configurable:true,writable:true,enumerable:false});}
 var d=document.documentElement;if(new URLSearchParams(location.search).get('app')==='1')d.classList.add('rw-app');var f=false;try{f=window.top!==window.self}catch(e){f=true}if(f)d.classList.add('rw-embed');}catch(e){}})();</script>
+<script>/* boot guard (runs before any module, also in ?app=1): load watchdog, WebGL context-loss + fatal fallback with RETRY / SAFE MODE,
+   crash-loop memory (a load that never finished -> next load on a touch device starts in safe mode), errors posted to the app WebView (no token). */
+(function(){try{
+var Q=new URLSearchParams(location.search),K='rw.boot',now=Date.now(),touch=('ontouchstart' in window)||(window.matchMedia&&matchMedia('(pointer: coarse)').matches),sent=0,box=null,why='',done=false;
+var scrub=function(s){s=String(s==null?'':s).replace(/(bearer\s+)\S+/gi,'$1<x>').replace(/token=[^&\s"]*/gi,'token=<x>');try{var a=JSON.parse(localStorage.getItem('rw.crewAccount')||'null');if(a&&a.token)s=s.split(a.token).join('<x>')}catch(e){}return s.slice(0,400)};
+var post=function(reason,detail){try{if(!window.ReactNativeWebView||sent>=12)return;sent++;window.ReactNativeWebView.postMessage(JSON.stringify({type:'error',reason:scrub(reason),detail:scrub(detail),stage:scrub(window.__diag&&window.__diag.info.stage||'boot'),safe:!!(Q.has('safe')||window.__rwAutoSafe),t:Math.round((Date.now()-now)/1000)}))}catch(e){}};
+var prev=null;try{prev=JSON.parse(localStorage.getItem(K)||'null')}catch(e){}
+var auto=touch&&!Q.has('safe')&&!Q.has('full')&&prev&&prev.ok===false&&now-prev.t<15*60000;
+if(auto)window.__rwAutoSafe=true;
+try{localStorage.setItem(K,JSON.stringify({t:now,ok:false}))}catch(e){}
+var go=function(safe){try{var q=new URLSearchParams(location.search);if(safe)q.set('safe','1');location.replace(location.pathname+'?'+q.toString())}catch(e){location.reload()}};
+var hide=function(){if(box){box.remove();box=null;why=''}};
+var show=function(reason,sub,canWait){if(done&&reason==='STILL LOADING')return;if(box){return}why=reason;
+ box=document.createElement('div');box.id='rwFail';box.setAttribute('role','alertdialog');
+ box.style.cssText='position:fixed;inset:0;z-index:100000;background:#000;color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:calc(env(safe-area-inset-top) + 64px) 24px calc(env(safe-area-inset-bottom) + 24px);text-align:center;text-transform:uppercase;font:800 13px/1.35 "Unbounded","Arial Black",Arial,sans-serif;letter-spacing:.14em';
+ var b='-webkit-appearance:none;appearance:none;border-radius:0;box-shadow:none;margin:0;display:block;width:min(320px,80vw);padding:15px 18px;font:900 14px Unbounded,Arial,sans-serif;letter-spacing:.2em;text-transform:uppercase;border:2px solid #fff;cursor:pointer;';
+ var safeNow=Q.has('safe')||window.__rwAutoSafe;
+ box.innerHTML='<div style="font-size:24px;font-weight:900;letter-spacing:.06em">RECKLESS WORLD</div><div>'+reason+'</div><div style="font-size:10px;opacity:.7;max-width:340px">'+(sub||'')+'</div>'
+  +'<button data-a="retry" style="'+b+'background:#fff;color:#000">RETRY</button>'
+  +'<button data-a="safe" style="'+b+'background:#000;color:#fff">'+(safeNow?'RETRY IN SAFE MODE':'SAFE MODE')+'</button>'
+  +(canWait?'<button data-a="wait" style="'+b+'background:#000;color:#fff;border-color:#666">KEEP WAITING</button>':'')
+  +(window.ReactNativeWebView?'<button data-a="close" style="'+b+'background:#000;color:#fff;border-color:#666">CLOSE GAME</button>':'');
+ box.addEventListener('click',function(e){var a=e.target&&e.target.getAttribute&&e.target.getAttribute('data-a');if(a==='retry')go(false);else if(a==='safe')go(true);else if(a==='wait'){hide();arm(45000)}else if(a==='close'){try{window.ReactNativeWebView.postMessage('{"type":"close"}')}catch(x){}}});
+ (document.body||document.documentElement).appendChild(box)};
+var timer=0,arm=function(ms){clearTimeout(timer);timer=setTimeout(function(){if(!done){post('still loading',(window.__diag&&window.__diag.info.stage)||'');show('STILL LOADING','THE CITY IS TAKING TOO LONG ON THIS DEVICE. SAFE MODE USES LESS MEMORY.',true)}},ms)};
+arm(Q.has('nowatch')?1e9:(Q.get('watch')|0)*1000||45000);
+window.__rwBoot={autoSafe:!!auto,ok:function(){done=true;clearTimeout(timer);if(why==='STILL LOADING')hide();try{localStorage.setItem(K,JSON.stringify({t:Date.now(),ok:true}))}catch(e){}},
+ fail:function(reason,detail){post(reason,detail);clearTimeout(timer);show(reason==='rendering failed'?'GRAPHICS FAILED':'COULDN\u2019T START',(window.__rwAutoSafe||Q.has('safe')?'SAFE MODE IS ON. ':'')+'TRY SAFE MODE IF THIS KEEPS HAPPENING.')},show:show,post:post};
+var lostT=0;
+document.addEventListener('webglcontextlost',function(){post('webgl context lost','');clearTimeout(lostT);lostT=setTimeout(function(){show('GRAPHICS RESET','YOUR PHONE RAN LOW ON GRAPHICS MEMORY. SAFE MODE USES LESS.')},2500)},true);
+document.addEventListener('webglcontextrestored',function(){clearTimeout(lostT);if(why==='GRAPHICS RESET')hide()},true);
+addEventListener('error',function(e){post('script error',(e.message||'')+' '+String(e.filename||'').split('/').pop()+':'+(e.lineno||''))});
+addEventListener('unhandledrejection',function(e){var r=e.reason;post('unhandled rejection',r&&r.message||r)});
+}catch(e){}})();</script>
 </head><body>
 <canvas id="c"></canvas>
 <div id="title" class="loading"><div class="lb t"></div><div class="lb b"></div>
@@ -13,6 +47,6 @@ var d=document.documentElement;if(new URLSearchParams(location.search).get('app'
 <div id="loading"><span>LOADING BELFAST</span><i><b id="lbar"></b></i></div>
 <button id="play">PRESS START</button>
 <a id="safeLnk" href="?safe=1" style="position:absolute;right:14px;top:14px;z-index:5;color:#fff;font:600 10px 'DM Sans',sans-serif;letter-spacing:.08em;opacity:.7">BLACK SCREEN? TRY SAFE MODE</a>
-<small>FREE · NO LOGIN · MAP DATA © OPENSTREETMAP CONTRIBUTORS · BELFAST CITY LIDAR (DFI RIVERS / CYIENT, OGL)</small></div>
+<small><span class="webonly">FREE · NO LOGIN · </span>MAP DATA © OPENSTREETMAP CONTRIBUTORS · BELFAST CITY LIDAR (DFI RIVERS / CYIENT, OGL)</small></div>
 <script type="module" src="/src/main.js"></script>
 </body></html>

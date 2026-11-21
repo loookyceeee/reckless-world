@@ -420,6 +420,6 @@ export function bakeCrowdVariants(scene, { poses = 4, lod = 0.35, simplify = 0 }
     for (const m of av.allMeshes()) m.dispose(); av.root.dispose(); av.skeleton.dispose();
   });
   // decimate the baked crowd bodies in the background (static meshes, ~30% of the triangles); swaps geometry in place when done
-  if (simplify) for (const it of out) { try { const far = it.body.clone(it.body.name + '-far'); far.makeGeometryUnique(); it.far = far; const q = new QuadraticErrorSimplification(far); q.simplify({ quality: simplify, distance: 0, optimizeMesh: false }, (nm) => { const vd = VertexData.ExtractFromMesh(nm); vd.applyToMesh(far, false); nm.dispose(); it.farReady = true; }); } catch (e) { console.warn('simplify', e); } }
+  if (simplify) for (const it of out) { try { const far = it.body.clone(it.body.name + '-far'); far.makeGeometryUnique(); it.far = far; const q = new QuadraticErrorSimplification(far); q.simplify({ quality: simplify, distance: 0, optimizeMesh: false }, (nm) => { const vd = VertexData.ExtractFromMesh(nm); vd.applyToMesh(far, false); nm.dispose(); it.farReady = true; q._triangles = q._vertices = q._reconstructedMesh = q.references = null; }); } catch (e) { console.warn('simplify', e); } }
   return { list: out, variants: VARS.length, poses };
 }

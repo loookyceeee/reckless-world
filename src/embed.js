@@ -8,8 +8,9 @@ const root = document.documentElement;
 export const APP = root.classList.contains('rw-app');
 export const EMBED = root.classList.contains('rw-embed');
 const take = () => { const t = window.__rwHandoff; try { delete window.__rwHandoff; } catch (e) { window.__rwHandoff = undefined; } return typeof t === 'string' ? t : null; };
-const me = async (t) => { try { const r = await fetch(API + '/api/auth/me', { headers: { Authorization: 'Bearer ' + t }, cache: 'no-store', credentials: 'omit' });
-  if (r.status === 426) return { s: 'pin' }; if (r.status === 401 || r.status === 403) return { s: 'expired' }; if (!r.ok) return { s: 'offline' }; const p = await r.json().catch(() => ({})); return { s: 'ok', email: (p && (p.email || (p.user && p.user.email))) || '' }; } catch (e) { return { s: 'offline' }; } };
+const me = async (t) => { const ac = typeof AbortController !== 'undefined' ? new AbortController() : null; const to = ac && setTimeout(() => ac.abort(), 8000); // a hung request must not hold up the boot
+  try { const r = await fetch(API + '/api/auth/me', { headers: { Authorization: 'Bearer ' + t }, cache: 'no-store', credentials: 'omit', signal: ac ? ac.signal : undefined }); clearTimeout(to);
+  if (r.status === 426) return { s: 'pin' }; if (r.status === 401 || r.status === 403) return { s: 'expired' }; if (!r.ok) return { s: 'offline' }; const p = await r.json().catch(() => ({})); return { s: 'ok', email: (p && (p.email || (p.user && p.user.email))) || '' }; } catch (e) { clearTimeout(to); return { s: 'offline' }; } };
 /** 'none' | 'ok' | 'expired' (401/403) | 'pin' (426 UPDATE_APP) | 'offline'. On offline it retries once in the background (8 s) and stores on success. */
 export async function consumeHandoff(onLate) {
   const t = take(); if (!t) return 'none';

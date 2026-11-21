@@ -17,7 +17,8 @@ export function splitMesh(mesh, cell) {
   for (const [k, idx] of groups) {
     const map = new Map(), p = [], n = [], u = [], c = [], ni = [];
     for (const v of idx) { let m = map.get(v); if (m == null) { m = map.size; map.set(v, m); p.push(P[v * 3], P[v * 3 + 1], P[v * 3 + 2]); if (N) n.push(N[v * 3], N[v * 3 + 1], N[v * 3 + 2]); if (U) u.push(U[v * 2], U[v * 2 + 1]); if (C) c.push(C[v * 4], C[v * 4 + 1], C[v * 4 + 2], C[v * 4 + 3]); } ni.push(m); }
-    const vd = new VertexData(); vd.positions = p; vd.indices = ni; if (N) vd.normals = n; if (U) vd.uvs = u; if (C) vd.colors = c;
+    const F = (x) => new Float32Array(x); // typed arrays: Babylon keeps the CPU copy, plain JS arrays cost 2-3x the memory
+    const vd = new VertexData(); vd.positions = F(p); vd.indices = map.size > 65535 ? new Uint32Array(ni) : new Uint16Array(ni); if (N) vd.normals = F(n); if (U) vd.uvs = F(u); if (C) vd.colors = F(c);
     const m = new Mesh(mesh.name + '@' + k, mesh.getScene()); vd.applyToMesh(m, false); m.material = mesh.material; m.parent = mesh.parent; m.isPickable = mesh.isPickable; m.receiveShadows = mesh.receiveShadows; m.renderingGroupId = mesh.renderingGroupId; m.visibility = mesh.visibility; m.hasVertexAlpha = mesh.hasVertexAlpha; m.alphaIndex = mesh.alphaIndex;
     m.metadata = { chunkOf: mesh.name }; out.push(m);
   }
@@ -41,11 +42,11 @@ export function splitThin(mesh, cell) {
 }
 
 // chunk everything static under root; returns a culler
-export function chunkStatic(root, { cell = 96, skip = [] } = {}) {
+export function chunkStatic(root, { cell = 96, skip = [], expand = true } = {}) {
   const list = root.getChildMeshes(false).filter(m => m instanceof Mesh && !skip.some(s => (typeof s === 'string' ? m.name === s : s.test(m.name))) && !m.skeleton && m.getTotalIndices() > 0);
   const chunks = [], parts0 = [];
   for (const m of list) parts0.push(...(m.thinInstanceCount > 0 ? splitThin(m, cell * 2) : splitMesh(m, cell))); // light street furniture in 2x cells, heavy merged geometry in 1x
-  const parts1 = bakeByMaterial(parts0);
+  const parts1 = bakeByMaterial(parts0, expand);
   {
     for (const p of parts1) {
       p.refreshBoundingInfo && p.thinInstanceCount === 0 && p.refreshBoundingInfo();
@@ -70,12 +71,13 @@ export const TIERS = {
 };
 
 // bake every chunk that shares a cell + material + vertex layout into ONE mesh (thin instances expanded) -> far fewer draw calls
-function bakeByMaterial(parts) {
+// expand=false (phones): thin-instanced parts stay instanced (expanding them costs ~190 MB CPU + GPU on the city)
+function bakeByMaterial(parts, expand = true) {
   const groups = new Map(), out = [];
   for (const p of parts) {
     const cellKey = p.name.includes('@') ? p.name.split('@')[1] : null;
     const attrs = ['normal', 'uv', 'color'].filter(a => p.isVerticesDataPresent(a)).join('|');
-    if (!cellKey || !p.material || !p.isVerticesDataPresent('normal')) { out.push(p); continue; }
+    if (!cellKey || !p.material || !p.isVerticesDataPresent('normal') || (!expand && p.thinInstanceCount > 0)) { out.push(p); continue; }
     const k = cellKey + '#' + p.material.uniqueId + '#' + attrs; let g = groups.get(k); if (!g) groups.set(k, g = []); g.push(p);
   }
   const tmp = new Vector3(), M = new Matrix();

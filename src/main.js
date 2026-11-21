@@ -63,10 +63,13 @@ import * as EV from './events.js';
 import { createStory } from './story.js';
 import { planeR, torus, xf, plane, toMesh, hex, cyl, merge } from './geo.js';
 
+// memory: Babylon's refreshBoundingInfo keeps a Vector3 per vertex (_positions) on every mesh: ~330 MB for the 5M-vertex city,
+// enough to get the iOS WebView content process killed during load. Picking regenerates them on demand from the geometry.
+{ const rbi = Mesh.prototype.refreshBoundingInfo; Mesh.prototype.refreshBoundingInfo = function (a = false, b = false) { return rbi.call(this, typeof a === 'object' && a ? { updatePositionsArray: false, ...a } : { applySkeleton: a, applyMorph: b, updatePositionsArray: false }); }; }
 const Q = new URLSearchParams(location.search);
 const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
 // ?safe=1: lowest settings, no post-processing at all (for devices that show a black screen)
-const SAFE = Q.has('safe');
+const SAFE = Q.has('safe') || !!window.__rwAutoSafe; // __rwAutoSafe: index.html boot guard saw the last load on this phone never finish
 const LOW = SAFE || Q.has('low') || (isTouch && Math.min(screen.width, screen.height) < 900);
 const HIQ_K = !isTouch && !LOW;
 const app = { title: true, paused: false, inside: false, live: !Q.has('nolive'), keys: new Set(), key: null };
@@ -130,7 +133,7 @@ async function start() {
   applyWet(scene, SKY.env, { roads: [0.5, 0.02, 0.04, 2.5], puddle: [1.0, 0.4, 0.3, 1.6], markings: [0.3, 0.02], pavement: [0.12, 0.0, 0.02, 3.5] });
   // perf: split merged + thin-instanced static city meshes into 96 m cells, freeze them, distance-cull per tier
   const STREAM = Q.has('nostream') ? null : await createStream(scene, city, { base: import.meta.env.BASE_URL }).catch(e => { console.warn('stream', e); return null; }); window.__rw.STREAM = STREAM;
-  const culler = Q.has('nochunk') ? null : chunkStatic(city.root, { cell: Number(Q.get('cell')) || 128, skip: [...city.beacons.map(b => b.m.name), /^midkit/] });
+  const culler = Q.has('nochunk') ? null : chunkStatic(city.root, { expand: !(isTouch || Q.has('noexpand')) || Q.has('expand'), cell: Number(Q.get('cell')) || 128, skip: [...city.beacons.map(b => b.m.name), /^midkit/] });
   // sharper ground/facade textures at grazing angles: anisotropic filtering (8x desktop, 4x phones, off in safe mode)
   { const af = SAFE || /swiftshader|llvmpipe|software/i.test(DG.info.gpu) ? 1 : LOW ? 4 : 8; for (const t of scene.textures) if (t && 'anisotropicFilteringLevel' in t && !t.isCube) t.anisotropicFilteringLevel = af; }
   freezeMaterials(scene, ['trunk', 'leaf', 'furn', 'lampPoleM', 'pave', 'roads', 'pavement', 'markings']);
@@ -150,7 +153,7 @@ async function start() {
   let player = createAvatar(scene, { name: 'player', outfit: 'skate', fit: true });
   await crewCfgP; window.__rw.crewRules = CR.CREW_RULES;
   // app handoff (#token=, taken out of the URL by index.html's boot script): verify with /api/auth/me, store like a normal sign-in
-  let lateHand = null; const HAND = await EMB.consumeHandoff(() => lateHand && lateHand());
+  let lateHand = null; const HAND = await EMB.consumeHandoff(() => lateHand && lateHand()).catch(e => { console.warn('handoff', e && e.message); return 'none'; }); // any failure falls through to the email + PIN sign-in
   const CREW = { fit: CR.loadFit(), xp: null, account: CR.getAccount() };
   if (HAND === 'expired' || HAND === 'pin') setTimeout(() => { try { hud.toast(HAND === 'pin' ? 'APP UPDATE NEEDED · SIGN IN WITH EMAIL + APP PIN' : 'APP SIGN-IN EXPIRED · SIGN IN WITH EMAIL + APP PIN'); } catch (e) { } }, 4000);
   window.addEventListener('rw-signin-needed', () => { CR.signOut(); CREW.account = null; CREW.xp = null; setTimeout(() => { try { hud.toast('SESSION EXPIRED · SIGN IN AGAIN IN THE WARDROBE'); } catch (e) { } }, 0); });
@@ -603,9 +606,9 @@ async function start() {
   const anyKey = (e) => { if (app.title) startGame(); }; addEventListener('keydown', anyKey);
   document.getElementById('play').onclick = startGame; document.getElementById('title').addEventListener('pointerdown', (e) => { if (document.getElementById('title').classList.contains('ready')) startGame(); });
   if (isTouch) document.getElementById('play').textContent = 'TAP TO ENTER';
-  EMB.mountFullscreen(); window.__rw.embed = { app: EMB.APP, embed: EMB.EMBED, hand: HAND };
+  try { EMB.mountFullscreen(); } catch (e) { console.warn('fullscreen', e && e.message); } window.__rw.embed = { app: EMB.APP, embed: EMB.EMBED, hand: HAND };
   // app contract: no token (or 401 / 426 UPDATE_APP) and not already signed in -> show the email + PIN sign-in once, after tap-to-start and any base picker
-  if (EMB.APP && HAND !== 'ok' && !CREW.account) { const iv = setInterval(() => { if (app.title || hud.isOpen() || (app.phone && app.phone.isOpen)) return; clearInterval(iv); if (CREW.account) return; app.key('o'); setTimeout(() => { const pr = document.getElementById('pinrow'); if (pr) pr.classList.remove('hidden'); const em = document.getElementById('email'); if (em && !isTouch) em.focus(); }, 300); }, 1000); }
+  if (EMB.APP && HAND !== 'ok' && !CREW.account) { const iv = setInterval(() => { try { if (app.title || hud.isOpen() || (app.phone && app.phone.isOpen)) return; clearInterval(iv); if (CREW.account) return; app.key('o'); setTimeout(() => { const pr = document.getElementById('pinrow'); if (pr) pr.classList.remove('hidden'); const em = document.getElementById('email'); if (em && !isTouch) em.focus(); }, 300); } catch (e) { clearInterval(iv); console.warn('app sign-in', e && e.message); } }, 1000); }
   Object.assign(window.__rw, { enterClub: (id) => { const d = id === 'warehousexl' ? whDoor : venueDoors.find(q => q.v.id === id); return enterClub(id, d || { x: 0, z: 0 }); }, cur: () => T, ready: true, engine, scene, P, C, enterTemple, exitTemple, kind: engine.__kind, low: LOW,
     setMode: (m) => { setTempleMode(T, scene, m); hud.interior(true, m); }, openMap: () => hud.openMap(mapCtx()), close: () => hud.close(), hud, player,
     teleport: (x, z, yaw) => { P.x = x; P.z = z; if (yaw != null) { P.heading = yaw; C.yaw = yaw; } C.curDist = C.dist; slowT = 0; },
@@ -613,4 +616,4 @@ async function start() {
     stats: () => { const inst = window.__rw.inst; return { drawCalls: inst ? inst.drawCallsCounter.current : -1, activeMeshes: scene.getActiveMeshes().length, activeIndices: scene.getActiveIndices(), totalVertices: scene.getTotalVertices(), meshes: scene.meshes.length, frameMs: inst ? inst.frameTimeCounter.lastSecAverage : -1 }; }, fps: () => engine.getFps(), ext, T, traffic, posters, whDoor });
 }
 // title screen
-start().catch(e => { console.error(e); const l = document.getElementById('loading'); if (l) l.textContent = 'ERROR: ' + e.message; DG.fatal('could not start', e); });
+start().then(() => { try { window.__rwBoot && window.__rwBoot.ok(); } catch (e) { } if (window.__rwAutoSafe) setTimeout(() => { try { window.__rw.hud.toast('SAFE MODE ON · LAST LOAD DIDN\u2019T FINISH'); } catch (e) { } }, 3000); }).catch(e => { console.error(e); const l = document.getElementById('loading'); if (l) l.textContent = 'ERROR: ' + e.message; DG.fatal('could not start', e); });
