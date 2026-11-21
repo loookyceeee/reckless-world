@@ -1,0 +1,36 @@
+// Audit: side activities smoke (low tier, small viewport) -> /tmp/rwx/side_*.png
+import puppeteer from 'puppeteer-core';
+const browser = await puppeteer.launch({ executablePath: '/usr/bin/google-chrome', headless: 'new', protocolTimeout: 600000, args: ['--no-sandbox', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
+const page = await browser.newPage(); await page.setViewport({ width: 960, height: 540 });
+const errs = []; page.on('pageerror', e => errs.push('PE ' + e.message)); page.on('console', m => { if (m.type() === 'error') errs.push('CE ' + m.text().slice(0, 200)); });
+page.on('request', r => { if (['PUT', 'PATCH', 'DELETE', 'POST'].includes(r.method()) && !/soundcloud/.test(r.url())) errs.push('REQ ' + r.method() + ' ' + r.url()); });
+await page.evaluateOnNewDocument(() => { localStorage.setItem('rw.avatarBase', 'male'); localStorage.setItem('rw.introSeen', '1'); localStorage.setItem('rw.story.v1', JSON.stringify({ skipped: true, ob: 5, obDone: true, m: 6, done: true })); });
+await page.goto('http://localhost:4173/?webgl&low&nostory', { waitUntil: 'load' });
+await page.waitForFunction(() => window.__rw && window.__rw.ready, { timeout: 240000 });
+const sleep = (ms) => new Promise(r => setTimeout(r, ms)); const shot = (n) => page.screenshot({ path: `/tmp/rwx/side_${n}.png` });
+const ev = async (label, fn, arg) => { try { const r = await page.evaluate(fn, arg); console.log(label, JSON.stringify(r)); } catch (e) { console.log(label, 'ERR', e.message.slice(0, 200)); } };
+const ia = () => page.evaluate(() => { const e = document.querySelector('#interact, .interact, .prompt'); return e ? e.innerText.replace(/\s+/g, ' ') : null; });
+await page.click('#play').catch(() => {}); await sleep(5000);
+await ev('flyers', () => { __rw.M.startFlyers(); return __rw.M.FD.state; }); await sleep(3000); await shot('flyers'); await ev('flyer obj', () => document.getElementById('objective').innerText.replace(/\n/g, ' / ')); await ev('cancel', () => { __rw.M.cancel(); return __rw.M.active(); }); await sleep(1500);
+await ev('posterrun', () => { __rw.M.startPosterRun(); return __rw.M.PR.state; }); await sleep(3000); await shot('posterrun'); await ev('cancel', () => { __rw.M.cancel(); return __rw.M.active(); }); await sleep(1500);
+await ev('rapid stop', () => { const s = __rw.RB.stops[2]; __rw.teleport(s.sx, s.sz); return s.name; }); await sleep(3000); console.log('prompt', await ia()); await page.keyboard.press('e'); await sleep(2500); await shot('rapid_menu');
+await ev('rapid menu html', () => { const p = document.querySelector('.overlay .panel'); return p ? p.innerText.replace(/\s+/g, ' ').slice(0, 300) : 'none'; });
+await page.evaluate(() => { const b = [...document.querySelectorAll('.overlay .panel button')].find(b => /TERMINUS|THOMPSON|WARE/.test(b.innerText)); if (b) b.click(); }); await sleep(7000); await shot('rapid_ride'); await ev('after ride', () => [__rw.P.x | 0, __rw.P.z | 0, __rw.RB.active]); await sleep(5000);
+await page.evaluate(() => __rw.hud.close());
+await ev('to parked', () => { const pc = __rw.traffic.parked.find(c => !['bus', 'cab', 'wagon', 'estate'].includes(c.kind) && c.node.isEnabled()); const p = pc.node.getAbsolutePosition(); __rw.teleport(p.x + 2.6, p.z + 0.5); return pc.kind; }); await sleep(3000); console.log('prompt', await ia());
+await ev('drive enter', () => { const pc = __rw.DRV.near(__rw.P); if (!pc) return 'no car near'; __rw.DRV.enter(pc, __rw.P, __rw.player); return __rw.DRV.on; }); await sleep(2000);
+await page.keyboard.down('w'); await sleep(5000); await page.keyboard.up('w'); await shot('drive'); await ev('drive state', () => ({ on: __rw.DRV.on, x: __rw.P.x | 0, z: __rw.P.z | 0 }));
+await page.keyboard.press('k'); await sleep(1500); await ev('radio note', () => [...document.querySelectorAll('.note')].map(n => n.innerText.replace(/\s+/g, ' ')).slice(0, 3));
+await page.keyboard.press('e'); await sleep(2500); await ev('drive exit', () => __rw.DRV.on);
+await ev('cab hail', () => { const w = [...document.querySelectorAll('.wheel [data-id], .wheel button')].map(b => b.dataset.id || b.innerText); return w; });
+await page.keyboard.down('KeyQ'); await sleep(800); await page.mouse.move(480, 270); await sleep(200);
+await page.evaluate(() => { const b = [...document.querySelectorAll('.wheel *')].find(e => /HAIL CAB|^CAB$/i.test(e.innerText || '')); if (b) { const r = b.getBoundingClientRect(); window.__cabxy = [r.x + r.width / 2, r.y + r.height / 2]; } });
+const xy = await page.evaluate(() => window.__cabxy); if (xy) await page.mouse.move(xy[0], xy[1]); await sleep(300); await page.keyboard.up('KeyQ'); await sleep(6000); await shot('cab'); console.log('cab xy', JSON.stringify(xy), 'prompt', await ia());
+await ev('temple', () => __rw.enterTemple()); await sleep(6000);
+await ev('dance start', () => { __rw.setMode('rave'); __rw.dance.start({ venue: 'THE TEMPLE', t: 0 }); return __rw.dance.active(); }); await sleep(2500); await shot('dance');
+for (let i = 0; i < 8; i++) { await page.keyboard.press(['ArrowLeft', 'ArrowUp', 'ArrowRight', 'ArrowDown'][i % 4]); await sleep(400); }
+await sleep(1500); await shot('dance2'); await page.keyboard.press('Escape'); await sleep(1000);
+await ev('photo inside', () => { __rw.app.key('p'); return true; }); await sleep(2500); await shot('photo');
+await ev('events local', () => { try { return localStorage.getItem('rw.events') || Object.keys(localStorage); } catch (e) { return e.message; } });
+console.log('ERRS', JSON.stringify([...new Set(errs)].slice(0, 30)));
+await browser.close();
