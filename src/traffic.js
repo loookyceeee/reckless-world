@@ -124,12 +124,18 @@ function carVD(kind, body) {
     P.push(color(xf(box(2.3, 1.6, 0.05), { t: [0, 2.0, 9.0] }), glass));
     P.push(color(xf(box(1.6, 0.25, 0.04), { t: [0, 2.92, 9.01] }), hex('#ffb000')));
     P.push(color(xf(box(2.45, 2.45, 0.9), { t: [0, 1.7, -0.6] }), hex('#1a1420'))); // articulation bellows
-  } else if (kind === 'cab') { // Belfast black cab (classic tall hackney shape)
-    P.push(color(xf(rbox(1.9, 0.85, 4.55, 0.28, 10), { t: [0, 0.78, 0] }), body));
-    P.push(color(xf(rbox(1.75, 0.74, 2.7, 0.26, 10), { t: [0, 1.5, -0.35] }), body)); // roof ~1.85 m (TX-style hackney)
-    P.push(color(xf(box(1.77, 0.42, 2.5), { t: [0, 1.53, -0.35] }), glass));
-    P.push(color(xf(rbox(0.95, 0.22, 0.95, 0.25, 8), { t: [0, 0.62, 2.1] }), hex('#c9ccd2'))); // grille
-    P.push(color(xf(rbox(0.55, 0.16, 0.22, 0.3, 6), { t: [0, 1.9, 0.6] }), hex('#ffb12a'))); // TAXI light
+  } else if (kind === 'cab') { // Belfast black cab, LEVC TX-style hackney (4.86 x 1.87 x 1.89 m, ~3.0 m wheelbase); no maker badge
+    P.push(color(xf(rbox(1.87, 0.62, 4.8, 0.22, 10), { t: [0, 0.64, 0] }), body)); // lower body, sill to waistline
+    P.push(color(xf(rbox(1.8, 0.3, 1.25, 0.3, 10), { r: [0.12, 0, 0], t: [0, 1.0, 1.72] }), body)); // bonnet sloping to the nose
+    P.push(color(xf(rbox(1.82, 0.9, 3.05, 0.34, 12), { t: [0, 1.36, -0.55] }), body)); // tall passenger cabin, roof ~1.81 m
+    for (const sd of [-1, 1]) P.push(color(xf(box(0.02, 0.42, 2.75), { t: [sd * 0.915, 1.42, -0.5] }), glass)); // side window band
+    P.push(color(xf(box(1.62, 0.5, 0.03), { r: [-0.5, 0, 0], t: [0, 1.38, 0.99] }), glass)); // raked windscreen
+    P.push(color(xf(box(1.5, 0.38, 0.03), { t: [0, 1.45, -2.085] }), glass)); // rear screen
+    for (const sd of [-1, 1]) for (const z of [0.15, -0.95]) P.push(color(xf(box(0.03, 0.44, 0.09), { t: [sd * 0.928, 1.42, z] }), hex('#0b0b0c'))); // B/C pillars
+    P.push(color(xf(rbox(0.9, 0.34, 0.08, 0.3, 10), { t: [0, 0.76, 2.41] }), hex('#c9ccd2'))); // chrome grille ring
+    P.push(color(xf(rbox(0.8, 0.26, 0.06, 0.3, 10), { t: [0, 0.76, 2.44] }), hex('#141416')));
+    for (const z of [2.38, -2.38]) P.push(color(xf(box(1.86, 0.14, 0.12), { t: [0, 0.42, z] }), hex('#1b1b1d'))); // bumpers
+    P.push(color(xf(rbox(0.55, 0.16, 0.22, 0.3, 6), { t: [0, 1.88, 0.7] }), hex('#ffb12a'))); // TAXI light
   } else if (kind === 'taxi') {
     P.push(color(xf(rbox(1.85, 0.8, 4.4, 0.25, 10), { t: [0, 0.75, 0] }), body));
     P.push(color(xf(rbox(1.7, 0.85, 2.4, 0.3, 10), { t: [0, 1.45, -0.2] }), body));
@@ -145,14 +151,14 @@ function carVD(kind, body) {
     P.push(color(xf(rbox(1.55, 0.62, L * 0.5, 0.32, 10), { t: [0, 1.25, kind === 'hatch' ? -0.25 : -0.15] }), body));
     P.push(color(xf(box(1.4, 0.4, L * 0.47), { t: [0, 1.28, kind === 'hatch' ? -0.25 : -0.15] }), glass));
   }
-  const wz = kind === 'bus' ? 4.0 : kind === 'wagon' ? 1.7 : 1.35, wx = kind === 'bus' ? 1.12 : kind === 'wagon' ? 1.0 : 0.76, wr = kind === 'bus' ? 0.5 : kind === 'wagon' ? 0.42 : 0.33;
+  const wz = kind === 'bus' ? 4.0 : kind === 'wagon' ? 1.7 : kind === 'cab' ? 1.5 : 1.35, wx = kind === 'bus' ? 1.12 : kind === 'wagon' ? 1.0 : 0.76, wr = kind === 'bus' ? 0.5 : kind === 'wagon' ? 0.42 : kind === 'cab' ? 0.35 : 0.33;
   const AX = kind === 'bus' ? [6.6 / wz, -1.9 / wz, -7.4 / wz] : [-1, 1]; // bus: front, middle and trailer axles
   for (const a of [-1, 1]) for (const b of AX) { P.push(color(xf(cyl(0.3, wr, wr, 14), { r: [0, 0, Math.PI / 2], t: [a * wx, wr, b * wz] }), tyre)); P.push(color(xf(cyl(0.31, wr * 0.55, wr * 0.55, 10), { r: [0, 0, Math.PI / 2], t: [a * wx, wr, b * wz] }), rim)); }
   return merge(P);
 }
-const HALF = c => c.kind === 'bus' ? 9 : c.kind === 'wagon' ? 2.7 : 2.3; // half body length for following gaps
+const HALF = c => c.kind === 'bus' ? 9 : c.kind === 'wagon' ? 2.7 : c.kind === 'cab' ? 2.45 : 2.3; // half body length for following gaps
 function lightsVD(kind) { // headlights front (+z), tail lights back
-  const L = kind === 'bus' ? 9.02 : kind === 'wagon' ? 2.68 : kind === 'estate' ? 2.36 : kind === 'hatch' ? 1.92 : kind === 'cab' ? 2.3 : 2.22, y = kind === 'bus' ? 0.75 : kind === 'wagon' ? 1.0 : 0.78, x = kind === 'bus' ? 0.95 : kind === 'wagon' ? 0.85 : 0.62;
+  const L = kind === 'bus' ? 9.02 : kind === 'wagon' ? 2.68 : kind === 'estate' ? 2.36 : kind === 'hatch' ? 1.92 : kind === 'cab' ? 2.43 : 2.22, y = kind === 'bus' ? 0.75 : kind === 'wagon' ? 1.0 : 0.78, x = kind === 'bus' ? 0.95 : kind === 'wagon' ? 0.85 : 0.62;
   const P = []; for (const sd of [-1, 1]) { P.push(color(xf(box(0.36, 0.14, 0.06), { t: [sd * x, y, L] }), hex('#fff6dc'))); P.push(color(xf(box(0.34, 0.14, 0.06), { t: [sd * x, y, -L] }), hex('#ff2020'))); }
   return merge(P);
 }
@@ -175,6 +181,7 @@ function modelVD(M, kind, col, part = 'body') {
   if (part === 'lights' && !I.length) return null;
   const vd = new VertexData(); vd.positions = P; vd.colors = C; vd.indices = I; vd.normals = []; VertexData.ComputeNormals(vd.positions, vd.indices, vd.normals); return vd;
 }
+const Q_NOLOD = typeof location !== 'undefined' && /[?&]nocarlod\b/.test(location.search);
 export function buildTraffic(scene, city, { low = false, stops = [], signals = [], models = null } = {}) {
   const R = rng(77);
   const G = buildGraph(city.roads, true), PG = buildGraph(city.roads, false);
@@ -192,7 +199,10 @@ export function buildTraffic(scene, city, { low = false, stops = [], signals = [
     if (templates[key]) return templates[key];
     if (key === 'patrolcar' && models && models.pestate) kind = 'pestate'; // modelled patrol estate (tools/gen_vehicles.py)
     const b = toMesh('car-' + key, (MODEL_OF[kind] && modelVD(models, kind, col)) || carVD(kind, col), scene, kind === 'wagon' ? wagonM : bodyM); const l = toMesh('carL-' + key, (models && models[MODEL_OF[kind]] && models[MODEL_OF[kind]].emit && modelVD(models, kind, col, 'lights')) || lightsVD(kind), scene, lightM);
-    b.position.y = -500; l.position.y = -500; b.alwaysSelectAsActiveMesh = true; l.alwaysSelectAsActiveMesh = true; return (templates[key] = { b, l, kind });
+    b.position.y = -500; l.position.y = -500; b.alwaysSelectAsActiveMesh = true; l.alwaysSelectAsActiveMesh = true;
+    // LODs (E): modelled bodies (~2k tris) swap to the procedural box body (~150 tris) past 70 m (45 m on low) and vanish past 220 m; lights go at 160 m
+    if (MODEL_OF[kind] && models && models[MODEL_OF[kind]] && kind !== 'bus' && kind !== 'wagon' && !Q_NOLOD) { const lo = toMesh('carLo-' + key, carVD(kind === 'pestate' ? 'estate' : kind, col), scene, bodyM); lo.isPickable = false; b.addLODLevel(low ? 45 : 70, lo); b.addLODLevel(low ? 150 : 220, null); l.addLODLevel(low ? 110 : 160, null); }
+    return (templates[key] = { b, l, kind });
   };
   // patrol livery meshes (fictional Belfast-style; Battenburg side panels, blue roof bar, no marks)
   const bbM = new StandardMaterial('bbM', scene); bbM.diffuseTexture = battenburgTex(scene); bbM.diffuseTexture.uScale = 1; bbM.diffuseTexture.wAng = 0; bbM.specularColor = new Color3(0.3, 0.3, 0.3); bbM.emissiveColor = new Color3(0.12, 0.12, 0.12);
@@ -251,7 +261,7 @@ export function buildTraffic(scene, city, { low = false, stops = [], signals = [
   const beamSrc = toMesh('hlBeam', xf(plane(4.2, 13), { r: [Math.PI / 2, 0, 0], t: [0, 0.1, 6.6] }), scene, hlM); beamSrc.position.y = -500; beamSrc.alwaysSelectAsActiveMesh = true;
   const N = low ? 24 : 58;
   const spawnSpec = [];
-  for (let i = 0; i < N; i++) { const kind = models ? ['saloon', 'hatch', 'suv', 'cab', 'saloon', 'van', 'cab', 'hatch', 'saloon', 'taxi'][i % 10] : ['saloon', 'hatch', 'saloon', 'cab', 'hatch', 'saloon', 'cab'][i % 7]; const col = kind === 'cab' ? hex('#121214') : kind === 'taxi' ? hex('#f4c21a') : COLS[Math.floor(R() * COLS.length)]; spawnSpec.push({ kind, col, key: kind + (kind === 'cab' ? '' : COLS.indexOf(col)) }); }
+  for (let i = 0; i < N; i++) { const kind = models ? ['saloon', 'hatch', 'suv', 'cab', 'saloon', 'van', 'cab', 'hatch', 'saloon', 'taxi'][i % 10] : ['saloon', 'hatch', 'saloon', 'cab', 'hatch', 'saloon', 'cab'][i % 7]; const col = kind === 'cab' ? hex('#121214') : kind === 'taxi' ? [COLS[1], COLS[2], COLS[5]][i % 3] /* Belfast private hire: ordinary paint + roof sign (black cabs are the 'cab' TX shape) */ : COLS[Math.floor(R() * COLS.length)]; spawnSpec.push({ kind, col, key: kind + (kind === 'cab' ? '' : COLS.indexOf(col)) }); }
   for (let i = 0; i < (low ? 1 : 3); i++) spawnSpec.push({ kind: 'bus', col: hex('#7e2a91'), key: 'bus' });
   spawnSpec.push({ kind: 'estate', col: hex('#9ea2aa'), key: 'patrolcar', patrol: true }, { kind: 'estate', col: hex('#9ea2aa'), key: 'patrolcar', patrol: true });
   spawnSpec.push({ kind: 'wagon', col: hex('#d6d9dd'), key: 'patrolwagon', patrol: true }, { kind: 'wagon', col: hex('#b9bec4'), key: 'patrolwagon2', patrol: true });
