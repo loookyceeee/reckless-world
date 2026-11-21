@@ -179,7 +179,7 @@ export function createHUD(app) {
       mg.strokeStyle = '#fff'; mg.lineWidth = 3; mg.beginPath(); mg.arc(R, R, R - 3, 0, Math.PI * 2); mg.stroke();
       $('street').textContent = st.street || ''; $('district').textContent = st.district || '';
       { const d = $('gps'); if (st.dest && !st.inside) { const m = Math.hypot(st.dest.x - st.x, st.dest.z - st.z); d.innerHTML = `<i></i>${st.dest.label} · ${m < 1000 ? Math.round(m / 10) * 10 + ' M' : (m / 1000).toFixed(1) + ' KM'}`; d.classList.add('on'); } else d.classList.remove('on'); }
-      $('objective').innerHTML = st.objective || '';
+      { const o = $('objective'), h = st.objective || ''; if (o._h !== h) { const head = h.split('<br>')[0].replace(/<[^>]+>/g, '').replace(/[0-9]+M\b|[0-9]+S\b/g, ''); if (o._head !== head && head) { o.classList.remove('pulse'); void o.offsetWidth; o.classList.add('pulse'); } o._head = head; o._h = h; o.innerHTML = h; const nb = $('notes'), hr = hud.getBoundingClientRect(), ob = h ? o.getBoundingClientRect().bottom - hr.top : 0; nb.style.top = Math.max(96, Math.round(ob + 10)) + 'px'; } }
     },
     openMap(st) { // st = { P, route(fx,fz,tx,tz), getDest(), setDest(d|null), venues:[{id,name,x,z}] }
       open(`<div class="pm"><div class="pmhead"><h2>BELFAST</h2><span class="pmhint">DRAG TO PAN · WHEEL / PINCH TO ZOOM · TAP THE MAP TO DROP A WAYPOINT</span></div>
