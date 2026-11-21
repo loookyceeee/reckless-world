@@ -9,6 +9,7 @@ import { Vector3 } from '@babylonjs/core/Maths/math.vector';
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
 import { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTexture';
 import { Texture } from '@babylonjs/core/Materials/Textures/texture';
+import { EquiRectangularCubeTexture } from '@babylonjs/core/Materials/Textures/equiRectangularCubeTexture';
 import { HDRCubeTexture } from '@babylonjs/core/Materials/Textures/hdrCubeTexture';
 import { Color3 } from '@babylonjs/core/Maths/math.color';
 
@@ -45,7 +46,11 @@ export function buildSky(scene, { low = false, hi = false } = {}) {
       tex.uScale = hf / (2 * Math.PI); tex.uOffset = yaw / (2 * Math.PI) - tex.uScale / 2; tex.vScale = vf / Math.PI; tex.vOffset = 0.5 + pitch / Math.PI - tex.vScale / 2; } };
   let env = null;
   // desktop: the 1K HDRI (1024x512) into a 256 cube for sharper wet reflections; phones keep the 512 px copy
-  try { env = new HDRCubeTexture(import.meta.env.BASE_URL + (hi ? 'data/env_night_1k.hdr' : 'data/env_night_512.hdr'), scene, low ? 64 : hi ? 256 : 128, false, false, false, false); env.level = 0.4; } catch (e) { console.warn('env', e); }
+  // audit P2-12: an 8-bit linear webp of the same HDRI (125 KB / 35 KB instead of 1.76 MB / 0.44 MB). Values are clipped at 1.0,
+  // which only trims lamp hot-spots; StandardMaterial reflections use the raw values either way. ?hdrenv keeps the old .hdr path.
+  const B = import.meta.env.BASE_URL, SZ = low ? 64 : hi ? 256 : 128;
+  try { env = new URLSearchParams(location.search).has('hdrenv') ? new HDRCubeTexture(B + (hi ? 'data/env_night_1k.hdr' : 'data/env_night_512.hdr'), scene, SZ, false, false, false, false)
+    : new EquiRectangularCubeTexture(B + (hi ? 'data/env_night_1k.webp' : 'data/env_night_512.webp'), scene, SZ, false, false); env.level = 0.4; } catch (e) { console.warn('env', e); }
   return { sky, env, mat: m, update: sky.update };
 }
 

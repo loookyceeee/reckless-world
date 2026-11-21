@@ -357,8 +357,8 @@ async function start() {
     if (k === 'n') { AU.toggle(); sndLbl(); return; }
     if (k === 'k') { MU.next(); if (DRV && DRV.on) hud.toast('RADIO · NEXT TRACK'); return; }
     if (k === 'h' && DRV && DRV.on) { AU.horn(); traffic.honked = performance.now(); return; }
-    if (k === 'c') { if (hud.isOpen()) return hud.close(); hud.openCredits(`<button id="exp">EXPORT TEST EVENTS (${EV.queue().length})</button><button id="livebtn">RAVE MODE: ${app.live ? 'ON' : 'OFF'}</button>`);
-      document.getElementById('exp').onclick = () => EV.exportQueue(); document.getElementById('livebtn').onclick = (e) => { app.live = !app.live; hud.setLive(app.live); e.target.textContent = 'RAVE MODE: ' + (app.live ? 'ON' : 'OFF'); }; return; }
+    if (k === 'c') { if (hud.isOpen()) return hud.close(); const DBG = Q.has('debug'); hud.openCredits(DBG ? `<button id="exp">EXPORT TEST EVENTS (${EV.queue().length})</button><button id="livebtn">RAVE MODE: ${app.live ? 'ON' : 'OFF'}</button>` : ''); // debug buttons only with ?debug (audit P2-3)
+      if (DBG) document.getElementById('exp').onclick = () => EV.exportQueue(); if (DBG) document.getElementById('livebtn').onclick = (e) => { app.live = !app.live; hud.setLive(app.live); e.target.textContent = 'RAVE MODE: ' + (app.live ? 'ON' : 'OFF'); }; return; }
     if (k === 'm') { if (hud.isOpen()) return hud.close(); return hud.openMap(mapCtx()); }
     if (k === 'o') { if (hud.isOpen()) return hud.close(); const reopen = () => { hud.close(); app.key('o'); };
       return hud.openWardrobe(CR, { fit: { ...CREW.fit }, xp: CREW.xp, account: CREW.account, email: EV.getEmail(), setEmail: EV.setEmail, apply: (f) => { applyFit(f); STORY && STORY.emit('fit'); },
@@ -404,7 +404,7 @@ async function start() {
     const g = (A, j) => A[Math.max(0, Math.min(n, j))]; return { p: Vector3.CatmullRom(g(KP, i - 1), g(KP, i), g(KP, i + 1), g(KP, i + 2), f), t: Vector3.CatmullRom(g(KT, i - 1), g(KT, i), g(KT, i + 1), g(KT, i + 2), f) }; };
   window.__rwFly = { restart: () => { titleT0 = t; }, FLY };
   scene.onBeforeRenderObservable.add(() => {
-    const dt = (window.__rw.fixedDt || Math.min(0.05, engine.getDeltaTime() / 1000)) * (app.wheel && app.wheel.isOpen && !isTouch ? 0.3 : 1); t += dt;
+    const dt = (window.__rw.fixedDt || Math.min(0.1, engine.getDeltaTime() / 1000) /* audit P2-10: real-time down to 10 fps (was 20 fps: slow motion on weak phones) */) * (app.wheel && app.wheel.isOpen && !isTouch ? 0.3 : 1); t += dt;
     // movement
     let ix = 0, iz = 0;
     if (!app.paused && !app.title) { if (K.has('KeyW') || K.has('ArrowUp')) iz += 1; if (K.has('KeyS') || K.has('ArrowDown')) iz -= 1; if (K.has('KeyA') || K.has('ArrowLeft')) ix -= 1; if (K.has('KeyD') || K.has('ArrowRight')) ix += 1; ix += stick.x; iz -= stick.y; }
@@ -468,6 +468,9 @@ async function start() {
     const camY = 1.5 + oy * want; const hit = (app.inside ? T.grid : city.grid).raycast(P.x, P.z, P.x + ox * want, P.z + oz * want, camY);
     const d = Math.max(1.0, want * hit - (hit < 1 ? 0.35 : 0)); C.curDist += (d - C.curDist) * Math.min(1, dt * (d < C.curDist ? 20 : 3.5)); // hide fast, restore lazily
     camPos.set(P.x + ox * C.curDist, Math.max(0.35, 1.5 + P.y * 0.55 + dipY + oy * C.curDist), P.z + oz * C.curDist);
+    { // audit P1-9: backed against a wall -> lift the camera over the head and fade the player instead of filling the screen with it
+      const close = Math.max(0, Math.min(1, (1.9 - C.curDist) / 0.9)); camPos.y += close * 1.15; tgt.y -= close * 0.25;
+      const vis = 1 - 0.7 * close; if (Math.abs((C._vis ?? 1) - vis) > 0.02) { C._vis = vis; try { for (const m of player.allMeshes()) m.visibility = vis; } catch (e) { } } }
     if (app.inside && T && T.club && camPos.z < 0.5) camPos.z = 0.5; // clubs: never behind the entrance wall (z = 0), the EXIT sign / door filled the screen green
     // smoothed follow camera + slight FOV kick when sprinting
     if (camSnap) { smPos.copyFrom(camPos); smTgt.copyFrom(tgt); camSnap = false; } else { const k = Math.min(1, dt * 8); Vector3.LerpToRef(smPos, camPos, k, smPos); Vector3.LerpToRef(smTgt, tgt, Math.min(1, dt * 14), smTgt); }
@@ -582,7 +585,7 @@ async function start() {
   const posterText = () => { const P0 = posters.find(p => !(posterDone(p))); if (!P0) return;
     app.phone.text({ title: 'POSTER RUN. ' + posters.length + ' WALLS.', body: 'Watch for patrols. Start when you are ready.', act: () => M && M.startPosterRun() }); setTimeout(() => app.phone.text({ title: 'FLYERS NEED DROPPING', body: 'Bundle at the Temple door, four venues, against the clock.', act: () => M && M.startFlyers() }), 30000); };
   const showHints = () => { if (localStorage.getItem('rw.hints')) return; localStorage.setItem('rw.hints', '1');
-    hud.hints(isTouch ? `<div class="hk" style="left:14%;top:52%">MOVE<i>DRAG LEFT SIDE</i></div><div class="hk" style="right:22%;top:36%">LOOK<i>DRAG RIGHT SIDE</i></div>
+    hud.hints(isTouch ? `<div class="hk" style="left:14%;top:52%">MOVE<i>DRAG LEFT SIDE</i></div><div class="hk" style="right:22%;top:56%">LOOK<i>DRAG RIGHT SIDE</i></div>
       <div class="hk" style="right:10px;bottom:calc(max(28px,env(safe-area-inset-bottom) + 12px) + 70px);display:none"></div>
       <div class="hk" style="right:96px;bottom:calc(max(28px,env(safe-area-inset-bottom) + 12px) + 136px)">◎ WHEEL<i>OR HOLD E</i></div><div class="hk" style="right:150px;bottom:calc(max(28px,env(safe-area-inset-bottom) + 12px) + 20px)">RUN<i>HOLD · LATCH</i></div>`
       : `<div class="card"><b>WASD</b>MOVE<b>SHIFT</b>SPRINT<b>SPACE</b>JUMP · VAULT<b>E</b>ACTION<b>TAB</b>PHONE<b>HOLD Q</b>WHEEL<b>B</b>LOOK BACK<b>M</b>MAP</div>`, 7000); };

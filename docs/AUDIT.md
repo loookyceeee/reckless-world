@@ -73,3 +73,34 @@ None found.
 - **Venues:** Temple, Ware-House XL, Thompsons, Terminus, Ware-House, LOCATION X: all enter/exit cleanly (A/AUD_venues.png).
 - **Perf (from G):** phone street 150 draws / 1.18M idx, rave 141 / 4.69M; desktop street 413 / 2.91M.
 - **Network:** GET only to the crew API (config, avatar_base when signed in). The sign-in POST /api/auth/request only fires from the wardrobe sign-in form.
+
+---
+
+## FIX PASS (2026-11-21, 03:36–04:10 UK time): all 9 P1s and the P2s ("do it all", ship over perfect)
+Shots: `A/FIX_*.png`. qa.mjs 9/9; `node tools/radio_filter_test.mjs` → fail 0. The red accents are unchanged until Luke decides.
+
+| Item | Status | What changed | Shot |
+|---|---|---|---|
+| P2-3 debug buttons | **FIXED** | EXPORT TEST EVENTS and RAVE MODE only show with `?debug` (the local test-event log itself is unchanged). | A/FIX_credits_no_debug_buttons.png |
+| P1-7 radio filter | **FIXED** | `isExplicit()`: leetspeak normalised (! 1 \| → i, 0 → o, @ 4 → a, $ 5 → s, 3 → e, 7 → t, * as wildcard), matched per word from the word start, plus always-bad substrings (fuck, motherf, `**`). Catches F\*ck, Sh!t, B!tch, Fkn, Sh1te, FCKN, C\*nt, Wh0re, Bullshit, f.u.c.k. Passes Essex, Middlesex, Sussex, Scunthorpe, Arsenal, Cocktail, Cockney, Dicky, Shift, Classic, Assassin, Shiitake, Count. Test: tools/radio_filter_test.mjs. | — |
+| Media Session | **FIXED (top frame)** | `navigator.mediaSession.metadata` is set to the same clean label (UPPER CASE title, artist RECKLESS RADIO) on every track. The SoundCloud iframe can still publish its own metadata on some browsers; **verify on a real phone lock screen**. | — |
+| P1-1 SKIP TUTORIAL | **FIXED** | Hidden while any overlay, phone or wheel is open. On portrait phones it moved above the minimap, clear of RUN and the stick. (It only ever shows during tutorial steps 1–5, so P2-2 is covered.) | A/FIX_portrait_hud.png |
+| P1-2 LOOK hint over notes | **FIXED** | Hint moved to 56% height. | A/FIX_portrait_hud.png |
+| P1-3 landscape notes / stick | **FIXED** | Notes sit between the brand and the objective column (no overlap). The idle stick ring is at the bottom left, beside the minimap. | A/FIX_landscape_hud.png |
+| P1-4 phone in landscape | **FIXED** | Right-side panel at 46vw, 5-column grid, 58 px tiles: every app is visible without scrolling. | A/FIX_landscape_phone.png |
+| P1-5 first-launch picker | **FIXED** | Cards can shrink (`min-width:0`) and the render scales to the card width, so FEMALE no longer overflows at 390 px. | — |
+| P1-6 ALL CAPS | **FIXED** | Removed every `text-transform:none`. `body *` is upper case except typed inputs (notes, phone messages, credits, panels, radio). | A/FIX_portrait_title_wardrobe_credits_caps.png |
+| P1-9 camera wall push-in | **FIXED** | When the collision camera is pulled in under 1.9 m, it lifts over the head (up to +1.15 m) and the player fades to 30%. | A/FIX_camera_wall.png |
+| P1-8 female face/hair | **IMPROVED (time-boxed)** | Materials only: skin lifted with less brown cast; hair shell gets a sheen and a darker cap so it reads as hair, not a helmet; curls get a highlight. Avatar refs refreshed (avatar-refs/game/turnaround/ingame_female_2026-11-21_audit.png). A full face repaint/hair geometry pass is still open if Luke wants more. | A/FIX_female_face_before_after.png, A/FIX_female_male_ingame.png |
+| P2-1 toast over objective | **FIXED** | Touch toasts at 38% height (30% in landscape), max 80vw. | — |
+| P2-4 wardrobe fit | **FIXED** | Desktop preview and list capped at 30vh. Landscape phones show the preview and list side by side. | A/FIX_landscape_wardrobe.png |
+| P2-5 dim TAP TO ENTER | **FIXED** | Soft pulse (100 → 72% opacity) on a dark backing instead of a 25% blink. | A/FIX_portrait_title_wardrobe_credits_caps.png |
+| P2-6 black boxes | **FIXED (root cause)** | OSM named colours ('grey', 'lightgrey', 'white', 'ivory'…) were parsed as black for walls and roofs. New `colOf()` maps CSS names and #rgb, and falls back to the default tint. That fixes about 230 buildings citywide, including the streamed chunks. | A/FIX_black_boxes_and_edge.png |
+| P2-7 grey edges | **FIXED (basic)** | Ground plane enlarged from 2.2 × 3.6 km to 3.2 × 5.0 km so every road sits on ground, and darkened to read as scrub. Fog covers the rest. A skyline card or extra stream ring is still a suggestion. | A/FIX_black_boxes_and_edge.png |
+| P2-10 slow motion | **FIXED** | The frame dt cap went from 0.05 s to 0.1 s: real time down to 10 fps (was 20 fps). Below 10 fps it eases. | — |
+| P2-12 sky + minimap size | **FIXED** | Env HDRI is now an 8-bit linear webp through EquiRectangularCubeTexture: desktop 1.76 MB → 125 KB, phone 0.44 MB → 35 KB (`?hdrenv` keeps the old .hdr). Minimap is lossless webp: 1.15 MB → 0.61 MB, pixel-identical. | — |
+| P2-13 Kenney credit | **FIXED** | In-game credits name Kenney City Kit Roads and the original CC0 drains. | A/FIX_credits_no_debug_buttons.png |
+| P2-14 paste stall | **ADDRESSED** | Pasting is time-based. The stall came from the 20 fps dt cap on the slow box, now 10 fps. Verify on device. | — |
+| P2-8 cab from wheel, P2-9 caption | **CHECKED** | No layout change needed for the caption. Cab via the wheel is still a manual device check. | — |
+| P2-11 tier labels | **DOCUMENTED** | Phones always start `LOW` (touch and short side < 900), then the runtime culler picks the med/low distance tier. Same behaviour, now written down here. | — |
+| Suggestions 1–8 | open | Red accents waiting on Luke; code-split, live sign-in after 23 Nov, device pass, KTX2 deferred. | — |

@@ -38,7 +38,7 @@ export async function loadAvatar3D(scene, { name = 'player', base = import.meta.
   const tex = (f, onErr, noMip = false) => { const t = new Texture(TEX + f + '.webp', scene, noMip, false, noMip ? Texture.BILINEAR_SAMPLINGMODE : Texture.TRILINEAR_SAMPLINGMODE, null, () => onErr && onErr()); t.anisotropicFilteringLevel = 4; return t; };
   const mat = (id, col, { rough = 0.75, t = null, fill = 0.42 } = {}) => { const m = new StandardMaterial('av3d-' + id, scene); m.diffuseColor = col.clone(); const sp = (1 - rough) * 0.3; m.specularColor = new Color3(sp, sp, sp); m.specularPower = 28; m.ambientColor = new Color3(0.3, 0.3, 0.32);
     if (t) { m.diffuseTexture = t; m.emissiveTexture = t; m.emissiveColor = new Color3(fill, fill, fill); m.diffuseColor = new Color3(0.78, 0.78, 0.78); } return m; };
-  const skinM = mat('skin', SKIN, { rough: 0.6, t: tex('body'), fill: 0.32 }); if (FEM) { skinM.diffuseColor.set(0.8, 0.68, 0.56); skinM.emissiveColor.set(0.27, 0.2, 0.15); } else skinM.diffuseColor.set(0.82, 0.8, 0.8); skinM.specularColor.set(0.05, 0.04, 0.035); // warm light skin like the sheets (was washed-out pale) // less fill, more key: arms read apart from the torso
+  const skinM = mat('skin', SKIN, { rough: 0.6, t: tex('body'), fill: 0.32 }); if (FEM) { skinM.diffuseColor.set(0.88, 0.81, 0.75); skinM.emissiveColor.set(0.36, 0.31, 0.27); } /* audit P1-8: lifted, less brown cast (face read muddy beside the male) */ else skinM.diffuseColor.set(0.82, 0.8, 0.8); skinM.specularColor.set(0.05, 0.04, 0.035); // warm light skin like the sheets (was washed-out pale) // less fill, more key: arms read apart from the torso
   const hairM = mat('hair', HAIR, { rough: 0.9, t: tex('hair', null, true), fill: 0.5 }); /* no mips: stretched nape UVs must not average the fade into stripes */ hairM.diffuseColor.set(0.45, 0.45, 0.45); /* opaque hair shell: the fade carries skin colour down to the hairline, so no alpha holes or nape slit */ hairM.backFaceCulling = false; // alpha-tested fringe edge: no forehead band
   const browM = mat('brow', HAIR, { rough: 0.8 });
   const eyeM = mat('eye', Color3.White(), { rough: 0.2, t: tex('eyes'), fill: 0.5 });
@@ -47,6 +47,9 @@ export async function loadAvatar3D(scene, { name = 'player', base = import.meta.
   const set = (n, m) => (byName[n] || []).forEach(x => { if (SO != null) m.sideOrientation = SO; x.material = m; });
   const curlM = mat('curls', HAIR, { rough: 0.7 }); curlM.diffuseColor = Color3.FromHexString('#1a1412'); curlM.specularColor = new Color3(0.12, 0.1, 0.09); curlM.specularPower = 18; curlM.emissiveColor = new Color3(0.03, 0.025, 0.022);
   const studM = mat('stud', Color3.FromHexString('#d8dce4'), { rough: 0.1 }); studM.specularColor = new Color3(1, 1, 1); studM.specularPower = 64; studM.emissiveColor = new Color3(0.35, 0.36, 0.4);
+  if (FEM) { // audit P1-8: hair cap read as a flat helmet -> lighter shell with a soft sheen; curls get a highlight so the bun/strands separate
+    hairM.diffuseColor.set(0.36, 0.34, 0.33); hairM.specularColor.set(0.26, 0.24, 0.22); hairM.specularPower = 18; hairM.emissiveColor.set(0.3, 0.29, 0.28);
+    curlM.diffuseColor = Color3.FromHexString('#2a211d'); curlM.specularColor = new Color3(0.32, 0.28, 0.25); curlM.specularPower = 26; curlM.emissiveColor = new Color3(0.06, 0.05, 0.045); }
   set('Curls', curlM); set('Stud', studM);
   const soleM = mat('soles', Color3.FromHexString('#1c1c1f'), { rough: 0.55 }); soleM.specularColor = new Color3(0.18, 0.18, 0.2); soleM.specularPower = 24; set('Soles', soleM);
   set('Body', skinM); set('Hair', hairM); set('Eyebrows', browM); set('Eyes', eyeM);

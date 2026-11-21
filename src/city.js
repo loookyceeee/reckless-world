@@ -12,6 +12,10 @@ import { earcut, hex, rng, box, rbox, cyl, sphere, xf, color, merge, toMesh, pla
 import { SegGrid } from './collide.js';
 import { VENUES } from './venues.js';
 
+// OSM roof:colour comes as #rrggbb, #rgb or a CSS name; anything unknown falls back to the default roof tint (never black)
+const CSSN = { grey: '#808080', gray: '#808080', lightgrey: '#d3d3d3', lightgray: '#d3d3d3', light_grey: '#d3d3d3', darkgrey: '#a9a9a9', darkgray: '#a9a9a9', dark_grey: '#a9a9a9', silver: '#c0c0c0', slategrey: '#708090', slategray: '#708090', beige: '#f5f5dc', brown: '#8b4513', red: '#9c3b30', black: '#222222', white: '#e8e8e8', green: '#4f6b4a', blue: '#4a5a78', maroon: '#6b2a2a', tan: '#d2b48c', ivory: '#f2efe2', papayawhip: '#f5e6cc', orange: '#c07a3a', yellow: '#d8c27a' };
+const colOf = (s) => { if (!s) return null; s = String(s).trim().toLowerCase(); if (CSSN[s]) s = CSSN[s]; if (/^#[0-9a-f]{3}$/.test(s)) s = '#' + s[1] + s[1] + s[2] + s[2] + s[3] + s[3]; return /^#[0-9a-f]{6}$/.test(s) ? Color3.FromHexString(s) : null; };
+
 export const TEMPLE_OSM_ID = 398481228;
 const PALETTE = ['#c9a27e', '#a5553f', '#8f4a3b', '#d8cfc0', '#9aa3ad', '#6d7b8c', '#b8b0a3', '#e3d5b8', '#7e5b4a', '#c4b49a', '#5f6b78', '#d9c2a3'].map(hex);
 
@@ -132,7 +136,7 @@ function extrudeOne(b, W, Rf, grid, R) {
     let area = 0; for (let i = 0; i < pts.length; i++) { const a = pts[i], c = pts[(i + 1) % pts.length]; area += a[0] * c[1] - c[0] * a[1]; }
     if (Math.abs(area) < 8) return null;
     if (area < 0) pts.reverse(); // CCW
-    const h = b.h; const col = b.c ? Color3.Lerp(hex(b.c), hex('#d8cfc0'), 0.18) : b.k === 'church' ? hex('#b89b7a') : PALETTE[Math.floor(R() * PALETTE.length)];
+    const h = b.h; const cc = colOf(b.c); const col = cc ? Color3.Lerp(cc, hex('#d8cfc0'), 0.18) : b.k === 'church' ? hex('#b89b7a') : PALETTE[Math.floor(R() * PALETTE.length)];
     const tint = 0.9 + R() * 0.2;
     let u0 = R() * 8;
     for (let i = 0; i < pts.length; i++) {
@@ -146,7 +150,7 @@ function extrudeOne(b, W, Rf, grid, R) {
       u0 = u1;
       grid.add(a[0], a[1], c[0], c[1], h);
     }
-    const rc = b.rc ? Color3.Lerp(hex(b.rc), col, 0.12) : Color3.Lerp(col, hex('#3a3d4a'), 0.6);
+    const rcc = colOf(b.rc); const rc = rcc ? Color3.Lerp(rcc, col, 0.12) : Color3.Lerp(col, hex('#3a3d4a'), 0.6); // audit P2-6: OSM named roof colours ('grey', 'lightgrey'...) parsed as black boxes
     if (!roofGeom(pts, h, b, rc, col, Rf, R)) {
       const flat = pts.flat(); const tri = earcut(flat); const base = Rf.p.length / 3;
       for (const p of pts) { Rf.p.push(p[0], h, p[1]); Rf.n.push(0, 1, 0); Rf.c.push(rc.r, rc.g, rc.b, 1); }
@@ -175,8 +179,8 @@ export async function buildCity(scene, { low = false } = {}) {
   const grid = new SegGrid(16);
   const R = rng(42);
   // ---------- ground ----------
-  const gm = new StandardMaterial('ground', scene); gm.diffuseColor = hex('#2b2f2a'); gm.specularColor = new Color3(0.05, 0.05, 0.08);
-  const ground = toMesh('ground', xf(box(2200, 0.2, 3560), { t: [-85, -0.205, -760] }), scene, gm); ground.parent = root;
+  const gm = new StandardMaterial('ground', scene); gm.diffuseColor = hex('#20251e'); gm.specularColor = new Color3(0.05, 0.05, 0.08);
+  const ground = toMesh('ground', xf(box(3200, 0.2, 5000), { t: [-240, -0.205, -790] }), scene, gm); ground.parent = root;
   // ---------- buildings ----------
   const { d, e } = windowTextures(scene);
   const wm = new StandardMaterial('walls', scene); wm.diffuseTexture = d; wm.emissiveTexture = e; wm.specularColor = new Color3(0.12, 0.12, 0.14); wm.specularPower = 24; wm.backFaceCulling = false;
