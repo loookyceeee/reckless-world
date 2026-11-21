@@ -11,4 +11,5 @@ A free, browser-based open-world night out in Belfast for Reckless Raves, built 
 - Street lights and trees: Belfast City Council open data (OGL v3.0).
 - Animation: Quaternius Universal Animation Library (CC0). Night HDRI: Poly Haven (CC0).
 - Traffic cars: Kenney Car Kit (CC0), https://kenney.nl/assets/car-kit
+- Outer-street blocks (desktop only, mid-distance fill on streets with no mapped buildings): Kenney City Kit Commercial + Suburban (CC0), tools/blender/export_midkit.py + tools/gen_midkit_place.py
 - The police vehicles are fictional, and all shop names are invented.

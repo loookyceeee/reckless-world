@@ -33,6 +33,7 @@ import '@babylonjs/core/Animations/animatable';
 import { buildCity, updateCity } from './city.js';
 import { chunkStatic, freezeMaterials, TIERS } from './perf.js';
 import { buildSky, applyWet, applyWetAsphalt } from './sky.js';
+import { buildMidkit } from './midkit.js';
 import { createAudio } from './audio.js';
 import { buildFlavour, buildWetStreaks } from './flavour.js';
 import { buildTempleExterior, updateTempleExterior, buildTempleInterior, setTempleMode, updateTempleInterior, INTERIOR_ORIGIN } from './temple.js';
@@ -63,6 +64,7 @@ const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in win
 // ?safe=1: lowest settings, no post-processing at all (for devices that show a black screen)
 const SAFE = Q.has('safe');
 const LOW = SAFE || Q.has('low') || (isTouch && Math.min(screen.width, screen.height) < 900);
+const HIQ_K = !isTouch && !LOW;
 const app = { title: true, paused: false, inside: false, live: !Q.has('nolive'), keys: new Set(), key: null };
 window.__rw = { ready: false, app };
 
@@ -118,10 +120,11 @@ async function start() {
 
   const crewCfgP = CR.loadCrewConfig(); CR.loadAvatarManifest(); window.__rw.crewArt = () => CR.avatarArtSource(); window.__rw.CR = CR; // loyalty's ranks/unlocks/starter fit, fetched while the city builds
   const city = await buildCity(scene, { low: LOW }); bar(55);
+  const MID = HIQ_K && !Q.has('nomid') ? await buildMidkit(scene, city.root, { base: import.meta.env.BASE_URL }).catch(e => { console.warn('midkit', e); return null; }) : null; window.__rw.mid = MID; // desktop: Kenney mid-distance street fill (chunked + culled with the city)
   const HIQ = !isTouch && !LOW && !Q.has('nowet'); const SKY = buildSky(scene, { low: LOW, hi: HIQ }); scene.__env = SKY.env; if (HIQ) applyWetAsphalt(scene);
   applyWet(scene, SKY.env, { roads: [0.5, 0.02, 0.04, 2.5], puddle: [1.0, 0.4, 0.3, 1.6], markings: [0.3, 0.02], pavement: [0.12, 0.0, 0.02, 3.5] });
   // perf: split merged + thin-instanced static city meshes into 96 m cells, freeze them, distance-cull per tier
-  const culler = Q.has('nochunk') ? null : chunkStatic(city.root, { cell: Number(Q.get('cell')) || 128, skip: city.beacons.map(b => b.m.name) });
+  const culler = Q.has('nochunk') ? null : chunkStatic(city.root, { cell: Number(Q.get('cell')) || 128, skip: [...city.beacons.map(b => b.m.name), /^midkit/] });
   // sharper ground/facade textures at grazing angles: anisotropic filtering (8x desktop, 4x phones, off in safe mode)
   { const af = SAFE || /swiftshader|llvmpipe|software/i.test(DG.info.gpu) ? 1 : LOW ? 4 : 8; for (const t of scene.textures) if (t && 'anisotropicFilteringLevel' in t && !t.isCube) t.anisotropicFilteringLevel = af; }
   freezeMaterials(scene, ['trunk', 'leaf', 'furn', 'lampPoleM', 'pave', 'roads', 'pavement', 'markings']);
@@ -493,7 +496,7 @@ async function start() {
     if (M && !app.title) { M.update(dt); state.patrols = M.blips(); const hk = M.H.level + '|' + (M.H.hidden > 0) + '|' + (M.H.flash > 0); if (hk !== app._hk) { app._hk = hk; hud.heat(M.H.level, M.H.hidden > 0, M.H.flash > 0); } }
     hud.update(dt, { stamina: ST.v, stamFlash: ST.flash, x: P.x, z: P.z, heading: P.heading, camYaw: C.yaw, inside: app.inside, lx: P.x - T.root.position.x, lz: P.z - T.root.position.z, plan: app.inside && T.club ? T.plan : null, ...state });
     fpsT += dt; if (fpsT > 0.5) { fpsT = 0; hud.fps(Math.round(engine.getFps())); }
-    cullT -= dt; if (culler && cullT <= 0 && !app.inside) { cullT = 0.25; culler.setDist(app.title ? 900 : TIERS[tier].dist); culler.update(cam.position); WET.update(cam.position); const pd = TIERS[tier].dist * 0.3; for (const p of traffic.peds) { const on = Math.hypot(p.av.root.position.x - cam.position.x, p.av.root.position.z - cam.position.z) < pd; if (p._on !== on) { p._on = on; p.av.root.setEnabled(on); } } }
+    cullT -= dt; if (culler && cullT <= 0 && !app.inside) { cullT = 0.25; culler.setDist(app.title ? 900 : TIERS[tier].dist); culler.update(cam.position); if (MID) MID.update(cam.position, app.title ? 700 : TIERS[tier].dist + 60); WET.update(cam.position); const pd = TIERS[tier].dist * 0.3; for (const p of traffic.peds) { const on = Math.hypot(p.av.root.position.x - cam.position.x, p.av.root.position.z - cam.position.z) < pd; if (p._on !== on) { p._on = on; p.av.root.setEnabled(on); } } }
     if (!app.title && !app.inside && autoTier) { tierT += engine.getDeltaTime() / 1000; tierF.push(engine.getFps()); if (tierT > 4) { const avg = tierF.reduce((a, b) => a + b, 0) / tierF.length; tierF = []; tierT = 0;
       const order = ['low', 'med', 'high'], i = order.indexOf(tier); if (avg < 24 && i > 0) setTier(order[i - 1]); else if (avg > 55 && i < 2 && !tierUp) { tierUp = true; setTier(order[i + 1]); } } }
   });
