@@ -253,7 +253,15 @@ async function start() {
     const sf = ((city.sf && city.sf.stops) || []).map(p => ({ x: p[0] ?? p.x, z: p[1] ?? p.z })).filter(p => Number.isFinite(p.x));
     while (spots.length < 20 && sf.length) { let bi = 0, bd = -1; sf.forEach((p, i) => { const d = Math.min(...spots.map(q => Math.hypot(p.x - q.x, p.z - q.z))); if (d > bd && d < 900) { bd = d; bi = i; } }); const p = sf.splice(bi, 1)[0]; spots.push({ x: p.x + 1.6, z: p.z + 1.6, label: 'BUS STOP' }); }
     for (const sp of spots) city.grid.resolve(sp, 0.5);
-    COL = createCollect({ scene, hud, AU: { shutter: () => AU.shutter(), blip: (...a) => AU.blip(...a) }, app, grid: city.grid, targets, spots }); window.__rw.COL = COL; COL.onShoot = () => photo();
+    COL = createCollect({ scene, hud, AU: { shutter: () => AU.shutter(), blip: (...a) => AU.blip(...a) }, app, grid: city.grid, targets, spots }); window.__rw.COL = COL;
+    { const ip = pipe && pipe.imageProcessing, cc0 = ip && ip.colorCurves, base = ip ? { c: ip.contrast, v: ip.vignetteWeight } : null; // photo filters on the grade (the saved shot is the rendered canvas, so it carries the look)
+      COL.onFilter = (f) => { if (!ip) return; const cc = new ColorCurves(); if (cc0) Object.assign(cc, { globalSaturation: cc0.globalSaturation, shadowsHue: cc0.shadowsHue, shadowsDensity: cc0.shadowsDensity, shadowsSaturation: cc0.shadowsSaturation, highlightsHue: cc0.highlightsHue, highlightsDensity: cc0.highlightsDensity, highlightsSaturation: cc0.highlightsSaturation });
+        ip.contrast = base.c; ip.vignetteWeight = base.v;
+        if (f === 'B&W') cc.globalSaturation = -100; if (f === 'NOIR') { cc.globalSaturation = -100; ip.contrast = base.c * 1.45; ip.vignetteWeight = base.v * 2.2; }
+        if (f === 'WARM') { cc.globalHue = 30; cc.globalDensity = 45; cc.globalSaturation = 10; } if (f === 'COOL') { cc.globalHue = 205; cc.globalDensity = 45; }
+        if (f === 'NEON') { cc.globalSaturation = 60; cc.highlightsHue = 330; cc.highlightsDensity = 40; ip.contrast = base.c * 1.15; }
+        ip.colorCurves = cc; };
+      COL.onPose = (p) => { P.dancing = p === 'DANCE'; P.pose = p; }; } COL.onShoot = () => photo();
     if (glow) glow.addExcludedMesh(COL.mesh); }
   const mapCtx = () => ({ P, route, venues: venueDest, getDest: () => DEST, setDest: (d) => { DEST = d; routeT = 0; } });
   hud.setLive(app.live);
@@ -267,7 +275,7 @@ async function start() {
     hud.note({ kicker: 'BAR · ' + T.name, title: 'THE BARTENDER', body: BARTENDER[Math.floor(Math.random() * BARTENDER.length)], hold: 6 }); };
   const standUp = () => { if (!SEAT) return; P.x = SEAT.ox; P.z = SEAT.oz; SEAT.stool.setEnabled(false); SEAT = null; app.lockMove = false; player.root.position.y = (T.floorY ? T.floorY(P.x, P.z) : 0); };
   addEventListener('keydown', (e) => { if (e.target.tagName === 'INPUT') return; if (DANCE && DANCE.active() && DANCE.key(e)) { e.preventDefault(); return; }
-    if (COL && COL.vfOn() && !app.title) { if (e.code === 'Escape' || e.code === 'KeyB') { COL.viewfinder(false); e.preventDefault(); return; } if (e.code === 'Space' || e.code === 'KeyE' || e.code === 'Enter') { e.preventDefault(); photo(); return; } }
+    if (COL && COL.vfOn() && !app.title) { if (e.code === 'Escape' || e.code === 'KeyB') { COL.viewfinder(false); e.preventDefault(); return; } if (e.code === 'Space' || e.code === 'KeyE' || e.code === 'Enter') { e.preventDefault(); photo(); return; } if (e.code === 'KeyC') { COL.cycle('filter'); return; } if (e.code === 'KeyV') { COL.cycle('pose'); return; } if (e.code === 'KeyH') { COL.cycle('hud'); return; } }
     if (SEAT && ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) { standUp(); }
     K.add(e.code); const k = e.key.toLowerCase(); if (e.code === 'KeyB' && !app.title) { if (!C.lb) camSnap = true; C.lb = true; return; } if (e.code === 'Space' && !app.title) { e.preventDefault(); P.jumpReq = 0.15; return; } if (e.code === 'Tab') { e.preventDefault(); if (!app.title) app.key('phone'); return; } if (e.code === 'KeyQ' && !e.repeat && !app.title && !hud.isOpen() && app.wheel) { app.wheel.open(); return; } if ('emfopclnk'.includes(k) && k.length === 1) { if (app.phone && app.phone.isOpen && 'mop'.includes(k)) app.phone.close(); app.key(k); } if (e.code === 'Escape') { hud.close(); app.phone && app.phone.close(); app.wheel && app.wheel.release(false); } });
   addEventListener('keyup', (e) => { K.delete(e.code); if (e.code === 'KeyB') C.lb = false; if (e.code === 'KeyQ' && app.wheel) app.wheel.release(true); });

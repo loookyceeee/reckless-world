@@ -39,11 +39,20 @@ export function createCollect({ scene, hud, AU, app, grid, targets, spots }) {
     return best; };
   const thumb = (canvas) => { try { const c = document.createElement('canvas'); c.width = 192; c.height = 108; const g = c.getContext('2d'); g.drawImage(canvas, 0, 0, c.width, c.height); return c.toDataURL('image/jpeg', 0.6); } catch (e) { return null; } };
   // viewfinder overlay
-  const vf = document.createElement('div'); vf.className = 'vfinder'; vf.innerHTML = '<i class="c tl"></i><i class="c tr"></i><i class="c bl"></i><i class="c br"></i><div class="vfl"></div><button class="vfshoot">SHOOT</button><button class="vfx">✕</button>';
+  const vf = document.createElement('div'); vf.className = 'vfinder'; vf.innerHTML = '<i class="c tl"></i><i class="c tr"></i><i class="c bl"></i><i class="c br"></i><div class="vfl"></div><button class="vfshoot">SHOOT</button><button class="vfx">✕</button><div class="vfbar"><button data-k="filter">FILTER · <b>NONE</b></button><button data-k="pose">POSE · <b>STAND</b></button><button data-k="hud">HUD · <b>ON</b></button></div>';
   (hud.hud || document.body).appendChild(vf); const vfl = vf.querySelector('.vfl');
   let vfOn = false; const api = {};
   api.viewfinder = (on = !vfOn) => { vfOn = on; vf.classList.toggle('on', on); document.body.classList.toggle('vfon', on); };
   vf.querySelector('.vfx').addEventListener('click', (e) => { e.stopPropagation(); api.viewfinder(false); });
+  // stage 10 photo mode: filters, poses, clean HUD (main.js wires onFilter / onPose to the grade and the player)
+  const FILTERS = ['NONE', 'B&W', 'NOIR', 'WARM', 'COOL', 'NEON'], POSES = ['STAND', 'DANCE'];
+  let fi = 0, pi = 0, clean = false;
+  api.cycle = (k) => { const b = vf.querySelector(`[data-k="${k}"] b`);
+    if (k === 'filter') { fi = (fi + 1) % FILTERS.length; b.textContent = FILTERS[fi]; api.onFilter && api.onFilter(FILTERS[fi]); }
+    if (k === 'pose') { pi = (pi + 1) % POSES.length; b.textContent = POSES[pi]; api.onPose && api.onPose(POSES[pi]); }
+    if (k === 'hud') { clean = !clean; b.textContent = clean ? 'OFF' : 'ON'; document.body.classList.toggle('vfclean', clean); } };
+  vf.querySelectorAll('.vfbar button').forEach(b => b.addEventListener('click', (e) => { e.stopPropagation(); api.cycle(b.dataset.k); }));
+  const _vf0 = api.viewfinder; api.viewfinder = (on = !vfOn) => { _vf0(on); if (!on) { if (fi) { fi = FILTERS.length - 1; api.cycle('filter'); } if (pi) { pi = POSES.length - 1; api.cycle('pose'); } if (clean) api.cycle('hud'); } };
   vf.querySelector('.vfshoot').addEventListener('click', (e) => { e.stopPropagation(); api.onShoot && api.onShoot(); });
   // called by main's photo() right after the frame is rendered: returns the target this shot counts for (or null)
   api.checkShot = (cam, canvas) => { AU && AU.shutter && AU.shutter(); const f = framed(cam); if (!f) { if (vfOn) hud.toast('NOTHING ON THE LIST IN FRAME'); return null; }

@@ -11,8 +11,8 @@ export function createWeather(scene, { low = false, force = null, AU = null } = 
   const ps = new ParticleSystem('rain', N, scene); ps.particleTexture = T; ps.emitter = new Vector3(0, 0, 0);
   ps.minEmitBox = new Vector3(-16, 1, -16); ps.maxEmitBox = new Vector3(16, 13, 16);
   ps.direction1 = new Vector3(-0.6, -16, -0.3); ps.direction2 = new Vector3(0.4, -19, 0.5); ps.minEmitPower = 1; ps.maxEmitPower = 1;
-  ps.minLifeTime = 0.15; ps.maxLifeTime = 0.75; ps.minSize = 0.05; ps.maxSize = 0.08; ps.minScaleY = 6; ps.maxScaleY = 9;
-  ps.billboardMode = ParticleSystem.BILLBOARDMODE_STRETCHED; ps.blendMode = ParticleSystem.BLENDMODE_ADD;
+  ps.minLifeTime = 0.15; ps.maxLifeTime = 0.75; ps.minSize = 0.16; ps.maxSize = 0.22; ps.minScaleX = 0.35; ps.maxScaleX = 0.45; ps.minScaleY = 1.4; ps.maxScaleY = 2.0;
+  ps.billboardMode = ParticleSystem.BILLBOARDMODE_ALL; // the streak lives in the texture (stretched mode drew nothing on SwiftShader) ps.blendMode = ParticleSystem.BLENDMODE_ADD;
   ps.color1 = new Color4(0.75, 0.8, 0.95, 0.7); ps.color2 = new Color4(0.6, 0.65, 0.8, 0.5); ps.colorDead = new Color4(0.55, 0.6, 0.75, 0.35);
   ps.emitRate = 0; ps.start();
   const S = { k: 0, want: force === 'rain' ? 1 : 0, t: force === 'rain' ? 1e9 : 150 + Math.random() * 120, inside: false };
