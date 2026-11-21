@@ -363,13 +363,17 @@ export function buildTempleInterior(scene, { glow, low = false, makeDancer, bake
   const hazeM = mat(scene, 'hazeM', { unlit: true, add: true, d: Color3.Black() }); hazeM.opacityTexture = hazeT; hazeM.emissiveColor = hex('#0f1119');
   const hazes = []; for (let k = 0; k < (low ? 4 : 8); k++) { const m = toMesh('haze' + k, xf(plane(22, 9), { t: [0, 0, 0] }), scene, hazeM); m.parent = root; m.position.set((R() - 0.5) * 6, 3 + R() * 4, 10 + k * 3.4); m.isPickable = false; hazes.push(m); }
 
-  // ---- bar (right aisle, by the entrance) ----
-  { const barM = mat(scene, 'tBar', { d: hex('#2a2626') }); const bar = toMesh('bar', merge([color(xf(box(0.8, 1.1, 5), { t: [7.2, 0.55, 6.5] }), hex('#2a2626')), color(xf(box(1.0, 0.06, 5.2), { t: [7.2, 1.13, 6.5] }), hex('#8a8580')), color(xf(box(0.4, 2.2, 5), { t: [9.2, 1.1, 6.5] }), hex('#1c1a1a'))]), scene, barM); bar.parent = root;
-    const glowM2 = mat(scene, 'tBarGlow', { unlit: true }); glowM2.emissiveColor = hex('#ff2a3a'); const strip = toMesh('barStrip', xf(box(0.02, 0.06, 5), { t: [6.79, 0.9, 6.5] }), scene, glowM2); strip.parent = root;
-    const botM = mat(scene, 'tBottles', { unlit: true }); botM.emissiveColor = hex('#ffd8a0'); const bt = []; for (let k = 0; k < 18; k++) bt.push(xf(cyl(0.28, 0.04, 0.05, 6), { t: [8.95, 1.35 + (k % 2) * 0.55, 4.3 + Math.floor(k / 2) * 0.5] })); const bots = toMesh('bottles', merge(bt), scene, botM); bots.parent = root;
+  // ---- bar: north aisle, on the LEFT as you walk in from the west entrance (Luke); the cream fire doors stay in the south aisle ----
+  { const barM = mat(scene, 'tBar', { d: hex('#2a2626') }); const bar = toMesh('bar', merge([color(xf(box(0.8, 1.1, 5), { t: [-7.2, 0.55, 6.5] }), hex('#2a2626')), color(xf(box(1.0, 0.06, 5.2), { t: [-7.2, 1.13, 6.5] }), hex('#8a8580')), color(xf(box(0.4, 2.2, 5), { t: [-9.2, 1.1, 6.5] }), hex('#1c1a1a'))]), scene, barM); bar.parent = root;
+    const glowM2 = mat(scene, 'tBarGlow', { unlit: true }); glowM2.emissiveColor = hex('#ff2a3a'); const strip = toMesh('barStrip', xf(box(0.02, 0.06, 5), { t: [-6.79, 0.9, 6.5] }), scene, glowM2); strip.parent = root;
+    const botM = mat(scene, 'tBottles', { unlit: true }); botM.emissiveColor = hex('#ffd8a0'); const bt = []; for (let k = 0; k < 18; k++) bt.push(xf(cyl(0.28, 0.04, 0.05, 6), { t: [-8.95, 1.35 + (k % 2) * 0.55, 4.3 + Math.floor(k / 2) * 0.5] })); const bots = toMesh('bottles', merge(bt), scene, botM); bots.parent = root;
     const sT = new DynamicTexture('barSign', { width: 256, height: 128 }, scene, true); { const g = sT.getContext(); g.setTransform(1, 0, 0, 128 / 96, 0, 0); g.fillStyle = '#000'; g.fillRect(0, 0, 256, 96); g.strokeStyle = '#fff'; g.lineWidth = 6; g.strokeRect(6, 6, 244, 84); g.fillStyle = '#fff'; g.font = '800 54px Unbounded, Arial'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('BAR', 128, 50); sT.update(); }
-    const sM = mat(scene, 'tBarSignM', { unlit: true, two: true }); sM.emissiveTexture = sT; const sign = toMesh('barSign', xf(plane(1.6, 0.6), { r: [0, Math.PI / 2, 0], t: [7.2, 2.7, 6.5] }), scene, sM); sign.parent = root;
-    segs.push([6.8, 4, 6.8, 9]); }
+    const sM = mat(scene, 'tBarSignM', { unlit: true, two: true }); sM.emissiveTexture = sT; const sign = toMesh('barSign', xf(plane(1.6, 0.6), { r: [0, -Math.PI / 2, 0], t: [-7.2, 2.7, 6.5] }), scene, sM); sign.parent = root;
+    segs.push([-6.8, 4, -6.8, 9]);
+    // soft warm light over the back shelf (additive wash, no real light): reads as bar lighting without touching the east window
+    const bwT = new DynamicTexture('barWashT', 128, scene, true); { const g = bwT.getContext(); const gr = g.createRadialGradient(64, 40, 4, 64, 64, 64); gr.addColorStop(0, 'rgba(255,255,255,0.9)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, 128, 128); bwT.update(); }
+    const bwM = mat(scene, 'tBarWash', { unlit: true, add: true, d: Color3.Black() }); bwM.opacityTexture = bwT; bwM.emissiveColor = hex('#6a4a2a');
+    const bw = toMesh('barWash', xf(plane(5.6, 2.6), { r: [0, -Math.PI / 2, 0], t: [-8.98, 1.7, 6.5] }), scene, bwM); bw.parent = root; bw.isPickable = false; }
   // ---- crowd (thin instances) ----
   const crowdN = low ? 80 : 150;
   const crowd = [];
