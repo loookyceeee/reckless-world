@@ -443,6 +443,41 @@ export async function buildCity(scene, { low = false } = {}) {
       b.position.set(v.x, 12, v.z); b.parent = root; b.isPickable = false; beacons.push({ m: b, k, v });
     }
   }
+  // ---------- street extras (F): CC0 drains, roadworks barriers, blank sign posts (data/extras.json, tools/blender/export_extras.py) ----------
+  // Kenney City Kit Roads 2.2 + original manhole/gully, vertex-coloured, one thin-instanced mesh each. No real operator marks; signs are blank.
+  try {
+    const EX = await (await fetch(import.meta.env.BASE_URL + 'data/extras.json')).json();
+    const b64 = (str) => Uint8Array.from(atob(str), ch => ch.charCodeAt(0)).buffer;
+    const vdOf = (m) => { const pos = new Int16Array(b64(m.pos)), ci = new Uint8Array(b64(m.col)), ind = new Uint16Array(b64(m.ind)); const n = ci.length, P = new Float32Array(n * 3), C = new Float32Array(n * 4);
+      for (let i = 0; i < n; i++) { P[i * 3] = pos[i * 3] * m.scale; P[i * 3 + 1] = pos[i * 3 + 1] * m.scale; P[i * 3 + 2] = pos[i * 3 + 2] * m.scale; const c = m.pal[ci[i]]; C[i * 4] = c[0]; C[i * 4 + 1] = c[1]; C[i * 4 + 2] = c[2]; C[i * 4 + 3] = 1; }
+      const vd = new VertexData(); vd.positions = P; vd.colors = C; vd.indices = Array.from(ind); vd.normals = []; VertexData.ComputeNormals(vd.positions, vd.indices, vd.normals); return vd; };
+    const L = { manhole: [], gully: [], post: [], streetsign: [], warning: [], barrier: [], cone: [], fence: [], blinker: [] };
+    const RX = new Set(['primary', 'secondary', 'tertiary', 'residential', 'unclassified', 'living_street', 'trunk']);
+    const R2 = rng(91), venueNear = (x, z) => VENUES.some(v => { const vx = (v.lon - data.origin[1]) * data.kx, vz = (v.lat - data.origin[0]) * data.kz; return Math.hypot(x - vx, z - vz) < 30; });
+    const MH = low ? 90 : 46, GU = low ? 48 : 24; let sites = 0; const SITES = low ? 6 : 16;
+    for (const r of roadsOut) { if (!r.d || !RX.has(r.t)) continue; const w = r.w || 6; let accM = R2() * MH, accG = R2() * GU, accS = R2() * 160;
+      for (let i = 0; i < r.pts.length - 1; i++) { const a = r.pts[i], b = r.pts[i + 1], dx = b[0] - a[0], dz = b[1] - a[1], Ls = Math.hypot(dx, dz); if (Ls < 0.5) continue; const ux = dx / Ls, uz = dz / Ls, ang = Math.atan2(ux, uz);
+        while (accM < Ls) { const off = (R2() < 0.5 ? -1 : 1) * w * 0.22; L.manhole.push([a[0] + ux * accM - uz * off, YR + 0.004, a[1] + uz * accM + ux * off, R2() * 6.28]); accM += MH * (0.7 + R2() * 0.6); } accM -= Ls;
+        while (accG < Ls) { for (const sd of [-1, 1]) { const off = sd * (w / 2 - 0.16); L.gully.push([a[0] + ux * accG - uz * off, YR + 0.002, a[1] + uz * accG + ux * off, ang]); } accG += GU * (0.8 + R2() * 0.4); } accG -= Ls;
+        while (accS < Ls) { const sd = R2() < 0.5 ? -1 : 1, off = sd * (w / 2 + 0.7); const q = kerbside(a[0] + ux * accS - uz * off, a[1] + uz * accS + ux * off, 0.5);
+          if (q && !venueNear(q[0], q[1])) { (R2() < 0.6 ? L.post : L.warning).push([q[0], 0, q[1], ang + (sd > 0 ? Math.PI / 2 : -Math.PI / 2)]); grid.add(q[0] - 0.1, q[1], q[0] + 0.1, q[1], 2.6); } accS += low ? 320 : 170; } accS -= Ls;
+        // roadworks: a short coned-off lane with barriers, a fence run and a blinker on a few residential/tertiary streets
+        if (sites < SITES && Ls > 22 && (r.t === 'residential' || r.t === 'tertiary') && R2() < 0.012) { const sd = R2() < 0.5 ? -1 : 1, off = sd * (w / 2 - 1.1), s0 = 4 + R2() * (Ls - 18);
+          const P0 = (s, o) => [a[0] + ux * s - uz * o, a[1] + uz * s + ux * o]; const [cx, cz] = P0(s0 + 6, off); if (venueNear(cx, cz)) continue; sites++;
+          for (let k = 0; k < 3; k++) { const q = P0(s0 + 2 + k * 2.6, off); L.barrier.push([q[0], YR, q[1], ang]); }
+          for (let k = 0; k < 5; k++) { const q = P0(s0 + k * 3, off - sd * 1.0); L.cone.push([q[0], YR, q[1], R2() * 6.28]); }
+          for (let k = 0; k < 2; k++) { const q = P0(s0 + 3 + k * 2.4, off + sd * 0.8); L.fence.push([q[0], YR, q[1], ang]); }
+          { const q = P0(s0 + 10.5, off); L.blinker.push([q[0], YR, q[1], ang]); const w0 = P0(s0 - 6, w / 2 + 0.7); L.warning.push([w0[0], 0, w0[1], ang + Math.PI]); }
+          { const q0 = P0(s0, off - sd * 1.0), q1 = P0(s0 + 12, off - sd * 1.0); grid.add(q0[0], q0[1], q1[0], q1[1], 1); } } } }
+    { const seen = new Set(); for (const r of roadsOut) { if (!r.d || !r.n) continue; for (let i = 0; i < r.n.length; i++) { const k = r.n[i]; if ((nodeDeg.get(k) || 0) < 3 || seen.has(k) || R2() > (low ? 0.06 : 0.14)) continue; seen.add(k);
+      const p = r.pts[i], q = r.pts[i + 1] || r.pts[i - 1]; if (!q) continue; const dx = q[0] - p[0], dz = q[1] - p[1], Ls = Math.hypot(dx, dz) || 1, w = (nodeW.get(k) || 6) / 2 + 1.0;
+      const c = kerbside(p[0] + dx / Ls * (w + 1.5) - dz / Ls * w, p[1] + dz / Ls * (w + 1.5) + dx / Ls * w, 0.5); if (!c || venueNear(c[0], c[1])) continue; L.streetsign.push([c[0], 0, c[1], Math.atan2(dx, dz)]); grid.add(c[0] - 0.1, c[1], c[0] + 0.1, c[1], 2.6); } } }
+    const exM = new StandardMaterial('extras', scene); exM.diffuseColor = new Color3(1, 1, 1); exM.specularColor = new Color3(0.18, 0.18, 0.2);
+    const drM = new StandardMaterial('drains', scene); drM.diffuseColor = new Color3(0.55, 0.56, 0.6); drM.specularColor = new Color3(0.5, 0.5, 0.55); drM.specularPower = 40; drM.zOffset = -2;
+    const counts = {}; for (const k in L) { const list = L[k]; if (!list.length || !EX[k]) continue; counts[k] = list.length;
+      const me = toMesh('xtra-' + k, vdOf(EX[k]), scene, k === 'manhole' || k === 'gully' ? drM : exM); me.thinInstanceSetBuffer('matrix', tiBuf(list, (it) => Matrix.Compose(Vector3.One(), Quaternion.FromEulerAngles(0, it[3], 0), new Vector3(it[0], it[1], it[2]))), 16, true); me.parent = root; me.isPickable = false; }
+    window.__extras = counts; window.__extrasAt = { barrier: L.barrier[1], streetsign: L.streetsign[3], manhole: L.manhole[5] };
+  } catch (e) { console.warn('extras', e); }
   return { root, grid, buildings, roads: roadsOut, lamps, beacons, data, walls, roofs, sf: SF, mats: { wm, rm } };
 }
 export function updateCity(city, t) {
