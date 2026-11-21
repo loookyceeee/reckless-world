@@ -5,11 +5,11 @@ const TOK = 'tok_APPtest.123-xyz';
 const browser = await puppeteer.launch({ executablePath: '/usr/bin/google-chrome', headless: 'new', protocolTimeout: 600000, args: ['--no-sandbox', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 const sleep = (ms) => new Promise(r => setTimeout(r, ms)); const log = (...a) => console.log(...a);
 const UA = 'Mozilla/5.0 (Linux; Android 13; Pixel 5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Mobile Safari/537.36';
-async function mk(vp, mob, meStatus) {
-  const ctx = await browser.createBrowserContext(); const page = await ctx.newPage(); // fresh storage per case await page.setViewport({ ...vp, deviceScaleFactor: mob ? 2 : 1, isMobile: mob, hasTouch: mob }); if (mob) await page.setUserAgent(UA);
+async function mk(vp, mob, meStatus, iso = true) {
+  const page = iso ? await (await browser.createBrowserContext()).newPage() : await browser.newPage(); // app cases: fresh storage; iframe cases: default context (touch emulation didn't reach the cross-origin frame in a separate context) await page.setViewport({ ...vp, deviceScaleFactor: mob ? 2 : 1, isMobile: mob, hasTouch: mob }); // no UA override: with it, Chrome's touch emulation didn't reach the cross-origin iframe (no touch UI in the frame)
   const leaks = []; page.on('console', m => { if (m.text().includes(TOK)) leaks.push('console'); }); page.on('pageerror', e => log('PE', e.message));
-  page.on('request', r => { if (r.url().includes(TOK) && !r.isNavigationRequest()) leaks.push('url ' + r.url().slice(0, 80)); }); // the test's own navigation URL carries the fragment; browsers never send it
-  await page.evaluateOnNewDocument(() => { localStorage.setItem('rw.avatarBase', 'male'); });
+  if (iso) page.on('request', r => { if (r.url().includes(TOK) && !r.isNavigationRequest()) leaks.push('url ' + r.url().slice(0, 80)); }); // the test's own navigation URL carries the fragment; browsers never send it
+  if (iso) await page.evaluateOnNewDocument(() => { localStorage.setItem('rw.avatarBase', 'male'); }); // not for the iframe cases: an init script in the cross-origin frame made it miss Chrome's touch emulation (the base picker is dismissed instead)
   if (meStatus) { await page.setRequestInterception(true); page.on('request', r => { if (r.url().includes('/api/auth/me') && r.method() === 'OPTIONS') return r.respond({ status: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization', 'Access-Control-Allow-Methods': 'GET' } });
     if (r.url().includes('/api/auth/me')) { const ok = (r.headers().authorization || '') === 'Bearer ' + TOK;
     return r.respond({ status: ok ? meStatus : 401, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization' }, body: JSON.stringify(ok && meStatus === 200 ? { email: 'luke.test@example.com' } : { error: meStatus === 426 ? 'UPDATE_APP' : 'SESSION' }) }); } r.continue(); }); }
@@ -18,19 +18,18 @@ async function mk(vp, mob, meStatus) {
 const frameOf = async (page) => { const h = await page.waitForSelector('iframe'); return h.contentFrame(); };
 const readyF = (f) => f.waitForFunction(() => window.__rw && window.__rw.ready, { timeout: 240000 });
 // ---- iframe on the mock Squarespace page: portrait + landscape (touch), desktop (mouse/keyboard)
-for (const [tag, vp, mob] of [['port', { width: 393, height: 851 }, true], ['land', { width: 851, height: 393 }, true], ['desk', { width: 1280, height: 800 }, false]]) {
-  const { page } = await mk(vp, mob); await page.goto('http://localhost:8090/index.html', { waitUntil: 'load' });
-  await page.screenshot({ path: `/tmp/rwx/emb_${tag}_1_page.png`, fullPage: false });
-  await page.evaluate(() => document.getElementById('frame').scrollIntoView({ block: 'start' }));
-  const f = await frameOf(page); await readyF(f); await sleep(1500);
+for (const [tag, vp, mob] of [['port', { width: 393, height: 851 }, true], ['land', { width: 851, height: 393 }, true], ['desk', { width: 1280, height: 800 }, false]].filter(c => !process.env.ONLY || process.env.ONLY === c[0])) {
+  const { page } = await mk(vp, mob, null, false); await page.goto('http://localhost:8090/index.html', { waitUntil: 'load' });
+  const f = await frameOf(page); await readyF(f); await page.screenshot({ path: `/tmp/rwx/emb_${tag}_1_page.png`, fullPage: false }); // shot after the frame attaches: an early screenshot made the cross-origin frame miss touch emulation
+  await page.evaluate(() => document.getElementById('frame').scrollIntoView({ block: 'start' })); await sleep(1500);
   log(tag, 'in frame', JSON.stringify(await f.evaluate(() => ({ embed: window.__rw.embed, fs: !!document.getElementById('fsBtn'), fsTxt: (document.getElementById('fsBtn') || {}).innerText }))));
   await page.screenshot({ path: `/tmp/rwx/emb_${tag}_2_frame_title.png` });
   const fr = await (await page.$('iframe')).boundingBox();
   if (mob) await page.touchscreen.tap(fr.x + fr.width / 2, fr.y + fr.height * 0.6); else await page.mouse.click(fr.x + fr.width / 2, fr.y + fr.height * 0.6);
   await sleep(6000); log(tag, 'started', await f.evaluate(() => !window.__rw.app.title));
-  log(tag, 'base picker dismissed', await f.evaluate(() => { const b = document.querySelector('.overlay.basepick button[data-b=male]'); if (b) b.click(); return !!b; })); await sleep(800); // the frame's origin has no saved base, so the first-run MALE/FEMALE picker covers the touch buttons
-  if (mob) { const j = await f.evaluate(() => { const r = document.getElementById('tJump').getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; });
-    await page.touchscreen.tap(fr.x + j[0], fr.y + j[1]); await sleep(150); log(tag, 'touch jump airborne', await f.evaluate(() => window.__rw.P.air || window.__rw.P.y > 0.01));
+  { let hit = false; for (let i = 0; i < 12 && !hit; i++) { hit = await f.evaluate(() => { const b = document.querySelector('.overlay.basepick button[data-b=male]'); if (b) b.click(); return !!b; }); if (!hit) await sleep(250); } log(tag, 'base picker dismissed', hit); await sleep(800); } // the frame's origin has no saved base, so the first-run MALE/FEMALE picker covers the touch buttons
+  if (mob) { const j = await f.evaluate(() => { const r = document.getElementById('tJump').getBoundingClientRect(); const h = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2); const ch = []; let x = h; while (x && ch.length < 4) { ch.push(x.tagName + '#' + x.id + '.' + String(x.className).slice(0, 30)); x = x.parentElement; } return [r.x + r.width / 2, r.y + r.height / 2, ch.join(' < ')]; }); log(tag, 'jump button hit-test', j[2]); log(tag, 'frame touch env', JSON.stringify(await f.evaluate(() => [matchMedia('(pointer: coarse)').matches, 'ontouchstart' in window, document.body.className, navigator.maxTouchPoints])));
+    await page.touchscreen.tap(fr.x + j[0], fr.y + j[1]); { let air = false; for (let i = 0; i < 10 && !air; i++) { await sleep(100); air = await f.evaluate(() => !!(window.__rw.P.air || window.__rw.P.y > 0.01)); } log(tag, 'touch jump airborne', air); }
     const sY0 = await page.evaluate(() => scrollY); const y0 = await f.evaluate(() => window.__rw.C.yaw); const sx = fr.x + fr.width * 0.8, sy = fr.y + fr.height * 0.45;
     const cdp = await page.target().createCDPSession(); await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: sx, y: sy }] });
     for (let i = 1; i <= 6; i++) { await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: sx - i * 12, y: sy }] }); await sleep(60); }
@@ -48,7 +47,7 @@ for (const [tag, vp, mob] of [['port', { width: 393, height: 851 }, true], ['lan
   await page.close();
 }
 // ---- app contract: ?app=1#token= (200), 426 UPDATE_APP, and no fragment
-for (const [tag, st, hash] of [['app_ok', 200, '#token=' + TOK], ['app_426', 426, '#token=' + TOK], ['app_none', 200, '']]) {
+for (const [tag, st, hash] of [['app_ok', 200, '#token=' + TOK], ['app_426', 426, '#token=' + TOK], ['app_none', 200, '']].filter(() => !process.env.ONLY)) {
   const { page, leaks } = await mk({ width: 393, height: 851 }, true, st);
   await page.goto('http://localhost:4173/?webgl&app=1' + hash, { waitUntil: 'load' }); await page.waitForFunction(() => window.__rw && window.__rw.ready, { timeout: 240000 }); await sleep(1500);
   log(tag, JSON.stringify(await page.evaluate(() => { const a = JSON.parse(localStorage.getItem('rw.crewAccount') || 'null'); const vis = (id) => { const e = document.getElementById(id) || document.querySelector(id); return !!e && getComputedStyle(e).display !== 'none' && e.getBoundingClientRect().width > 0; };
