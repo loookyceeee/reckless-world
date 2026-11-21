@@ -34,6 +34,7 @@ import { buildCity, updateCity } from './city.js';
 import { chunkStatic, freezeMaterials, TIERS } from './perf.js';
 import { buildSky, applyWet, applyWetAsphalt } from './sky.js';
 import { buildMidkit } from './midkit.js';
+import { createWeather } from './weather.js';
 import { createAudio } from './audio.js';
 import { buildFlavour, buildWetStreaks } from './flavour.js';
 import { buildTempleExterior, updateTempleExterior, buildTempleInterior, setTempleMode, updateTempleInterior, INTERIOR_ORIGIN } from './temple.js';
@@ -330,6 +331,7 @@ async function start() {
     T = TEMPLE; await EV.raveExit();
   });
   const AU = createAudio();
+  const WX = Q.has('noweather') ? null : createWeather(scene, { low: LOW, force: Q.has('rain') ? 'rain' : Q.has('norain') ? 'dry' : null, AU }); window.__rw.weather = WX;
   let npLast = '', muS = {};
   const MU = createMusic({ onState: (m) => { muS = m; if (m.playing && m.title && m.title !== npLast) { npLast = m.title; if (!app.title) hud.note({ kicker: 'NOW PLAYING · RECKLESS FM', title: m.title.toUpperCase(), body: 'Reckless Raves on SoundCloud', type: 'radio' }); } AU.beatOff = m.playing; const np = document.getElementById('np'); if (np) { np.innerHTML = m.playing && m.title ? `♪ ${m.title.toUpperCase()} · RECKLESS RAVES ON SOUNDCLOUD` : (m.failed ? '♪ RECKLESS BEAT (SOUNDCLOUD UNAVAILABLE)' : ''); np.href = m.link; } } });
   DANCE = createDance({ hud, AU, MU, isTouch, onPunch: (k) => { punch = Math.max(punch, k); buzz(k > 0.8 ? 18 : 8); } }); window.__rw.dance = DANCE;
@@ -465,7 +467,8 @@ async function start() {
     // world updates
     if (COL) { COL.update(P, t, app.inside); COL.frameHint(cam); }
     if (DANCE) DANCE.update(dt, t); punch = Math.max(0, punch - dt * 3.5); if (glow && app.inside) glow.intensity = 0.55 + punch * 0.9; if (pipe && app.inside) pipe.imageProcessing.exposure = (T.club ? 1.7 : 2.0) + punch * 0.35;
-    if (!app.inside) { updateCity(city, t); updateLandmarks(LM, t); updateTempleExterior(ext, t, app.live); updateTraffic(traffic, dt, P, t); templeRing.rotation.y += dt; templeRing.scaling.setAll(1 + 0.06 * Math.sin(t * 4)); }
+    if (WX) { const wk = WX.update(dt, cam, { inside: app.inside }); if (!app.inside) scene.fogDensity = 0.0028 * (1 + 0.6 * wk); } 
+    if (!app.inside) { updateCity(city, t); updateLandmarks(LM, t); updateTempleExterior(ext, t, app.live); traffic.dancingNow = !!(P.dancing || autoDance || (DANCE && DANCE.active())); updateTraffic(traffic, dt, P, t); templeRing.rotation.y += dt; templeRing.scaling.setAll(1 + 0.06 * Math.sin(t * 4)); }
     else if (T.club) updateClub(T, t, dt, TEMPLE.CV); else updateTempleInterior(T, t, dt), T.dancers.forEach(dn => animateAvatar(dn, dt, { dancing: true }));
     // interaction prompts
     interact = null;

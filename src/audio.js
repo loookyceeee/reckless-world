@@ -35,6 +35,8 @@ export function createAudio() {
     set(v) { on = v; if (!ctx) return; master.gain.setTargetAtTime(on ? 0.7 : 0, ctx.currentTime, 0.25); },
     toggle() { if (!ctx) { api.unlock(); return on; } api.set(!on); return on; },
     // short original two-tone (not a real emergency-service sample): 4 alternating triangle notes, ~1.3 s
+    rain(k) { if (!ctx) return; if (!api._rg) { const s = ctx.createBufferSource(); s.buffer = noiseBuf(3, false); s.loop = true; const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 2600; f.Q.value = 0.5; const g = ctx.createGain(); g.gain.value = 0; s.connect(f).connect(g).connect(master); s.start(); api._rg = g; }
+      api._rg.gain.setTargetAtTime(Math.max(0, Math.min(1, k)) * 0.16, ctx.currentTime, 0.8); },   // stage 10: rain hiss follows the weather intensity
     siren() { if (!ctx || !on) return; const t = ctx.currentTime, o = ctx.createOscillator(), g = ctx.createGain(); o.type = 'triangle'; o.connect(g).connect(master);
       for (let i = 0; i < 4; i++) o.frequency.setValueAtTime(i % 2 ? 590 : 780, t + i * 0.32); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.05, t + 0.03); g.gain.setValueAtTime(0.05, t + 1.22); g.gain.linearRampToValueAtTime(0, t + 1.3); o.start(t); o.stop(t + 1.35); },
     // car: original two-note horn (no samples) and a low engine drone that rises with speed; both through the master gain

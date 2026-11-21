@@ -399,11 +399,18 @@ export function updateTraffic(T, dt, player, t) {
     if (best && bd < 60) T.qPool.forEach((a, i) => { if (best.pts[i]) animateAvatar(a, dt, { speed: 0 }); }); }
   for (const p of T.peds) {
     let pk = 1; if (T.drv && T.drv.on && Math.abs(T.drv.speed) > 4) { const q = p.av.root.position, dd = Math.hypot(q.x - player.x, q.z - player.z); if (dd < 9) pk = 2.4; }
+    // stage 10 reactions: a sprinting player brushing past makes a ped flinch (stop, side-step, turn); a dancing player draws a cheering ring
+    const q0 = p.av.root.position, pd = Math.hypot(q0.x - player.x, q0.z - player.z);
+    if (pd < 2.2 && player.speed > 4.5 && !(p.re > 0)) { p.re = 0.9; p.reK = 'flinch'; p.reSd = ((q0.x - player.x) * (p.vz || 0) - (q0.z - player.z) * (p.vx || 0)) > 0 ? 1 : -1; }
+    if (pd < 9 && (player.dancing || T.dancingNow) && !(p.reK === 'cheer' && p.re > 0.5)) { p.re = 1.4; p.reK = 'cheer'; }
+    if (p.re > 0) { p.re -= dt; const fy = Math.atan2(player.x - q0.x, player.z - q0.z);
+      if (p.reK === 'flinch') { p.off += p.reSd * dt * 1.6; p.off = Math.max(-2.6, Math.min(2.6, p.off)); const qa = PG.pos.get(p.a), qb = PG.pos.get(p.b); const vx = (qb[0] - qa[0]) / p.len, vz = (qb[1] - qa[1]) / p.len; q0.set(qa[0] + vx * p.s - vz * p.off, 0, qa[1] + vz * p.s + vx * p.off); }
+      p.av.root.rotation.y = fy; if (pd < 70) animateAvatar(p.av, dt, { speed: 0, dancing: p.reK === 'cheer' }); if (p.re <= 0) p.reK = null; continue; }
     p.s += p.speed * pk * dt;
     while (p.s >= p.len) { p.s -= p.len; const nb = (PG.adj.get(p.b) || []).filter(n => n !== p.a); const next = nb.length ? nb[Math.floor(T.R() * nb.length)] : p.a; T.setPedEdge(p, p.b, next); }
     const qa = PG.pos.get(p.a), qb = PG.pos.get(p.b); const vx = (qb[0] - qa[0]) / p.len, vz = (qb[1] - qa[1]) / p.len;
     p.av.root.position.set(qa[0] + vx * p.s + (-vz) * p.off, 0, qa[1] + vz * p.s + vx * p.off);
-    p.av.root.rotation.y = Math.atan2(vx, vz);
+    p.av.root.rotation.y = Math.atan2(vx, vz); p.vx = vx; p.vz = vz;
     const d = Math.hypot(p.av.root.position.x - player.x, p.av.root.position.z - player.z);
     if (d > 140) T.placePed(p, player);
     if (d < 70) animateAvatar(p.av, dt, { speed: p.speed * pk });
