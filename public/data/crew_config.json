@@ -1,12 +1,12 @@
 {
   "schema": "reckless-crew-config/v1",
-  "status": "approved",
-  "status_note": "APPROVED by Luke 2026-11-18 15:10 (curve, game XP cut, wardrobe spread). Takes effect at launch with the XP reset (Mon 23 Nov 2026 00:00 Europe/London); status becomes 'live' then. xp_to_enter_previous / unlock_level_previous / history keep the old values.",
+  "status": "live",
+  "status_note": "LIVE since 2026-11-21 (Luke: 'Turn everyone on, app is finished too', 12:47). XP counts from 2026-11-21 00:00 Europe/London; everyone started at 0.",
   "owner": "RECKLESS CREW LOYALTY (writes this file); APP DEV + RECKLESS WORLD read it, never edit",
-  "updated_at": "2026-11-18T15:45:00Z",
+  "updated_at": "2026-11-21T12:50:00Z",
   "account_key": "email, trimmed + lowercased",
   "launch": {
-    "xp_start_instant_utc": "2026-11-23T00:00:00Z",
+    "xp_start_instant_utc": "2026-11-21T00:00:00Z",
     "timezone": "Europe/London",
     "everyone_starts_at": 0
   },
