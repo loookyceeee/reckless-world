@@ -36,7 +36,7 @@ window.__rwBoot={autoSafe:!!auto,ok:function(){done=true;clearTimeout(timer);if(
  fail:function(reason,detail){post(reason,detail);clearTimeout(timer);show(reason==='rendering failed'?'GRAPHICS FAILED':'COULDN\u2019T START',(window.__rwAutoSafe||Q.has('safe')?'SAFE MODE IS ON. ':'')+'TRY SAFE MODE IF THIS KEEPS HAPPENING.')},show:show,post:post};
 var lostT=0;
 document.addEventListener('webglcontextlost',function(){post('webgl context lost','');clearTimeout(lostT);lostT=setTimeout(function(){show('GRAPHICS RESET','YOUR PHONE RAN LOW ON GRAPHICS MEMORY. SAFE MODE USES LESS.')},2500)},true);
-document.addEventListener('webglcontextrestored',function(){clearTimeout(lostT);if(why==='GRAPHICS RESET')hide()},true);
+document.addEventListener('webglcontextrestored',function(){if(window.__rwLiteFreed)return;clearTimeout(lostT);if(why==='GRAPHICS RESET')hide()},true); /* LITE freed the CPU geometry: a restored context can't rebuild it, so keep RETRY up */
 addEventListener('error',function(e){post('script error',(e.message||'')+' '+String(e.filename||'').split('/').pop()+':'+(e.lineno||''))});
 addEventListener('unhandledrejection',function(e){var r=e.reason;post('unhandled rejection',r&&r.message||r)});
 }catch(e){}})();</script>

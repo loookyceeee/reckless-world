@@ -63,7 +63,11 @@ export function merge(list) {
   if (hasUV) out.uvs = uv; if (hasSkin) { out.matricesIndices = mi; out.matricesWeights = mw; }
   return out;
 }
-export function toMesh(name, vd, scene, mat) { const m = new Mesh(name, scene); vd.applyToMesh(m, false); if (mat) m.material = mat; return m; }
+// typed copies on the way to the GPU: Babylon keeps the CPU arrays, and plain JS number arrays cost 2-4x a Float32Array (the caller's vd is left untouched)
+const F32 = (a) => (a && Array.isArray(a) ? new Float32Array(a) : a);
+export function toMesh(name, vd, scene, mat) { const m = new Mesh(name, scene); const t = new VertexData(); t.positions = F32(vd.positions); t.normals = F32(vd.normals); t.colors = F32(vd.colors); t.uvs = F32(vd.uvs); t.uvs2 = F32(vd.uvs2); t.tangents = F32(vd.tangents);
+  t.matricesIndices = F32(vd.matricesIndices); t.matricesWeights = F32(vd.matricesWeights); const I = vd.indices; t.indices = I && Array.isArray(I) ? new Uint32Array(I) : I; // Uint32: these meshes may be merged later
+  t.applyToMesh(m, false); if (mat) m.material = mat; return m; }
 
 // Gothic pointed (equilateral-ish) arch outline from left spring to right spring, as 2D points [x,y].
 export function pointedArch(cx, springY, span, steps = 10, sharp = 1.0) {
