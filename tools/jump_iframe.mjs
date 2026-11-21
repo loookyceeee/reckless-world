@@ -1,0 +1,11 @@
+import puppeteer from 'puppeteer-core';
+const b = await puppeteer.launch({ executablePath: '/usr/bin/google-chrome', headless: 'new', protocolTimeout: 600000, args: ['--no-sandbox', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+const pg = await b.newPage(); await pg.setViewport({ width: 393, height: 851, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+await pg.goto('http://localhost:8090/index.html', { waitUntil: 'load' }); await pg.evaluate(() => document.getElementById('frame').scrollIntoView({ block: 'start' }));
+const f = await (await pg.waitForSelector('iframe')).contentFrame(); await f.waitForFunction(() => window.__rw && window.__rw.ready, { timeout: 240000 }); await new Promise(r => setTimeout(r, 1500));
+const fr = await (await pg.$('iframe')).boundingBox(); await pg.touchscreen.tap(fr.x + fr.width / 2, fr.y + fr.height * 0.6); await new Promise(r => setTimeout(r, 6000));
+console.log('picker', await f.evaluate(() => { const b = document.querySelector('.overlay.basepick button[data-b=male]'); if (b) b.click(); return !!b; })); await new Promise(r => setTimeout(r, 800)); console.log('picker after', await f.evaluate(() => !!document.querySelector('.overlay.basepick:not(.hidden)')));
+const j = await f.evaluate(() => { const e = document.getElementById('tJump'); const r = e.getBoundingClientRect(); const h = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2); const ch = []; let x = h; while (x && ch.length < 5) { ch.push(x.tagName + '#' + x.id + '.' + x.className + ' z' + getComputedStyle(x).zIndex); x = x.parentElement; } return [r.x + r.width / 2, r.y + r.height / 2, getComputedStyle(e).display, ch.join(' < '), (h && h.outerHTML || '').slice(0, 200)]; });
+const fr2 = await (await pg.$('iframe')).boundingBox(); console.log('btn', JSON.stringify(j), 'frame', JSON.stringify(fr), JSON.stringify(fr2));
+await pg.touchscreen.tap(fr2.x + j[0], fr2.y + j[1]); const ys = []; for (let i = 0; i < 10; i++) { ys.push(await f.evaluate(() => [+window.__rw.P.y.toFixed(2), !!window.__rw.P.air])); await new Promise(r => setTimeout(r, 100)); }
+console.log('y', JSON.stringify(ys)); await b.close();

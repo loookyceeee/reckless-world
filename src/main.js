@@ -144,15 +144,31 @@ async function start() {
   freezeMaterials(scene, ['trunk', 'leaf', 'furn', 'lampPoleM', 'pave', 'roads', 'pavement', 'markings']);
   const templeB = city.buildings.find(b => b.temple);
   const ext = buildTempleExterior(scene, templeB, city.grid); ext.root.parent = city.root;
-  const TEMPLE = buildTempleInterior(scene, { glow, low: LOW, bakeCrowd: () => bakeCrowdVariants(scene, { lod: LOW ? 0.28 : isTouch ? 0.26 : 0.33, simplify: Q.has('nosimp') || LITE ? 0 : 0.3 }), makeDancer: (i) => { const a = createAvatar(scene, { name: 'dancer' + i, outfit: ['skate', 'stan', 'stanfull', 'stanfull', 'skate', 'stan'][i], decals: true, lod: 0.5 }); return a; } });
-  let T = TEMPLE; // the live interior (Temple or one of the clubs built on first entry)
-  T.cam = cam; T.name = 'THE TEMPLE'; T.sub = '8 CARLISLE CIRCUS'; T.exitLabel = 'CARLISLE CIRCUS';
-  T.root.setEnabled(false);
-  const tGrid = new SegGrid(8); for (const s of T.segs) tGrid.add(s[0], s[1], s[2], s[3], 99); T.grid = tGrid;
-  T.bars = [{ x: INTERIOR_ORIGIN.x + 6.3, z: INTERIOR_ORIGIN.z + 6.5, face: Math.PI / 2 }];
-  if (T.CV) T.CV.cap = T.crowd.length;
+  // venue interiors (Temple + clubs) are built on first entry, not at load (docs/PERF.md). LITE also disposes them, and the shared crowd, on exit.
+  const KINDS = ['meshes', 'materials', 'textures', 'lights', 'skeletons', 'animationGroups', 'transformNodes', 'particleSystems'];
+  const owned = (fn) => { const snap = {}; for (const k of KINDS) snap[k] = new Set(scene[k] || []); const r = fn(); r._owned = {}; for (const k of KINDS) r._owned[k] = (scene[k] || []).filter(x => !snap[k].has(x)); return r; };
+  const disposeOwned = (V) => { const o = V && V._owned; if (!o) return; V._owned = null;
+    for (const a of o.animationGroups) try { a.stop(); a.dispose(); } catch (e) { } for (const p of o.particleSystems) try { p.dispose(false); } catch (e) { }
+    for (const m of o.meshes) try { if (glow) glow.removeExcludedMesh(m); m.dispose(true, false); } catch (e) { } for (const l of o.lights) try { l.dispose(); } catch (e) { }
+    for (const n of o.transformNodes) try { n.dispose(true); } catch (e) { } for (const sk of o.skeletons) try { sk.dispose(); } catch (e) { }
+    for (const mt of o.materials) try { mt.dispose(false, false); } catch (e) { } for (const t of o.textures) try { t.dispose(); } catch (e) { } };
+  const GLOWX = /-(body|head|skate|stan|barrel|stanb)$/; const glowEx = (V) => { if (glow && V && V._owned) for (const me of V._owned.meshes) if (GLOWX.test(me.name)) glow.addExcludedMesh(me); };
+  let CVo = null; const getCV = () => { if (!CVo) { CVo = owned(() => bakeCrowdVariants(scene, { poses: LITE ? 3 : 4, lod: LITE ? 0.2 : LOW ? 0.28 : isTouch ? 0.26 : 0.33, simplify: Q.has('nosimp') || LITE ? 0 : 0.3 })); glowEx(CVo);
+      const N = LOW ? 80 : 150; CVo.cap = N; // thin-instance buffers here (not only in the Temple build): a club can now be the first venue entered
+      for (const it of CVo.list) for (const m of [it.body, it.head, it.far]) { if (!m) continue; m.isPickable = false; m.alwaysSelectAsActiveMesh = true; m._buf = new Float32Array(N * 16); m.thinInstanceSetBuffer('matrix', m._buf, 16, false); m.thinInstanceCount = 0; } } return CVo; };
+  const CROWD = { max: 999, far: 13 }; // set by setTier, copied to each venue when it is built
+  let TEMPLE = null;
+  const getTemple = () => { if (TEMPLE) return TEMPLE; getCV(); const V = owned(() => buildTempleInterior(scene, { glow, low: LOW, bakeCrowd: () => getCV(), makeDancer: (i) => { const a = createAvatar(scene, { name: 'dancer' + i, outfit: ['skate', 'stan', 'stanfull', 'stanfull', 'skate', 'stan'][i], decals: true, lod: 0.5 }); return a; } }));
+    V.cam = cam; V.name = 'THE TEMPLE'; V.sub = '8 CARLISLE CIRCUS'; V.exitLabel = 'CARLISLE CIRCUS'; V.root.setEnabled(false);
+    const tGrid = new SegGrid(8); for (const s of V.segs) tGrid.add(s[0], s[1], s[2], s[3], 99); V.grid = tGrid;
+    V.bars = [{ x: INTERIOR_ORIGIN.x + 6.3, z: INTERIOR_ORIGIN.z + 6.5, face: Math.PI / 2 }];
+    if (V.CV) V.CV.cap = V.crowd.length; V.crowdMax = CROWD.max; V.crowdFar = CROWD.far;
+    if (glow) for (const me of V.glowSkip()) glow.addExcludedMesh(me); glowEx(V);
+    return (TEMPLE = V); };
+  if (Q.has('eagervenue')) getTemple();
+  let T = null; // the live interior while inside (null outside)
   const LM = buildLandmarks(scene, city, city.grid); LM.root.parent = city.root;
-  city.templeDoor = ext.doorPos; const carModels = Q.has('nocars') ? null : await (await fetch(import.meta.env.BASE_URL + 'data/cars.json')).json().catch(() => null); if (carModels && !Q.has('oldveh')) Object.assign(carModels, await (await fetch(import.meta.env.BASE_URL + 'data/vehicles.json')).json().catch(() => ({}))); const traffic = buildTraffic(scene, city, { models: carModels, low: LOW, stops: (city.sf && city.sf.stops) || [], signals: (city.sf && city.sf.signals) || [] }); bar(85);
+  city.templeDoor = ext.doorPos; const carModels = Q.has('nocars') ? null : await (await fetch(import.meta.env.BASE_URL + 'data/cars.json')).json().catch(() => null); if (carModels && !Q.has('oldveh')) Object.assign(carModels, await (await fetch(import.meta.env.BASE_URL + 'data/vehicles.json')).json().catch(() => ({}))); const traffic = buildTraffic(scene, city, { models: carModels, low: LOW, lite: LITE, stops: (city.sf && city.sf.stops) || [], signals: (city.sf && city.sf.signals) || [] }); bar(85);
   const route = makeRouter(buildGraph(city.roads, false)); let routeT = 0; const GPS3 = createGps3D(scene);
   // player
   let player = createAvatar(scene, { name: 'player', outfit: 'skate', fit: true });
@@ -243,7 +259,6 @@ async function start() {
 
   if (glow) { const GX = ['walls', 'roads', 'roofs', 'ground', 'pool', 'poolLED', 'canopy', 'trunk', 'lampPole', 'hlBeam', 'pavement', 'markings', 'puddles', 'bollards', 'railings', 'signalPoles', 'beaconPoles', 'kerbs']; for (const me of scene.meshes) { const base = ((me.metadata && me.metadata.chunkOf) || me.name).split(','); if (base.some(b => GX.includes(b))) glow.addExcludedMesh(me); }
     for (const me of scene.meshes) if (/-(body|head|skate|stan|barrel|stanb)$/.test(me.name) || me.name.startsWith('car-') || me.name === 'ci') glow.addExcludedMesh(me); }
-  if (glow) for (const me of T.glowSkip()) glow.addExcludedMesh(me);
   if (glow) for (const ps of posters) glow.addExcludedMesh(ps.mesh); // photo posters: no bloom wash
   let mapBase = buildMinimapBase(city);
   try { const meta = await (await fetch(import.meta.env.BASE_URL + 'data/minimap_meta.json')).json(); const im = await loadMinimapImage(import.meta.env.BASE_URL + 'data/' + meta.file, meta); if (im && LITE) { const k = 0.5, cv = document.createElement('canvas'); cv.width = Math.round(im.canvas.width * k); cv.height = Math.round(im.canvas.height * k); cv.getContext('2d').drawImage(im.canvas, 0, 0, cv.width, cv.height); const S = im.S * k; Object.assign(im, { canvas: cv, S, tx: (x) => (x - im.x0) * S, ty: (z) => (im.ztop - z) * S }); } // LITE: half-res minimap (36 MB decoded -> 9 MB)
@@ -335,29 +350,33 @@ async function start() {
   const carSrc = (on) => { for (const m of scene.meshes) if (m.position.y === -500 && /^(car-|carL-|busDecal|busGlass|hlBeam)/.test(m.name)) m.setEnabled(on); };
   const CLUBS = {}; const CLUB_ORDER = ['warehousexl', 'terminus', 'thompsons', 'warehouse', 'locationx'];
   const getClub = (id) => { if (CLUBS[id]) return CLUBS[id]; const v = VENUES.find(q => q.id === id);
-    const c = buildClub(scene, id, { index: CLUB_ORDER.indexOf(id), low: LOW, posters: [...upP, ...pastP], venue: v }); c.cam = cam; c.root.setEnabled(false);
+    getCV(); const c = owned(() => buildClub(scene, id, { index: CLUB_ORDER.indexOf(id), low: LOW, posters: [...upP, ...pastP], venue: v })); c.cam = cam; c.root.setEnabled(false);
     c.grid = new SegGrid(8); for (const sg of c.segs) c.grid.add(sg[0], sg[1], sg[2], sg[3], 99);
     c.exitLabel = ({ warehousexl: 'DUNBAR STREET', terminus: 'GLENGALL STREET', thompsons: "PATTERSON'S PLACE", warehouse: 'BANKMORE SQUARE', locationx: 'LISBURN ROAD' })[id];
-    if (glow) for (const me of c.glowSkip()) glow.addExcludedMesh(me); c.crowdMax = TEMPLE.crowdMax; c.crowdFar = TEMPLE.crowdFar; return (CLUBS[id] = c); };
+    if (glow) for (const me of c.glowSkip()) glow.addExcludedMesh(me); c.crowdMax = CROWD.max; c.crowdFar = CROWD.far; glowEx(c); return (CLUBS[id] = c); };
   const setMode = (m) => T.club ? setClubMode(T, scene, m) : setTempleMode(T, scene, m);
   let DOOR = null; // where to come back out
-  const enterVenue = async (V, door) => fadeTo(() => {
+  const enterVenue = async (getV, door) => fadeTo(() => { const V = getV();
     app.inside = true; city.root.setEnabled(false); carSrc(false); SKY.sky.setEnabled(false); FL.setEnabled(false); WET.setEnabled(false); traffic.cars.forEach(c => c.node.setEnabled(false)); traffic.parked.forEach(c => c.node.setEnabled(false)); traffic.peds.forEach(p => p.av.root.setEnabled(false));
-    T = V; DOOR = door; if (TEMPLE.CV) for (const it of TEMPLE.CV.list) for (const m of [it.body, it.head, it.far]) if (m) { m.parent = V.root; m.thinInstanceCount = 0; }
+    T = V; DOOR = door; { const CV = getCV(); for (const it of CV.list) for (const m of [it.body, it.head, it.far]) if (m) { m.parent = V.root; m.thinInstanceCount = 0; } }
     cityLights.forEach(l => l.setEnabled(false)); Object.values(T.lights).forEach(l => l.setEnabled(true)); T.root.setEnabled(true); if (glow) glow.intensity = 0.55; if (pipe) pipe.imageProcessing.exposure = T.club ? 1.7 : 2.0;
     setMode(Q.get('lights') === 'day' ? 'day' : 'rave'); hud.interior(true, T.mode);
     P.x = T.spawn.x; P.z = T.spawn.z; P.heading = 0; C.yaw = 0; C.pitch = 0.16; C.dist = 4.6; C.curDist = 4.6;
     EV.raveEnter(T.club ? T.name : 'The Temple'); hud.toast(T.name + ' · ' + (T.club ? T.sub : 'CARLISLE CIRCUS'));
   });
-  const enterTemple = async () => enterVenue(TEMPLE, { x: ext.doorPos.x - Math.sin(ext.yaw) * 2.5, z: ext.doorPos.z - Math.cos(ext.yaw) * 2.5, heading: ext.yaw + Math.PI });
-  const enterClub = async (id, d) => enterVenue(getClub(id), { x: d.x + (d.nx || 0) * 0.8, z: d.z + (d.nz || 0) * 0.8, heading: d.nx !== undefined ? Math.atan2(d.nx, d.nz) : 0 });
+  const enterTemple = async () => enterVenue(getTemple, { x: ext.doorPos.x - Math.sin(ext.yaw) * 2.5, z: ext.doorPos.z - Math.cos(ext.yaw) * 2.5, heading: ext.yaw + Math.PI });
+  const enterClub = async (id, d) => enterVenue(() => getClub(id), { x: d.x + (d.nx || 0) * 0.8, z: d.z + (d.nz || 0) * 0.8, heading: d.nx !== undefined ? Math.atan2(d.nx, d.nz) : 0 });
   const exitTemple = async () => fadeTo(async () => {
     app.inside = false; T.root.setEnabled(false); Object.values(T.lights).forEach(l => l.setEnabled(false)); cityLights.forEach(l => l.setEnabled(true)); if (glow) glow.intensity = 0.5; if (pipe) pipe.imageProcessing.exposure = 1.4;
     city.root.setEnabled(true); carSrc(true); SKY.sky.setEnabled(true); FL.setEnabled(true); WET.setEnabled(true); traffic.cars.forEach(c => c.node.setEnabled(true)); traffic.parked.forEach(c => c.node.setEnabled(true)); traffic.peds.forEach(p => { p.av.root.setEnabled(true); p._on = undefined; });
     scene.clearColor = NIGHT; scene.fogDensity = 0.0028; scene.fogColor = new Color3(0.1, 0.105, 0.17); hud.interior(false);
     const d = DOOR || { x: ext.doorPos.x - Math.sin(ext.yaw) * 2.5, z: ext.doorPos.z - Math.cos(ext.yaw) * 2.5, heading: ext.yaw + Math.PI };
     P.x = d.x; P.z = d.z; P.heading = d.heading; C.yaw = P.heading; C.pitch = 0.2; C.dist = 5.8;
-    T = TEMPLE; await EV.raveExit();
+    const was = T; T = null;
+    if (LITE && !Q.has('keepvenue')) { // free the interior + crowd; rebuilt on the next entry
+      if (CVo) { for (const it of CVo.list) for (const m of [it.body, it.head, it.far]) if (m) m.parent = null; disposeOwned(CVo); CVo = null; }
+      disposeOwned(was); if (was === TEMPLE) TEMPLE = null; else for (const k in CLUBS) if (CLUBS[k] === was) delete CLUBS[k]; }
+    await EV.raveExit();
   });
   const AU = createAudio();
   const WX = Q.has('noweather') ? null : createWeather(scene, { low: LOW, lite: LITE, force: Q.has('rain') ? 'rain' : Q.has('norain') ? 'dry' : null, AU }); window.__rw.weather = WX;
@@ -411,7 +430,7 @@ async function start() {
   const baseScale = 1 / Math.min(1.5, devicePixelRatio || 1);
   function setTier(n) { tier = n; const T0 = TIERS[n]; const dprE = Math.min(2.5, devicePixelRatio || 1); engine.setHardwareScalingLevel(LITE ? (SAFE ? 1.25 : 1) : isTouch ? T0.scale / dprE : T0.scale === 1 ? baseScale : Math.min(T0.scale, 1.25) / Math.min(1.5, dprE)); // phones: native px / scale (1.5x down on med)
     if (pipe) { pipe.bloomEnabled = T0.bloom; pipe.grainEnabled = T0.grain; try { pipe.samples = n === 'high' && !isTouch ? 4 : 1; } catch (e) { } }
-    if (SSAO) { const on = n === 'high'; const M = scene.postProcessRenderPipelineManager; if (on && !SSAO._rwOn) M.attachCamerasToRenderPipeline('ssao', cam0); if (!on && SSAO._rwOn !== false) M.detachCamerasFromRenderPipeline('ssao', cam0); SSAO._rwOn = on; } if (glow) glow.isEnabled = T0.glow; if (typeof STREAM !== 'undefined' && STREAM) { STREAM.radius = LITE ? 150 : isTouch ? Math.min(300, T0.stream) : T0.stream; STREAM.drop = STREAM.radius + (LITE ? 250 : 300); } if (typeof T !== 'undefined' && T) { T.crowdMax = T0.crowd; T.crowdFar = T0.far; } TEMPLE.crowdMax = T0.crowd; TEMPLE.crowdFar = T0.far; for (const k in CLUBS) { CLUBS[k].crowdMax = T0.crowd; CLUBS[k].crowdFar = T0.far; } window.__rw.tier = n; console.log('[rw] quality tier', n); }
+    if (SSAO) { const on = n === 'high'; const M = scene.postProcessRenderPipelineManager; if (on && !SSAO._rwOn) M.attachCamerasToRenderPipeline('ssao', cam0); if (!on && SSAO._rwOn !== false) M.detachCamerasFromRenderPipeline('ssao', cam0); SSAO._rwOn = on; } if (glow) glow.isEnabled = T0.glow; if (typeof STREAM !== 'undefined' && STREAM) { STREAM.radius = LITE ? 150 : isTouch ? Math.min(300, T0.stream) : T0.stream; STREAM.drop = STREAM.radius + (LITE ? 250 : 300); } if (typeof T !== 'undefined' && T) { T.crowdMax = T0.crowd; T.crowdFar = T0.far; } CROWD.max = T0.crowd; CROWD.far = T0.far; if (TEMPLE) { TEMPLE.crowdMax = T0.crowd; TEMPLE.crowdFar = T0.far; } for (const k in CLUBS) { CLUBS[k].crowdMax = T0.crowd; CLUBS[k].crowdFar = T0.far; } window.__rw.tier = n; console.log('[rw] quality tier', n); }
   setTier(tier);
   const FLY = 26; let titleT0 = 0;
   const flyover = (s) => { const u = Math.min(1, Math.max(0, s / FLY)); const e = u < 0.5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2; const n = KP.length - 1, x = e * n, i = Math.min(n - 1, Math.floor(x)), f = x - i;
@@ -501,7 +520,7 @@ async function start() {
     if (DANCE) DANCE.update(dt, t); punch = Math.max(0, punch - dt * 3.5); if (glow && app.inside) glow.intensity = 0.55 + punch * 0.9; if (pipe && app.inside) pipe.imageProcessing.exposure = (T.club ? 1.7 : 2.0) + punch * 0.35;
     if (WX) { const wk = WX.update(dt, cam, { inside: app.inside }); if (!app.inside) scene.fogDensity = 0.0028 * (1 + 0.6 * wk); } 
     if (!app.inside) { updateCity(city, t); updateLandmarks(LM, t); updateTempleExterior(ext, t, app.live); traffic.dancingNow = !!(P.dancing || autoDance || (DANCE && DANCE.active())); updateTraffic(traffic, dt, P, t); templeRing.rotation.y += dt; templeRing.scaling.setAll(1 + 0.06 * Math.sin(t * 4)); }
-    else if (T.club) updateClub(T, t, dt, TEMPLE.CV); else updateTempleInterior(T, t, dt), T.dancers.forEach(dn => animateAvatar(dn, dt, { dancing: true }));
+    else if (T.club) updateClub(T, t, dt, getCV()); else updateTempleInterior(T, t, dt), T.dancers.forEach(dn => animateAvatar(dn, dt, { dancing: true }));
     // interaction prompts
     interact = null;
     if (!app.inside) {
@@ -531,7 +550,7 @@ async function start() {
       if (!!app.inside !== !!app._kIn) { app._kIn = !!app.inside; if (app.inside) keyHints('temple'); } }
     if (STORY && !app.title) STORY.update(dt);
     if (M && !app.title) { M.update(dt); state.patrols = M.blips(); const hk = M.H.level + '|' + (M.H.hidden > 0) + '|' + (M.H.flash > 0); if (hk !== app._hk) { app._hk = hk; hud.heat(M.H.level, M.H.hidden > 0, M.H.flash > 0); } }
-    hud.update(dt, { stamina: ST.v, stamFlash: ST.flash, x: P.x, z: P.z, heading: P.heading, camYaw: C.yaw, inside: app.inside, lx: P.x - T.root.position.x, lz: P.z - T.root.position.z, plan: app.inside && T.club ? T.plan : null, ...state });
+    hud.update(dt, { stamina: ST.v, stamFlash: ST.flash, x: P.x, z: P.z, heading: P.heading, camYaw: C.yaw, inside: app.inside, lx: T ? P.x - T.root.position.x : P.x, lz: T ? P.z - T.root.position.z : P.z, plan: app.inside && T.club ? T.plan : null, ...state });
     fpsT += dt; if (fpsT > 0.5) { fpsT = 0; hud.fps(Math.round(engine.getFps())); }
     if (STREAM && !app.inside) { const sp = app.title ? cam.position : P; STREAM.update(dt, sp.x, sp.z); }
     cullT -= dt; if (culler && cullT <= 0 && !app.inside) { cullT = 0.25; culler.setDist(app.title ? 900 : TIERS[tier].dist); culler.update(cam.position); if (MID) MID.update(cam.position, app.title ? 700 : TIERS[tier].mid); WET.update(cam.position); const pd = TIERS[tier].dist * 0.3; for (const p of traffic.peds) { const on = Math.hypot(p.av.root.position.x - cam.position.x, p.av.root.position.z - cam.position.z) < pd; if (p._on !== on) { p._on = on; p.av.root.setEnabled(on); } } }
@@ -563,7 +582,7 @@ async function start() {
     sound: { label: () => (AU.on ? 'SOUND ON' : 'SOUND OFF'), toggle: () => app.key('n') },
     quality: { get: () => tier, set: (n) => { if (TIERS[n]) setTier(n); } },
     radio: () => ({ ...muS, link: SC_PROFILE }), skip: () => MU.next(),
-    rave: () => ({ inside: !!app.inside, lights: T.mode, venue: app.inside ? T.name : 'THE TEMPLE', venues: venueDest.map(v => ({ id: v.id, name: v.name, sub: v.sub })), dwell: app.inside ? EV.dwell() : 0, need: EV.MIN_DWELL }),
+    rave: () => ({ inside: !!app.inside, lights: T ? T.mode : 'rave', venue: app.inside ? T.name : 'THE TEMPLE', venues: venueDest.map(v => ({ id: v.id, name: v.name, sub: v.sub })), dwell: app.inside ? EV.dwell() : 0, need: EV.MIN_DWELL }),
     posters: () => posters.map(p => ({ name: spotName(p.id), done: posterDone(p), x: p.ix, z: p.iz })),
     crewLook: () => CR.composeLook(CREW.base, CREW.fit),
     crew: () => CREW.account ? { rank: 'CREW LEVEL ' + CR.playerLevel(CREW.xp), line: 'Signed in. Your crew rank unlocks wardrobe pieces.' } : { rank: 'SIGNED OUT', line: 'Sign in with your crew email to wear unlocked pieces.' },
@@ -592,7 +611,7 @@ async function start() {
     if (Q.has('storyreset')) localStorage.removeItem('rw.story.v1');
     if (!Q.has('nostory')) { STORY = createStory({ hud, P, app, isTouch, fast: Q.has('storyfast'), jump: Q.has('storyjump') ? +Q.get('storyjump') : null, text: (m) => app.phone.text(m), setDest: (d) => { DEST = d; routeT = 0; },
       nextWall: () => { let b = null; for (const w of posters) { if (posterDone(w)) continue; const d = Math.hypot(w.ix - P.x, w.iz - P.z); if (!b || d < b.d) b = { x: w.ix, z: w.iz, name: (w.name || 'POSTER WALL').toUpperCase(), d }; } return b; },
-      templeD: () => Math.hypot(P.x - ext.doorPos.x, P.z - ext.doorPos.z), templeDest, inTemple: () => !!app.inside && T === TEMPLE, dancing: () => !!(P.dancing || app.autoDance || (DANCE && DANCE.active())), cinematic: () => !!(app.paused || app.cinematic), sprinting: () => ST.v < 0.85 });
+      templeD: () => Math.hypot(P.x - ext.doorPos.x, P.z - ext.doorPos.z), templeDest, inTemple: () => !!app.inside && !!T && T === TEMPLE, dancing: () => !!(P.dancing || app.autoDance || (DANCE && DANCE.active())), cinematic: () => !!(app.paused || app.cinematic), sprinting: () => ST.v < 0.85 });
       window.__rw.STORY = STORY; } }
   hud.$('tWheel').addEventListener('pointerdown', (e) => { e.stopPropagation(); if (app.wheel.isOpen) return app.wheel.release(false); app.wheel.open(true); });
   hud.hud.classList.add('titlehide'); titleT0 = t; document.getElementById('title').classList.add('ready');

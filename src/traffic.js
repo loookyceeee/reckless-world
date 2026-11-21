@@ -182,7 +182,7 @@ function modelVD(M, kind, col, part = 'body') {
   const vd = new VertexData(); vd.positions = P; vd.colors = C; vd.indices = I; vd.normals = []; VertexData.ComputeNormals(vd.positions, vd.indices, vd.normals); return vd;
 }
 const Q_NOLOD = typeof location !== 'undefined' && /[?&]nocarlod\b/.test(location.search);
-export function buildTraffic(scene, city, { low = false, stops = [], signals = [], models = null } = {}) {
+export function buildTraffic(scene, city, { low = false, lite = false, stops = [], signals = [], models = null } = {}) {
   const R = rng(77);
   const G = buildGraph(city.roads, true), PG = buildGraph(city.roads, false);
   // Real OSM traffic-signal nodes -> graph junction nodes (within 6 m). Two-phase cycle per junction: N-S then E-W.
@@ -259,7 +259,7 @@ export function buildTraffic(scene, city, { low = false, stops = [], signals = [
     const gr2 = g.createRadialGradient(64, 0, 2, 64, 0, 40); gr2.addColorStop(0, 'rgba(255,40,30,0.7)'); gr2.addColorStop(1, 'rgba(255,40,30,0)'); g.fillStyle = gr2; g.fillRect(0, 0, 128, 40); beamTex.hasAlpha = true; beamTex.update(); }
   const hlM = new StandardMaterial('hlM', scene); hlM.diffuseTexture = beamTex; hlM.useAlphaFromDiffuseTexture = true; hlM.emissiveColor = new Color3(0.36, 0.34, 0.3); hlM.disableLighting = true; hlM.alphaMode = 1; hlM.backFaceCulling = false;
   const beamSrc = toMesh('hlBeam', xf(plane(4.2, 13), { r: [Math.PI / 2, 0, 0], t: [0, 0.1, 6.6] }), scene, hlM); beamSrc.position.y = -500; beamSrc.alwaysSelectAsActiveMesh = true;
-  const N = low ? 24 : 58;
+  const N = lite ? 12 : low ? 24 : 58; // LITE (iOS / app / safe): half the phone traffic
   const spawnSpec = [];
   for (let i = 0; i < N; i++) { const kind = models ? ['saloon', 'hatch', 'suv', 'cab', 'saloon', 'van', 'cab', 'hatch', 'saloon', 'taxi'][i % 10] : ['saloon', 'hatch', 'saloon', 'cab', 'hatch', 'saloon', 'cab'][i % 7]; const col = kind === 'cab' ? hex('#121214') : kind === 'taxi' ? [COLS[1], COLS[2], COLS[5]][i % 3] /* Belfast private hire: ordinary paint + roof sign (black cabs are the 'cab' TX shape) */ : COLS[Math.floor(R() * COLS.length)]; spawnSpec.push({ kind, col, key: kind + (kind === 'cab' ? '' : COLS.indexOf(col)) }); }
   for (let i = 0; i < (low ? 1 : 3); i++) spawnSpec.push({ kind: 'bus', col: hex('#7e2a91'), key: 'bus' });
@@ -293,7 +293,7 @@ export function buildTraffic(scene, city, { low = false, stops = [], signals = [
   const kerbSpots = []; for (const r of city.roads) { if (!r.d || !['residential', 'tertiary', 'unclassified', 'secondary'].includes(r.t) || r.w < 6) continue;
     for (let i = 0; i < r.pts.length - 1; i++) { const a = r.pts[i], b = r.pts[i + 1]; const L = Math.hypot(b[0] - a[0], b[1] - a[1]); if (L < 14) continue; const ux = (b[0] - a[0]) / L, uz = (b[1] - a[1]) / L;
       for (let s = 6; s < L - 6; s += 5.6) kerbSpots.push([a[0] + ux * s - uz * (r.w / 2 - 1.05), a[1] + uz * s + ux * (r.w / 2 - 1.05), Math.atan2(ux, uz)]); } }
-  for (let i = 0; i < (low ? 30 : 90) && kerbSpots.length; i++) { const k = Math.floor(R() * kerbSpots.length); const [x, z, h] = kerbSpots.splice(k, 1)[0]; const kind = R() < 0.5 ? 'hatch' : 'saloon'; const ci = Math.floor(R() * COLS.length); park(kind + ci, kind, COLS[ci], x, z, h); }
+  for (let i = 0; i < (lite ? 14 : low ? 30 : 90) && kerbSpots.length; i++) { const k = Math.floor(R() * kerbSpots.length); const [x, z, h] = kerbSpots.splice(k, 1)[0]; const kind = R() < 0.5 ? 'hatch' : 'saloon'; const ci = Math.floor(R() * COLS.length); park(kind + ci, kind, COLS[ci], x, z, h); }
   let near; { near = (x, z) => { let best = null, bd = 1e9; for (const r of city.roads) { if (!r.d || r.t === 'service') continue; for (let i = 0; i < r.pts.length - 1; i++) { const a = r.pts[i], b = r.pts[i + 1]; const dx = b[0] - a[0], dz = b[1] - a[1], L = Math.hypot(dx, dz); if (L < 16) continue; const t = Math.max(0.2, Math.min(0.8, ((x - a[0]) * dx + (z - a[1]) * dz) / (L * L))); const px = a[0] + dx * t, pz = a[1] + dz * t; const d = Math.hypot(px - x, pz - z); if (d < bd) { bd = d; best = { px, pz, ux: dx / L, uz: dz / L, w: r.w, L }; } } } return best; };
     const tp = city.templeDoor; if (tp) { const s = near(tp.x + 30, tp.z - 10); if (s) for (let k = 0; k < 3; k++) park('cab', 'cab', hex('#121214'), s.px - s.ux * k * 5.4 - s.uz * (s.w / 2 - 1.1), s.pz - s.uz * k * 5.4 + s.ux * (s.w / 2 - 1.1), Math.atan2(s.ux, s.uz), { lights: true }); }
     const ref = tp || { x: 0, z: 0 }; let stop = null, sd = 1e9; for (const st of stops) { const d = Math.hypot(st[0] - ref.x, st[1] - ref.z); if (d < sd) { sd = d; stop = st; } }
@@ -344,7 +344,7 @@ export function buildTraffic(scene, city, { low = false, stops = [], signals = [
   } return rapid; };
   // pedestrians: crowd of clay avatars, some in Drop 018 merch
   const peds = [];
-  const pedN = low ? 10 : 30;
+  const pedN = lite ? 6 : low ? 10 : 30;
   const PCOL = ['#111114', '#f2f2f2', '#c62828', '#2e4a7d', '#5b6b3a', '#9e9e9e', '#d4a017'].map(hex);
   for (let i = 0; i < pedN; i++) {
     const merch = i % 3 === 0; const av = createAvatar(scene, { name: 'ped' + i, outfit: ['skate', 'stan', 'stanfull', 'skate', 'stan'][i % 5], decals: merch, lod: 0.4, palette: merch ? { tee: hex('#111114'), hoodie: hex('#111114'), denim: hex('#6f8fb3') } : { tee: PCOL[Math.floor(R() * PCOL.length)], hoodie: PCOL[Math.floor(R() * PCOL.length)], denim: Color3.Lerp(hex('#6f8fb3'), hex('#2c3e5c'), R()) } });

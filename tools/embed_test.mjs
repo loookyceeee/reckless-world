@@ -28,6 +28,7 @@ for (const [tag, vp, mob] of [['port', { width: 393, height: 851 }, true], ['lan
   const fr = await (await page.$('iframe')).boundingBox();
   if (mob) await page.touchscreen.tap(fr.x + fr.width / 2, fr.y + fr.height * 0.6); else await page.mouse.click(fr.x + fr.width / 2, fr.y + fr.height * 0.6);
   await sleep(6000); log(tag, 'started', await f.evaluate(() => !window.__rw.app.title));
+  log(tag, 'base picker dismissed', await f.evaluate(() => { const b = document.querySelector('.overlay.basepick button[data-b=male]'); if (b) b.click(); return !!b; })); await sleep(800); // the frame's origin has no saved base, so the first-run MALE/FEMALE picker covers the touch buttons
   if (mob) { const j = await f.evaluate(() => { const r = document.getElementById('tJump').getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; });
     await page.touchscreen.tap(fr.x + j[0], fr.y + j[1]); await sleep(150); log(tag, 'touch jump airborne', await f.evaluate(() => window.__rw.P.air || window.__rw.P.y > 0.01));
     const sY0 = await page.evaluate(() => scrollY); const y0 = await f.evaluate(() => window.__rw.C.yaw); const sx = fr.x + fr.width * 0.8, sy = fr.y + fr.height * 0.45;

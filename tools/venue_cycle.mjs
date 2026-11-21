@@ -1,0 +1,22 @@
+// lazy venue build / dispose cycle: node tools/venue_cycle.mjs <url> <tag> [mobile]
+import puppeteer from 'puppeteer-core';
+const [url, tag, mob] = process.argv.slice(2);
+const b = await puppeteer.launch({ executablePath: '/usr/bin/google-chrome', headless: 'new', protocolTimeout: 600000, args: ['--no-sandbox', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
+const pg = await b.newPage(); if (mob) await pg.setViewport({ width: 390, height: 844, deviceScaleFactor: 3, isMobile: true, hasTouch: true }); else await pg.setViewport({ width: 1280, height: 800 });
+const errs = []; pg.on('pageerror', e => errs.push(e.message)); pg.on('console', m => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) errs.push(m.text().slice(0, 160)); });
+await pg.evaluateOnNewDocument(() => localStorage.setItem('rw.avatarBase', 'male'));
+await pg.goto(url, { waitUntil: 'load' }); await pg.waitForFunction(() => window.__rw && window.__rw.ready, { timeout: 240000 });
+const cdp = await pg.target().createCDPSession(); await cdp.send('HeapProfiler.enable');
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+const stat = async (lbl) => { await cdp.send('HeapProfiler.collectGarbage'); const m = await pg.metrics(); const s = await pg.evaluate(() => { const sc = window.__rw.scene; return { inside: window.__rw.app.inside, cur: window.__rw.cur() && window.__rw.cur().name, meshes: sc.meshes.length, mats: sc.materials.length, tex: sc.textures.length, skel: sc.skeletons.length, ag: sc.animationGroups.length, verts: sc.getTotalVertices() }; });
+  console.log(tag, lbl.padEnd(14), 'heap', Math.round(m.JSHeapUsedSize / 1e6) + 'MB', JSON.stringify(s)); };
+await pg.evaluate(() => { document.getElementById('play').click(); }); await sleep(4000);
+await stat('outside');
+await pg.evaluate(() => window.__rw.enterTemple()); await sleep(5000); await stat('in temple'); await pg.screenshot({ path: `/tmp/rwx/venue_${tag}_temple.png` });
+await pg.evaluate(() => window.__rw.exitTemple()); await sleep(3000); await stat('out again');
+await pg.evaluate(() => window.__rw.enterTemple()); await sleep(5000); await stat('temple x2');
+await pg.evaluate(() => window.__rw.exitTemple()); await sleep(3000); await stat('out x2');
+await pg.evaluate(() => window.__rw.enterClub('warehousexl')); await sleep(5000); await stat('in club'); await pg.screenshot({ path: `/tmp/rwx/venue_${tag}_club.png` });
+await pg.evaluate(() => window.__rw.exitTemple()); await sleep(3000); await stat('out x3'); await pg.screenshot({ path: `/tmp/rwx/venue_${tag}_street.png` });
+console.log(tag, 'errors', JSON.stringify(errs.slice(0, 8)));
+await b.close();

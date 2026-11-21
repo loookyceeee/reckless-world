@@ -56,3 +56,20 @@ Measured in Chromium with an iPhone-sized touch viewport, live JS heap after GC,
 - `node tools/mem_sites.mjs <url>`: retained allocation sites
 - `node tools/mem_top.mjs <url>` and `node tools/mem_tex.mjs <url>`: vertices by mesh, and textures
 - `python3 tools/ios_webkit.py <url> <tag> [#hash]`, `python3 tools/ios_shot.py <url> <png> [land]`, `python3 tools/ios_guard.py <base>`: WebKit iPhone load, screenshots, and the boot guard
+
+## Cut 4: venues on demand, lighter LITE traffic and crowd
+- **Venues on demand:** the Temple and club interiors are built on first entry, inside the entry fade, on every platform. Before, the Temple was built at load. `?eagervenue` restores the old behaviour.
+- **Shared crowd:** the shared instanced crowd is baked on first entry too, and it now sets up its own instance buffers, so a club can be the first venue entered.
+- **LITE exit:** in LITE the interior and the crowd are disposed on exit. Everything the build created is tracked: meshes, materials, textures, lights, skeletons, animation groups, nodes and particles. Desktop keeps visited venues cached. `?keepvenue` keeps them cached in LITE too.
+- **LITE traffic and crowd:**
+  - 12 moving cars (phones 24, desktop 58), 14 parked cars (30/90) and 6 pedestrians (10/30)
+  - 3 dance poses instead of 4, at crowd model detail 0.2 instead of 0.28
+- **Results:**
+
+| build | JS heap after GC (peak) | GPU buffers | textures | total |
+|---|---|---|---|---|
+| live before cut 4, `?app=1` | 195 MB (205) | 106 MB | 68 MB | about 370 MB |
+| cut 4, `?app=1` and `?app=1&safe=1` | 139 MB (209-240) | 73 MB | 62 MB | about 274 MB |
+| cut 4, Android-class touch | 155 MB | 114 MB | 84 MB | about 353 MB |
+
+- **Venue cycle in LITE** (`tools/venue_cycle.mjs`): outside 137 MB, Temple 172 MB, back outside 143 MB, Temple again 176 MB, back outside 144 MB, club 168 MB, back outside 148 MB. Mesh and material counts return to the outside baseline after every exit, with no errors.
