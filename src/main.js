@@ -450,7 +450,7 @@ async function start() {
     if (P.air) { P.y += P.vy * dt; P.vy -= GRAV * dt; if (P.y <= 0) { P.y = 0; P.air = false; P.vy = 0; P.vault = false; C.dip = 0.14; buzz(12); } }
     if (P.speed > 0.01 && P.mx != null) { P.x += P.mx * P.speed * dt; P.z += P.mz * P.speed * dt; }
     const pp = { x: P.x, z: P.z }; (app.inside ? T.grid : city.grid).resolve(pp, 0.38, P.y - 0.02); P.x = pp.x; P.z = pp.z;
-    const autoDance = app.inside && T.mode === 'rave' && T.danceFloor(P) && P.speed < 0.2 && !window.__rw.noAutoDance;
+    const autoDance = app.inside && T.mode === 'rave' && T.danceFloor(P) && P.speed < 0.2 && !window.__rw.noAutoDance; app.autoDance = autoDance;
     if (SEAT) { P.x = SEAT.x; P.z = SEAT.z; P.heading = SEAT.h; P.speed = 0; }
     player.root.position.set(P.x, P.y + (app.inside && T.floorY ? T.floorY(P.x, P.z) : 0) + (SEAT ? (window.__rw.seatY ?? 0.3) : 0), P.z); player.root.rotation.y = P.heading; dust.emitter.set(P.x, 0.05, P.z); dust.emitRate = P.speed > 4.5 && !app.inside ? 45 : 0;
     if (player.lightRig) player.lightRig(cam);
@@ -569,9 +569,9 @@ async function start() {
       relocate: () => { hud.fade(true); setTimeout(() => { P.x = ext.spawn.x; P.z = ext.spawn.z; P.speed = 0; P.heading = ext.yaw + Math.PI; C.yaw = P.heading; camSnap = true; hud.fade(false); }, 450); } });
     app.phone.ctx.missions = M; window.__rw.M = M;
     if (Q.has('storyreset')) localStorage.removeItem('rw.story.v1');
-    if (!Q.has('nostory')) { STORY = createStory({ hud, P, app, isTouch, text: (m) => app.phone.text(m), setDest: (d) => { DEST = d; routeT = 0; },
+    if (!Q.has('nostory')) { STORY = createStory({ hud, P, app, isTouch, fast: Q.has('storyfast'), jump: Q.has('storyjump') ? +Q.get('storyjump') : null, text: (m) => app.phone.text(m), setDest: (d) => { DEST = d; routeT = 0; },
       nextWall: () => { let b = null; for (const w of posters) { if (posterDone(w)) continue; const d = Math.hypot(w.ix - P.x, w.iz - P.z); if (!b || d < b.d) b = { x: w.ix, z: w.iz, name: (w.name || 'POSTER WALL').toUpperCase(), d }; } return b; },
-      templeD: () => Math.hypot(P.x - ext.doorPos.x, P.z - ext.doorPos.z), templeDest, inTemple: () => !!app.inside && T === TEMPLE, dancing: () => !!(P.dancing || (DANCE && DANCE.active())), cinematic: () => !!(app.paused || app.cinematic), sprinting: () => ST.v < 0.85 });
+      templeD: () => Math.hypot(P.x - ext.doorPos.x, P.z - ext.doorPos.z), templeDest, inTemple: () => !!app.inside && T === TEMPLE, dancing: () => !!(P.dancing || app.autoDance || (DANCE && DANCE.active())), cinematic: () => !!(app.paused || app.cinematic), sprinting: () => ST.v < 0.85 });
       window.__rw.STORY = STORY; } }
   hud.$('tWheel').addEventListener('pointerdown', (e) => { e.stopPropagation(); if (app.wheel.isOpen) return app.wheel.release(false); app.wheel.open(true); });
   hud.hud.classList.add('titlehide'); titleT0 = t; document.getElementById('title').classList.add('ready');

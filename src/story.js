@@ -15,16 +15,17 @@ export const CHAIN = [
   { id: 'snap', title: 'PROOF', brief: 'SEND US A PICTURE OF THE CITY. ANY STREET WILL DO.', obj: () => 'TAKE A PHOTO · <b>P</b> OR PHONE → CAMERA', on: 'photo' },
   { id: 'ride', title: 'GET A RIDE', brief: 'IT IS A LONG WALK. GET IN A CAR OR HAIL A BLACK CAB.', obj: () => 'GET IN A CAR · <b>E</b> BY A PARKED CAR<br>OR PHONE → HAIL CAB', on: ['drive', 'cab'] },
   { id: 'queue', title: 'THE QUEUE', brief: 'DOORS ARE OPEN. GET TO THE TEMPLE.', obj: (c) => `GET TO THE TEMPLE DOOR <b>${Math.round(c.templeD())}M</b>`, check: (c) => c.templeD() < 7 || c.inTemple(), dest: (c) => c.templeDest() },
-  { id: 'rave', title: 'FIRST RAVE', brief: 'YOU ARE IN. GET ON THE FLOOR AND DANCE.', obj: (c) => c.inTemple() ? `DANCE ON THE FLOOR · <b>F</b> <b>${Math.max(0, 8 - c.danceT).toFixed(0)}S</b>` : 'GO INSIDE · <b>E</b> AT THE DOOR', check: (c) => c.danceT >= 8 },
+  { id: 'rave', title: 'FIRST RAVE', brief: 'YOU ARE IN. GET ON THE FLOOR AND DANCE.', obj: (c) => c.inTemple() ? `DANCE ON THE FLOOR · STAND STILL OR <b>E</b> <b>${Math.max(0, (c.fast ? 1.5 : 8) - c.danceT).toFixed(0)}S</b>` : 'GO INSIDE · <b>E</b> AT THE DOOR', check: (c) => c.danceT >= (c.fast ? 1.5 : 8) },
 ];
 export function createStory(ctx) {
   // ctx: { hud, P, app, isTouch, text(m), setDest(d|null), nextWall() -> {x,z,name,d}|null, templeD(), templeDest(), inTemple(), dancing(), cinematic() }
   let S; try { S = JSON.parse(localStorage.getItem(SK) || 'null'); } catch (e) { S = null; }
   S = S || { ob: 0, obDone: false, m: 0, done: false, started: false };
+  if (ctx.jump != null && ctx.jump >= 1 && ctx.jump <= CHAIN.length) S = { ob: ONBOARD.length, obDone: true, m: ctx.jump - 1, done: false, started: true }; // debug: ?storyjump=N
   const save = () => localStorage.setItem(SK, JSON.stringify(S));
   const st = { lx: ctx.P.x, lz: ctx.P.z, walk: 0, fast: 0, t: 0, keys: new Set(), danceT: 0, announced: -1, obAnn: -1 };
   addEventListener('keydown', (e) => { const k = e.key.toLowerCase(); if (k === 'b') st.keys.add('look'); if (k === 'tab') st.keys.add('phone'); if (k === 'm') st.keys.add('map'); });
-  const c = { ...ctx, get danceT() { return st.danceT; } };
+  const c = { ...ctx, get danceT() { return st.danceT; } }; // ctx.fast (?storyfast): dance step needs 1.5 s instead of 8 s
   let skipBtn = null;
   const showSkip = (on) => {
     if (on && !skipBtn) { skipBtn = document.createElement('button'); skipBtn.className = 'storyskip'; skipBtn.textContent = 'SKIP TUTORIAL'; skipBtn.onclick = () => api.skipOnboarding(); document.body.appendChild(skipBtn); }
