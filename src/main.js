@@ -94,6 +94,7 @@ async function start() {
   DG.info.stage = 'engine'; const engine = await makeEngine(canvas); if (Q.has('novao')) engine.disableVertexArrayObjects = true; bar(15); DG.info.engine = engine.__kind; DG.info.gpu = gpuName(engine); DG.log('engine', engine.__kind, DG.info.gpu);
   engine.onContextLostObservable && engine.onContextLostObservable.add(() => { console.error('WebGL context lost'); DG.show('graphics context lost'); });
   engine.setHardwareScalingLevel(SAFE ? 2 : LOW ? 1.5 : 1 / Math.min(1.5, devicePixelRatio || 1));
+  if (isTouch) try { const caps = engine.getCaps(); caps.maxTextureSize = Math.min(caps.maxTextureSize, 1024); caps.maxCubemapTextureSize = Math.min(caps.maxCubemapTextureSize, 512); } catch (e) {} // G: phones resize anything bigger than 1024 px on upload (GPU memory guard for future packs)
   const scene = new Scene(engine); scene.skipPointerMovePicking = true;
   const NIGHT = new Color4(0.07, 0.075, 0.14, 1);
   scene.clearColor = NIGHT; scene.ambientColor = new Color3(0.2, 0.2, 0.25);
@@ -134,7 +135,7 @@ async function start() {
   freezeMaterials(scene, ['trunk', 'leaf', 'furn', 'lampPoleM', 'pave', 'roads', 'pavement', 'markings']);
   const templeB = city.buildings.find(b => b.temple);
   const ext = buildTempleExterior(scene, templeB, city.grid); ext.root.parent = city.root;
-  const TEMPLE = buildTempleInterior(scene, { glow, low: LOW, bakeCrowd: () => bakeCrowdVariants(scene, { lod: LOW ? 0.28 : 0.33, simplify: Q.has('nosimp') ? 0 : 0.3 }), makeDancer: (i) => { const a = createAvatar(scene, { name: 'dancer' + i, outfit: ['skate', 'stan', 'stanfull', 'stanfull', 'skate', 'stan'][i], decals: true, lod: 0.5 }); return a; } });
+  const TEMPLE = buildTempleInterior(scene, { glow, low: LOW, bakeCrowd: () => bakeCrowdVariants(scene, { lod: LOW ? 0.28 : isTouch ? 0.26 : 0.33, simplify: Q.has('nosimp') ? 0 : 0.3 }), makeDancer: (i) => { const a = createAvatar(scene, { name: 'dancer' + i, outfit: ['skate', 'stan', 'stanfull', 'stanfull', 'skate', 'stan'][i], decals: true, lod: 0.5 }); return a; } });
   let T = TEMPLE; // the live interior (Temple or one of the clubs built on first entry)
   T.cam = cam; T.name = 'THE TEMPLE'; T.sub = '8 CARLISLE CIRCUS'; T.exitLabel = 'CARLISLE CIRCUS';
   T.root.setEnabled(false);
