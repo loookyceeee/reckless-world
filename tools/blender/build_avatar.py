@@ -674,7 +674,7 @@ def make(kind):
                 q_ = p - hc; dv_ = q_.normalized(); rr = 0.0
                 for hq, hqn in _HENV:
                     if hqn.dot(dv_) > 0.95: rr = max(rr, hq.dot(dv_))
-                v.co = toA.inverted() @ (hc + dv_ * (max(rr, q_.length) + 0.034 + (0.045 if FEM else 0.03) * smooth(0.0, -0.11, q_.z)))  # flares out over the jaw onto the shoulders like v5
+                v.co = toA.inverted() @ (hc + dv_ * (max(rr, q_.length) + 0.034 + (float(_os.environ.get('HFLARE', '0.06')) if FEM else 0.03) * smooth(0.0, -0.11, q_.z)))  # flares out over the jaw onto the shoulders like v5
             else: v.co = v.co + norms[v.index] * d
     bmesh.ops.delete(bm, geom=kill, context='VERTS')
     if kind in ('tee', 'crop', 'long', 'hoodie'):  # drape: relax the shell so the base's muscle relief doesn't print through
@@ -769,7 +769,7 @@ if _os.environ.get('AV_DEC', '1') == '1':
         bpy.context.view_layer.objects.active = o; bpy.ops.object.modifier_apply(modifier=md.name); print('decimate', o.name, n0, '->', len(o.data.polygons))
 # re-skin every garment from the body surface it now sits on: the fields slide shell verts along the body (hip, armpit) but they kept
 # the weights of the body vertex they were copied from, so any pose but rest let the skin poke through. AV_RESKIN=0 disables.
-if _os.environ.get('AV_RESKIN', '1') == '1':
+if _os.environ.get('AV_RESKIN', '0') == '1':
     for _o in [o for o in bpy.data.objects if o.type == 'MESH' and o.name.startswith('G_')]:
         _dt = _o.modifiers.new('rs', 'DATA_TRANSFER'); _dt.object = body; _dt.use_vert_data = True; _dt.data_types_verts = {'VGROUP_WEIGHTS'}; _dt.vert_mapping = 'POLYINTERP_NEAREST'
         _dt.layers_vgroup_select_src = 'ALL'; _dt.layers_vgroup_select_dst = 'NAME'; bpy.context.view_layer.objects.active = _o
@@ -784,8 +784,9 @@ print('weights limited to 4')
 # keep every garment outside the body after the silhouette fields (an inward pull must never let skin show through the cloth)
 from mathutils.bvhtree import BVHTree
 _bvh = BVHTree.FromPolygons([v.co.copy() for v in body.data.vertices], [pl.vertices[:] for pl in body.data.polygons])  # rest-pose body (the evaluated one carried the stance pose)
+_PUSH = float(_os.environ.get('AV_PUSH', '0.4'))  # push-out margin scale (the runtime cover mask hides covered skin; this only guards hems/cuffs)
 for _o in [o for o in bpy.data.objects if o.type == 'MESH' and o.name.startswith('G_')]:
-    _mg = 0.0025 if _o.name in ('G_briefs', 'G_bra') else 0.006; _n = 0
+    _mg = (0.0025 if _o.name in ('G_briefs', 'G_bra') else 0.006) * _PUSH; _n = 0
     for _v in _o.data.vertices:
         _loc, _nrm, _i, _dd = _bvh.find_nearest(_v.co)
         if _loc is None: continue
@@ -798,7 +799,7 @@ for _o in [o for o in bpy.data.objects if o.type == 'MESH' and o.name.startswith
         for k_ in pl.edge_keys: _ec[k_] = _ec.get(k_, 0) + 1
     _bnd = {i for k_, c_ in _ec.items() if c_ == 1 for i in k_}; _pl = [pl.vertices[:] for pl in _o.data.polygons]
     RVM = float(_os.environ.get('AV_RVM', '0.003')); RVC = float(_os.environ.get('AV_RVC', '0.008'))
-    for _it in range(int(_os.environ.get('AV_REVR', '4'))):
+    for _it in range(int(_os.environ.get('AV_REVR', '0'))):
         _gb = BVHTree.FromPolygons([v.co.copy() for v in _o.data.vertices], _pl); _push = {}; _m = 0
         for bv_ in body.data.vertices:
             _loc, _nrm, _fi, _dd = _gb.find_nearest(bv_.co, 0.04)
@@ -875,7 +876,7 @@ def _pushout_posed(objs, mg_of):
             if not m_: break
     for pb in arm.pose.bones: pb.matrix_basis.identity()
     bpy.ops.object.mode_set(mode='OBJECT')
-_pushout_posed([o for o in bpy.data.objects if o.type == 'MESH' and o.name.startswith('G_')], lambda n: 0.0025 if n in ('G_briefs', 'G_bra') else 0.007)
+_pushout_posed([o for o in bpy.data.objects if o.type == 'MESH' and o.name.startswith('G_')], lambda n: (0.0025 if n in ('G_briefs', 'G_bra') else 0.007) * _PUSH)
 # --- female tee re-model (TEE2): a real boxy tee instead of the inflated body shell. Torso = lofted superellipse rings
 # (straight sides below the chest, following the shoulder slope above), sleeves = straight wide tubes along the upper arm;
 # boolean union -> voxel remesh (clean manifold, no torn sleeves) -> pushed outside the body -> straight hem/sleeve/neck cuts ->
@@ -1116,6 +1117,38 @@ for o in bpy.context.scene.objects:  # lean export: one UV set, no vertex colour
     if o.type != 'MESH': continue
     while o.name != 'Hair' and len(o.data.color_attributes): o.data.color_attributes.remove(o.data.color_attributes[0])
     while len(o.data.uv_layers) > 1: o.data.uv_layers.remove(o.data.uv_layers[-1])
+# --- body cover mask (studio approach): per body vertex, a bit per garment that covers it (ray along the normal hits that
+# shell's outside), eroded 2 rings so cuffs and hems keep an overlap. Stored in COLOR_0 (R = bits 0-7, G = bits 8-15, exact
+# k/255); src/avatar3d.js hides body triangles whose 3 verts are all covered by what is worn. AV_COVER=0 disables.
+COVER_KINDS = ['tee', 'crop', 'long', 'hoodie', 'jeans', 'pants', 'cuffed', 'shorts', 'shortsL', 'pantsW', 'jersey', 'teeD', 'shoes', 'briefs', 'bra']
+if _os.environ.get('AV_COVER', '1') == '1':
+    from mathutils.bvhtree import BVHTree as _BT
+    _bm_ = body.data; _MW = body.matrix_world; _R3 = _MW.to_3x3()
+    _bp = [_MW @ v.co for v in _bm_.vertices]; _bn = [(_R3 @ v.normal).normalized() for v in _bm_.vertices]
+    _H = max(p.z for p in _bp) - min(p.z for p in _bp); _RL = 0.06 * _H; _IN = 0.012 * _H
+    _adj = [[] for _ in _bm_.vertices]
+    for e in _bm_.edges: a_, b_ = e.vertices; _adj[a_].append(b_); _adj[b_].append(a_)
+    _mask = [0] * len(_bm_.vertices)
+    for bit, kn in enumerate(COVER_KINDS):
+        g = bpy.data.objects.get('G_' + kn)
+        if not g or g.type != 'MESH': continue
+        gw = g.matrix_world; gt = _BT.FromPolygons([gw @ v.co for v in g.data.vertices], [pl.vertices[:] for pl in g.data.polygons])
+        cov = [False] * len(_bp)
+        for i, (p, n) in enumerate(zip(_bp, _bn)):
+            loc, nrm, fi, d = gt.ray_cast(p - n * _IN, n, _RL + _IN)
+            cov[i] = loc is not None and nrm.dot(n) > 0.0
+        _c0 = sum(cov)
+        _CL = int(_os.environ.get('AV_COVER_CLOSE', '2'))
+        for _r in range(_CL): cov = [c or any(cov[j] for j in _adj[i]) for i, c in enumerate(cov)]   # close ray misses (speckle holes)
+        for _r in range(_CL + int(_os.environ.get('AV_COVER_ERODE', '1'))):   # ...back to the shell's edge, then one ring of overlap at cuffs/hems
+            cov = [c and all(cov[j] for j in _adj[i]) for i, c in enumerate(cov)]
+        for i, c in enumerate(cov):
+            if c: _mask[i] |= 1 << bit
+        print('cover', kn, _c0, '->', sum(cov), '/', len(cov))
+    while len(_bm_.color_attributes): _bm_.color_attributes.remove(_bm_.color_attributes[0])
+    _ca = _bm_.color_attributes.new('Cover', 'FLOAT_COLOR', 'POINT')
+    for i, m_ in enumerate(_mask): _ca.data[i].color = ((m_ & 255) / 255.0, ((m_ >> 8) & 255) / 255.0, 0.0, 1.0)
+    _bm_.color_attributes.active_color = _ca; _bm_.color_attributes.render_color_index = 0
 bpy.ops.object.select_all(action='SELECT')
 bpy.ops.export_scene.gltf(filepath=OUT, export_format='GLB', export_animations=True, export_animation_mode='NLA_TRACKS', export_frame_step=2,
                           export_image_format='NONE', export_materials='EXPORT', export_apply=False, export_skins=True, export_all_influences=False,

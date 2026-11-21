@@ -12,11 +12,14 @@ import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
 import { Texture } from '@babylonjs/core/Materials/Textures/texture';
 import { Color3 } from '@babylonjs/core/Maths/math.color';
-import { Vector3 } from '@babylonjs/core/Maths/math.vector';
+import { Vector3, Quaternion, Matrix } from '@babylonjs/core/Maths/math.vector';
 import { PointLight } from '@babylonjs/core/Lights/pointLight';
+import { VertexBuffer } from '@babylonjs/core/Buffers/buffer';
 
 const KINDS = ['tee', 'crop', 'long', 'hoodie', 'jeans', 'pants', 'cuffed', 'shorts', 'shortsL', 'pantsW', 'jersey', 'teeD'];
 const M3 = { 'manager-shorts': 'shortsL', 'rawdawg-shorts': 'shortsL', 'artillery': 'pantsW', 'rcklstv-jersey': 'jersey', 'distress-shirt': 'teeD', 'see-me-crop': 'crop' }; // v5 cut variants (crew.js M3)
+// body cover mask (tools/blender/build_avatar.py COVER_KINDS): COLOR_0 R/G carry one bit per garment that covers the vertex
+const COVER_KINDS = ['tee', 'crop', 'long', 'hoodie', 'jeans', 'pants', 'cuffed', 'shorts', 'shortsL', 'pantsW', 'jersey', 'teeD', 'shoes', 'briefs', 'bra'];
 const SKIN = Color3.FromHexString('#ead3cb'), HAIR = Color3.FromHexString('#141214');
 
 export async function loadAvatar3D(scene, { name = 'player', base = import.meta.env.BASE_URL, kind = 'male' } = {}) {
@@ -72,6 +75,27 @@ export async function loadAvatar3D(scene, { name = 'player', base = import.meta.
   for (const k of ['idle', 'walk', 'jog', 'sprint', 'dance', 'jumpLoop', 'sit']) if (AG[k]) { AG[k].start(true, 1.0); AG[k].setWeightForAllAnimatables(k === 'idle' ? 1 : 0); }
   const w = { idle: 1, walk: 0, jog: 0, sprint: 0, dance: 0, jumpLoop: 0, sit: 0 };
   const av = { root, isGlb: true, parts: byName, ag: AG, fit: null, kind: FEM ? 'female' : 'male' };
+  // studio approach to skin-through-cloth: hide the body triangles the worn shells fully cover (one ring of overlap kept at
+  // cuffs/hems by the build), so no pose or blend can push skin through. One index list per worn set, cached.
+  const bodyM = (byName.Body || [])[0]; let coverV = null, idx0 = null; const idxCache = new Map();
+  if (bodyM) { const c = bodyM.getVerticesData(VertexBuffer.ColorKind); bodyM.useVertexColors = false; bodyM.hasVertexAlpha = false;
+    if (c) { const n = c.length / 4; coverV = new Uint16Array(n); for (let i = 0; i < n; i++) coverV[i] = Math.round(c[i * 4] * 255) | (Math.round(c[i * 4 + 1] * 255) << 8); idx0 = Array.from(bodyM.getIndices()); } }
+  const coverBody = (kinds) => { if (!coverV) return; let bits = 0; for (const k of kinds) { const b = COVER_KINDS.indexOf(k); if (b >= 0) bits |= 1 << b; }
+    let ix = idxCache.get(bits);
+    if (!ix) { ix = []; for (let t = 0; t < idx0.length; t += 3) { const a = idx0[t], b = idx0[t + 1], c = idx0[t + 2]; if ((coverV[a] & bits) && (coverV[b] & bits) && (coverV[c] & bits)) continue; ix.push(a, b, c); } idxCache.set(bits, ix); }
+    bodyM.setIndices(ix, null, true); av.bodyHidden = (idx0.length - ix.length) / 3; };
+  // per-outfit idle arm offset (v5: the female hoodies hang the arms a few degrees closer to the body). Applied after the
+  // animation pass each frame, about the body's front-back axis through each shoulder; the sign is picked once per arm.
+  const ARM_OFF = { hoodie: FEM ? 2.5 : 0 };
+  const uarms = ['upperarm_l', 'upperarm_r'].map(n => res.transformNodes.find(t => t.name === n)).filter(Boolean);
+  const armSign = new Map(); av.armOff = 0;
+  const elbowX = (nd) => { const kids = nd.getChildTransformNodes(true), ch = kids.find(k => k.name.startsWith('lowerarm')) || kids[0]; if (!ch) return 0; ch.computeWorldMatrix(true); const inv = Matrix.Invert(root.computeWorldMatrix(true)); return Math.abs(Vector3.TransformCoordinates(ch.getAbsolutePosition(), inv).x); };
+  const offArm = (nd, ang, sg) => { const par = nd.parent; if (!par || !nd.rotationQuaternion) return; const pw = par.computeWorldMatrix(true), inv = Matrix.Invert(pw);
+    const ax = Vector3.TransformNormal(gltfRoot.getDirection(new Vector3(0, 0, 1)), inv).normalize(); nd.rotationQuaternion = Quaternion.RotationAxis(ax, ang * sg).multiply(nd.rotationQuaternion); };
+  scene.onAfterAnimationsObservable.add(() => { if (!av.armOff || !root.isEnabled()) return; const ang = av.armOff * Math.PI / 180;
+    for (const nd of uarms) { if (!nd.rotationQuaternion) continue;
+      if (!armSign.has(nd)) { const q0 = nd.rotationQuaternion.clone(); offArm(nd, ang, 1); const xp = elbowX(nd); nd.rotationQuaternion = q0.clone(); offArm(nd, ang, -1); const xm = elbowX(nd); nd.rotationQuaternion = q0; const x0 = elbowX(nd); armSign.set(nd, xp < xm ? 1 : -1); av._armDbg = [x0, xp, xm]; }
+      offArm(nd, ang, armSign.get(nd)); } });
   av.setFit = (f, vis) => { av.fit = f; av._vis = vis; const V = vis(f.top, f.outer, f.legs), up = V.upper, lo = V.lower;
     for (const k of KINDS) (byName['G_' + k] || []).forEach(x => x.setEnabled(false));
     const show = (g, kind) => { if (!g) return; (byName['G_' + kind] || []).forEach(x => x.setEnabled(true)); wear(kind, g); };
@@ -80,7 +104,10 @@ export async function loadAvatar3D(scene, { name = 'player', base = import.meta.
     if (lo) show(lo, mk(lo));
     (byName.G_briefs || []).forEach(x => x.setEnabled(!lo || lo.kind === 'shorts'));
     const hood = !!up && mk(up) === 'hoodie';   // v5: seasoned hoodie / rawdwg zip are worn hood-up -> hair tucked inside
-    for (const n of ['Hair', 'Curls']) (byName[n] || []).forEach(x => x.setEnabled(!hood));
+    for (const n of ['Hair', 'Curls', 'Stud']) (byName[n] || []).forEach(x => x.setEnabled(!hood));   // hood up: hair and hoops tucked inside
+    const worn = ['shoes']; if (up) worn.push(mk(up)); if (lo) worn.push(mk(lo)); if (!lo || lo.kind === 'shorts') worn.push('briefs'); if (byName.G_bra) worn.push('bra');
+    if (!av.noCover) coverBody(worn);
+    av.armOff = (up && ARM_OFF[mk(up)]) || 0;
   };
   // speed (m/s) -> gait weights; playback rate matched to stride so feet don't skate
   const GAIT = [['idle', 0], ['walk', 1.6], ['jog', 3.2], ['sprint', 6.0]];
