@@ -37,8 +37,8 @@ House rules: zero spend · the game never awards XP and never PUTs · `test:true
 
 ## Stages
 - [x] Stage 9: driving (src/drive.js) + black cabs (src/cab.js, free, kerbside pickup, cinematic ride + drop). AI traffic looks further ahead for the player's car, brakes, honks when blocked, pulls over when you honk; peds hurry clear. Gamepad RT/LT/A, touch JUMP = handbrake, H horn, K next track, car-radio volume, synth engine.
-- [ ] Stage 10: rain/weather, NPC reactions (peds flinch or cheer, react to dancing and sprinting), radio in cars, photo mode upgrade (filters, poses, hide HUD). A photo frame/hunt exists, so this is partial.
-- [ ] Stage 11: mechanics QA (look-behind, gamepad, sensitivity, collisions, stamina, heat edge cases), with a written test list.
+- [x] Stage 10 (2026-11-21): rain showers (src/weather.js: cycle, streaks, fog + hiss; ?rain/?norain), ped reactions (flinch from sprinting, dance along when you dance), car radio (stage 9), photo mode filters/pose/clean HUD.
+- [x] Stage 11 (2026-11-21): tools/qa.mjs 9/9 automated checks + docs/QA_TESTS.md manual list.
 - [~] Stage 12: polish plus perf tiers. Perf tiers exist (perf.js low/med/high). No KTX2, LODs are partial, and mobile profiling isn't done.
 
 - [~] Temple pass from temple_brief.md (2026-11-20): LiDAR-sized brick exterior (eaves 13.1 m, ridge 23.2 m, #9a4a32, gabled), near-black timber roof, grey-blue flags, two cream fire exits in the south aisle. Stage stays at the east end with the red lancet uplight in rave mode only; the bar is now in the NORTH aisle by the entrance (on the left as you walk in from the west, per Luke, 350d092): counter, back shelf and a soft warm wash, nothing in front of the east window.
