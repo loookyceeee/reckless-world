@@ -189,7 +189,7 @@ async function start() {
     if (!best) continue; const F = buildFront(scene, v.id, { wx: best.wx, wz: best.wz, nx: best.nx, nz: best.nz, avail: best.avail - 0.6, bh: best.h, parent: city.root, grid: city.grid, low: LOW });
     const door = { v, x: F ? F.door.x : best.wx + best.nx * 2.5, z: F ? F.door.z : best.wz + best.nz * 2.5, nx: best.nx, nz: best.nz, wx: best.wx, wz: best.wz, front: F }; venueDoors.push(door); mkRing(door.x, door.z, 'ring-' + v.id);
   }
-  window.__rw.venueDoors = venueDoors;
+  window.__rw.venueDoors = venueDoors; window.__rw.whDoor = whDoor; window.__rw.allDoors = () => [{ ...whDoor, v: VENUES[1] }, ...venueDoors]; // Ware-House XL's door lives in whDoor (Common Market, Dunbar St); exposed for tools and checks
   traffic.queues = [whDoor.front, ...venueDoors.map(d => d.front)].filter(Boolean).map(f => f.queue);
   // rapid-bus fast-travel stops: one by every venue (src/glider.js)
   traffic.addStops([{ id: 'temple', name: 'THE TEMPLE', x: ext.doorPos.x, z: ext.doorPos.z }, { id: 'warehousexl', name: 'THE WARE-HOUSE XL', x: whDoor.x, z: whDoor.z },
@@ -451,6 +451,7 @@ async function start() {
     const camY = 1.5 + oy * want; const hit = (app.inside ? T.grid : city.grid).raycast(P.x, P.z, P.x + ox * want, P.z + oz * want, camY);
     const d = Math.max(1.0, want * hit - (hit < 1 ? 0.35 : 0)); C.curDist += (d - C.curDist) * Math.min(1, dt * (d < C.curDist ? 20 : 3.5)); // hide fast, restore lazily
     camPos.set(P.x + ox * C.curDist, Math.max(0.35, 1.5 + P.y * 0.55 + dipY + oy * C.curDist), P.z + oz * C.curDist);
+    if (app.inside && T && T.club && camPos.z < 0.5) camPos.z = 0.5; // clubs: never behind the entrance wall (z = 0), the EXIT sign / door filled the screen green
     // smoothed follow camera + slight FOV kick when sprinting
     if (camSnap) { smPos.copyFrom(camPos); smTgt.copyFrom(tgt); camSnap = false; } else { const k = Math.min(1, dt * 8); Vector3.LerpToRef(smPos, camPos, k, smPos); Vector3.LerpToRef(smTgt, tgt, Math.min(1, dt * 14), smTgt); }
     cam.position.copyFrom(smPos); cam.setTarget(smTgt);
