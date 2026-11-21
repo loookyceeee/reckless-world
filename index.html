@@ -3,6 +3,9 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"/>
 <title>RECKLESS WORLD · BELFAST</title><meta name="theme-color" content="#000"/>
 <link rel="icon" href="img/logo.png"/>
+<script>/* app/embed boot: runs before any module. #token=<bearer> is taken out of the URL at once (never logged, never in history), held in memory for embed.js to verify. */
+(function(){try{var h=location.hash||'',m=h.match(/(?:^#|&)token=([^&]*)/);if(m){var t='';try{t=decodeURIComponent(m[1])}catch(e){}var rest=h.replace(/(^#|&)token=[^&]*/,'').replace(/^#?&?/,'');history.replaceState(history.state,'',location.pathname+location.search+(rest?'#'+rest:''));if(/^[A-Za-z0-9._~+\/=-]{8,4096}$/.test(t))Object.defineProperty(window,'__rwHandoff',{value:t,configurable:true,writable:true,enumerable:false});}
+var d=document.documentElement;if(new URLSearchParams(location.search).get('app')==='1')d.classList.add('rw-app');var f=false;try{f=window.top!==window.self}catch(e){f=true}if(f)d.classList.add('rw-embed');}catch(e){}})();</script>
 </head><body>
 <canvas id="c"></canvas>
 <div id="title" class="loading"><div class="lb t"></div><div class="lb b"></div>

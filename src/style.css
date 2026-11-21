@@ -351,3 +351,20 @@ body:has(.overlay:not(.hidden)) .storyskip,body:has(.phone:not(.hidden)) .storys
 #play{animation:rwBlinkSoft 1.6s ease-in-out infinite;background:rgba(0,0,0,.35)}
 body *:not(input):not(textarea){text-transform:uppercase}
 @media (orientation:landscape) and (max-height:520px){.panel:has(.crewfig)>.crewfig{grid-row:1 / span 6;align-self:start;position:sticky;top:0;height:calc(100vh - 70px);align-items:center}}
+/* ---- app / embed (docs/EMBED.md) ---- */
+html.rw-app,html.rw-app body{background:#000;height:100%;overscroll-behavior:none}
+html.rw-app #safeLnk,html.rw-app #fsBtn,html.rw-app .webonly{display:none!important}
+html.rw-app #title{padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+html.rw-app .notes{right:max(10px,env(safe-area-inset-right))}
+#fsBtn{position:fixed;z-index:55;left:max(16px,env(safe-area-inset-left));top:calc(max(14px,env(safe-area-inset-top)) + 50px);display:flex;align-items:center;gap:6px;background:rgba(0,0,0,.6);color:#fff;border:1px solid rgba(255,255,255,.55);font:700 10px var(--f1,sans-serif);letter-spacing:.12em;text-transform:uppercase;padding:6px 9px;cursor:pointer}
+#fsBtn i{font-style:normal;font-size:13px;line-height:1}#fsBtn:hover{background:#fff;color:#000}
+body:has(#title:not(.gone)) #fsBtn{top:max(14px,env(safe-area-inset-top))}
+@media (pointer:coarse){#fsBtn span{display:none}#fsBtn{padding:6px 8px}}
+body:has(.overlay:not(.hidden)) #fsBtn,body:has(.phone:not(.hidden)) #fsBtn{display:none}
+/* app contract: top-left ~56px stays clear for APP DEV's native close [X]; external links and web-only chrome hidden */
+html.rw-app .brand{left:calc(max(16px,env(safe-area-inset-left)) + 56px)!important}
+html.rw-app .live a,html.rw-app a.phlink{display:none!important}
+html.rw-app .panel a[href^="http"]{pointer-events:none;text-decoration:none;color:inherit}
+html.rw-app .phone>*:first-child{padding-left:56px}
+@media (pointer:coarse){html.rw-app .overlay .panel{padding-top:calc(max(16px,env(safe-area-inset-top)) + 46px)!important}}
+html.rw-app #title .tc{margin-top:env(safe-area-inset-top)}

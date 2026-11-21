@@ -45,7 +45,7 @@ export function createPhone(ctx) {
       <button class="phbtn" data-act="crewOpen">SIGN IN / WARDROBE</button><p class="phfine">XP IS AWARDED BY CREW LOYALTY, NOT BY THIS GAME.</p>`),
     settings: () => { const q = ctx.quality.get();
       return frame('SETTINGS', `<div class="phcard"><small>QUALITY</small><div class="phrowb">${['low', 'med', 'high'].map(n => `<button class="phbtn${q === n ? ' on' : ''}" data-q="${n}">${n.toUpperCase()}</button>`).join('')}</div></div>
-      <div class="phrowb"><button class="phbtn" data-act="sound">${esc(ctx.sound.label())}</button><button class="phbtn" data-act="credits">CREDITS</button></div>
+      <div class="phrowb"><button class="phbtn" data-act="sound">${esc(ctx.sound.label())}</button><button class="phbtn" data-act="credits">CREDITS</button></div>${window.ReactNativeWebView && document.documentElement.classList.contains('rw-app') ? '<div class="phrowb"><button class="phbtn" data-act="appClose">CLOSE GAME</button></div>' : ''}
       <div class="phcard"><small>LOOK SENSITIVITY</small><div class="phrowb"><button class="phbtn" data-act="sensDn">−</button><b class="phval">${ctx.sens ? ctx.sens.get().toFixed(2) + '×' : ''}</b><button class="phbtn" data-act="sensUp">+</button></div><div class="phbar"><i style="width:${ctx.sens ? (ctx.sens.get() - 0.5) / 1.5 * 100 : 0}%"></i></div></div>
       <div class="phrowb"><button class="phbtn${haptics.on ? ' on' : ''}" data-act="haptics">HAPTICS ${haptics.on ? 'ON' : 'OFF'}</button></div>
       <p class="phfine">Map data © OpenStreetMap contributors. Terrain: LiDAR open data. Full credits in CREDITS.</p>`); },
@@ -91,6 +91,7 @@ export function createPhone(ctx) {
     if (a === 'skip') { ctx.skip(); return setTimeout(render, 600); }
     if (a === 'credits') { api.close(); return ctx.open.credits(); }
     if (ctx.onAct && ctx.onAct(a, api)) return render();
+    if (a === 'appClose') { try { window.ReactNativeWebView?.postMessage('{"type":"close"}'); } catch (e) { } return; }
     if (a === 'crewOpen') { api.close(); return ctx.open.wardrobe(); }
     if (a === 'gpsTemple') { ctx.setDest(null, 'temple'); api.close(); } else if (a && a.startsWith('gps:')) { ctx.setDest(null, a.slice(4)); api.close(); }
   });

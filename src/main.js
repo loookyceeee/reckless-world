@@ -1,4 +1,5 @@
 import * as DG from './diag.js';
+import * as EMB from './embed.js';
 import { ParticleSystem } from '@babylonjs/core/Particles/particleSystem';
 import { DefaultRenderingPipeline } from '@babylonjs/core/PostProcesses/RenderPipeline/Pipelines/defaultRenderingPipeline';
 import { SSAO2RenderingPipeline } from '@babylonjs/core/PostProcesses/RenderPipeline/Pipelines/ssao2RenderingPipeline';
@@ -148,7 +149,10 @@ async function start() {
   // player
   let player = createAvatar(scene, { name: 'player', outfit: 'skate', fit: true });
   await crewCfgP; window.__rw.crewRules = CR.CREW_RULES;
+  // app handoff (#token=, taken out of the URL by index.html's boot script): verify with /api/auth/me, store like a normal sign-in
+  let lateHand = null; const HAND = await EMB.consumeHandoff(() => lateHand && lateHand());
   const CREW = { fit: CR.loadFit(), xp: null, account: CR.getAccount() };
+  if (HAND === 'expired' || HAND === 'pin') setTimeout(() => { try { hud.toast(HAND === 'pin' ? 'APP UPDATE NEEDED · SIGN IN WITH EMAIL + APP PIN' : 'APP SIGN-IN EXPIRED · SIGN IN WITH EMAIL + APP PIN'); } catch (e) { } }, 4000);
   window.addEventListener('rw-signin-needed', () => { CR.signOut(); CREW.account = null; CREW.xp = null; setTimeout(() => { try { hud.toast('SESSION EXPIRED · SIGN IN AGAIN IN THE WARDROBE'); } catch (e) { } }, 0); });
   const applyFit = (f) => { f = CR.allowedFit(f, CR.playerLevel(CREW.xp)); CREW.fit = f; CR.saveFit(f); player.setFit(f, CR.visibleFor); }; applyFit(CREW.fit); window.__rw.applyFit = (f) => applyFit(f); window.__rw.fitRaw = (f) => player.setFit(f, CR.visibleFor); window.__rw.CR = CR;
   // smooth rigged crew avatar (models/avatar.glb); the procedural figure stands in until it loads (?procav keeps it)
@@ -160,6 +164,7 @@ async function start() {
       if (old.isGlb) { old.root.dispose(false, true); Object.values(old.ag).forEach(g => g.dispose()); } else { old.root.setEnabled(false); old.allMeshes().forEach(m => m.setEnabled(false)); }
       player = av; window.__rw.player = av; player.setFit(CREW.fit, CR.visibleFor); if (glow) for (const m of av.allMeshes()) glow.addExcludedMesh(m); DG.log('avatar3d loaded ' + kind); }).catch(e => console.warn('avatar3d', e)); };
   window.__rw.swapAvatar = swapAvatar; swapAvatar(CREW.base);
+  lateHand = () => { CREW.account = CR.getAccount(); try { loadCrew(); } catch (e) { } };
   const setBase = (b, fromApp = false) => { if (!['male', 'female'].includes(b)) return; if (!fromApp) CR.setLocalBase(b); CREW.baseFromApp = fromApp; if (b !== CREW.base) { CREW.base = b; swapAvatar(b); } };
   const loadBase = async () => { if (!CREW.account || Q.get('base')) return null; const b = await CR.readAvatarBase(CREW.account); /* avatar-base endpoint: 'male'|'female' only when set in the app, null when unset (or on failure) -> local pick / first-launch picker. GET only. */ if (b) setBase(b, true); return b; };
   const loadCrew = async () => { if (!CREW.account) return; const me = await CR.authMe(CREW.account); if (me === 'expired') { CR.signOut(); CREW.account = null; setTimeout(() => { try { hud.toast('SESSION EXPIRED · SIGN IN AGAIN IN THE WARDROBE'); } catch (e) { } }, 0); return; } CREW.basePending = loadBase(); try { const r = await CR.readCrew(CREW.account); if (r) { CREW.xp = r.xp; if (r.fit.top || r.fit.outer || r.fit.legs) applyFit(r.fit); } } catch (e) { } }; loadCrew();
@@ -598,6 +603,9 @@ async function start() {
   const anyKey = (e) => { if (app.title) startGame(); }; addEventListener('keydown', anyKey);
   document.getElementById('play').onclick = startGame; document.getElementById('title').addEventListener('pointerdown', (e) => { if (document.getElementById('title').classList.contains('ready')) startGame(); });
   if (isTouch) document.getElementById('play').textContent = 'TAP TO ENTER';
+  EMB.mountFullscreen(); window.__rw.embed = { app: EMB.APP, embed: EMB.EMBED, hand: HAND };
+  // app contract: no token (or 401 / 426 UPDATE_APP) and not already signed in -> show the email + PIN sign-in once, after tap-to-start and any base picker
+  if (EMB.APP && HAND !== 'ok' && !CREW.account) { const iv = setInterval(() => { if (app.title || hud.isOpen() || (app.phone && app.phone.isOpen)) return; clearInterval(iv); if (CREW.account) return; app.key('o'); setTimeout(() => { const pr = document.getElementById('pinrow'); if (pr) pr.classList.remove('hidden'); const em = document.getElementById('email'); if (em && !isTouch) em.focus(); }, 300); }, 1000); }
   Object.assign(window.__rw, { enterClub: (id) => { const d = id === 'warehousexl' ? whDoor : venueDoors.find(q => q.v.id === id); return enterClub(id, d || { x: 0, z: 0 }); }, cur: () => T, ready: true, engine, scene, P, C, enterTemple, exitTemple, kind: engine.__kind, low: LOW,
     setMode: (m) => { setTempleMode(T, scene, m); hud.interior(true, m); }, openMap: () => hud.openMap(mapCtx()), close: () => hud.close(), hud, player,
     teleport: (x, z, yaw) => { P.x = x; P.z = z; if (yaw != null) { P.heading = yaw; C.yaw = yaw; } C.curDist = C.dist; slowT = 0; },
