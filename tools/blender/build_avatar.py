@@ -726,11 +726,26 @@ for k in ['briefs', 'shoes', 'tee', 'crop', 'long', 'hoodie', 'jeans', 'pants', 
 for k, vv, nm in (('shorts', 'L', 'shortsL'), ('pants', 'W', 'pantsW'), ('long', '', 'jersey'), ('tee', '', 'teeD')):
     VAR = vv; o_ = make(k); o_.name = 'G_' + nm; o_.data.materials.clear(); m_ = bpy.data.materials.new('M_' + nm); o_.data.materials.append(m_)
 VAR = ''
+_FSK = [k_ for k_ in _os.environ.get('AV_FSK', '' if FEM else 'jeans,pants,pantsW,cuffed').split(',') if k_]
+_pre = {k_: [v.co.copy() for v in bpy.data.objects['G_' + k_].data.vertices] for k_ in _FSK if 'G_' + k_ in bpy.data.objects} if FLD else {}
 if FLD:
     for _k in ['tee', 'crop', 'long', 'hoodie', 'jeans', 'pants', 'cuffed', 'shorts', 'shoes', 'shortsL', 'pantsW', 'jersey', 'teeD']:
         for _fp in sorted(_glob.glob(FLD + '/' + _k + '[0-9]*.json')): apply_field([bpy.data.objects['G_' + _k]], _fp, body, snap=_os.environ.get('V5SNAP', '1') == '1', maxpx=float(_os.environ.get('V5MAXPX', '9')), skip=('upperarm', 'lowerarm', 'hand'))
     for _fp in sorted(_glob.glob(FLD + '/hair[0-9]*.json')):  # hair volume to the v5 silhouette (the face itself stays put)
         apply_field([o for o in bpy.data.objects if o.type == 'MESH' and o.name in ('Hair', 'Curls')], _fp, body, maxpx=12)
+# lower garments: the stacked per-look fields leave saw-teeth and spikes along the inner seams; despike + relax the summed field displacement over the whole shell
+for _k, _P0 in _pre.items():
+    _o = bpy.data.objects['G_' + _k]; _bm = bmesh.new(); _bm.from_mesh(_o.data); _bm.verts.ensure_lookup_table()
+    _D = [v.co - _P0[v.index] for v in _bm.verts]; _NB = [[e.other_vert(v).index for e in v.link_edges] for v in _bm.verts]
+    _sp = float(_os.environ.get('AV_FSPK', '0.012')); _ns = 0
+    for _ in range(3):  # despike: a vert whose displacement departs from its ring's mean by > _sp takes the ring mean
+        _m = [sum((_D[j] for j in nb), Vector()) / len(nb) if nb else _D[i] for i, nb in enumerate(_NB)]
+        for i in range(len(_D)):
+            if (_D[i] - _m[i]).length > _sp: _D[i] = _m[i]; _ns += 1
+    for _ in range(int(_os.environ.get('AV_FSM', '4'))):
+        _D = [(_D[i] * 2 + sum((_D[j] for j in nb), Vector())) / (2 + len(nb)) if nb else _D[i] for i, nb in enumerate(_NB)]
+    for v in _bm.verts: v.co = _P0[v.index] + _D[v.index]
+    _bm.to_mesh(_o.data); _bm.free(); print('field relax', _k, _ns)
 # hoodie hem: the fields lift the hem at the hips; drop the lowest band so it laps over the waistband like v5 (no skin gap)
 for _hn in ('G_hoodie',):
     if _hn not in bpy.data.objects: continue
