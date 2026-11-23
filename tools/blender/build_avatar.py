@@ -896,7 +896,7 @@ _pushout_posed([o for o in bpy.data.objects if o.type == 'MESH' and o.name.start
 # (straight sides below the chest, following the shoulder slope above), sleeves = straight wide tubes along the upper arm;
 # boolean union -> voxel remesh (clean manifold, no torn sleeves) -> pushed outside the body -> straight hem/sleeve/neck cuts ->
 # weights transferred from the body. Replaces G_tee; same name/material so the texture + AO pipeline is unchanged.
-if FEM and __import__("os").environ.get("TEE2", "1") == "1":
+if __import__("os").environ.get("TEE2", "1") == "1":  # quality pass: solid boxy tee for both bases (male shell was torn at hem/sleeves after despike+decimate)
     inv_ = toA.inverted()
     zt_ = z_neck + 0.012; zh_ = z_pelvis - 0.06; zc_ = z_neck - 0.13; NA = 40
     tors = [(p_, d_) for p_, d_ in zip(P, W) if (dom(d_) or '').startswith(('spine', 'pelvis', 'clavicle', 'neck'))]
@@ -927,7 +927,8 @@ if FEM and __import__("os").environ.get("TEE2", "1") == "1":
     for sd in ('_l', '_r'):  # sleeves: straight wide tube from inside the shoulder to 68% down the upper arm
         h_, t_ = bone_ws('upperarm' + sd); ax_ = (t_ - h_).normalized(); a0 = h_ - ax_ * 0.06; a1 = h_ + (t_ - h_) * 0.7
         up_ = Vector((0, 0, 1)); u_ = ax_.cross(up_).normalized(); v_ = ax_.cross(u_).normalized(); NS = 20; cs = []
-        for j, (c_, R_) in enumerate(((a0, 0.075), (h_ + (t_ - h_) * 0.15, 0.082), (a1, 0.088))):
+        _rs = 1.0 if FEM else 1.1  # male upper arm is thicker; keep the sleeve a clear tube
+        for j, (c_, R_) in enumerate(((a0, 0.075 * _rs), (h_ + (t_ - h_) * 0.15, 0.082 * _rs), (a1, 0.088 * _rs))):
             cs.append([tb.verts.new(inv_ @ (c_ + (u_ * math.cos(2 * math.pi * q / NS) + v_ * math.sin(2 * math.pi * q / NS) * 1.05) * R_)) for q in range(NS)])
         for j in range(len(cs) - 1):
             for q in range(NS): tb.faces.new((cs[j][q], cs[j][(q + 1) % NS], cs[j + 1][(q + 1) % NS], cs[j + 1][q]))
@@ -967,7 +968,7 @@ if FEM and __import__("os").environ.get("TEE2", "1") == "1":
     for c in isl[:-1]: bmesh.ops.delete(bm, geom=c, context='VERTS')
     bm.to_mesh(me2); bm.free()
     old = bpy.data.objects['G_tee']; o = old.copy(); o.data = me2; bpy.context.collection.objects.link(o)
-    for vg in list(o.vertex_groups): pass
+    for vg in list(o.vertex_groups): o.vertex_groups.remove(vg)
     bpy.data.objects.remove(old); o.name = 'G_tee'; me2.materials.clear(); me2.materials.append(bpy.data.materials.get('M_tee'))
     dt_ = o.modifiers.new('dt', 'DATA_TRANSFER'); dt_.object = body; dt_.use_vert_data = True; dt_.data_types_verts = {'VGROUP_WEIGHTS'}; dt_.vert_mapping = 'POLYINTERP_NEAREST'
     dt_.layers_vgroup_select_src = 'ALL'; dt_.layers_vgroup_select_dst = 'NAME'
@@ -977,6 +978,79 @@ if FEM and __import__("os").environ.get("TEE2", "1") == "1":
         with bpy.context.temp_override(object=o, active_object=o): bpy.ops.object.modifier_move_to_index(modifier=m_.name, index=0); bpy.ops.object.modifier_apply(modifier=m_.name)
     for poly in o.data.polygons: poly.use_smooth = True
     print('TEE2 built', len(o.data.vertices), 'verts')
+    # distress-shirt (G_teeD) is the same cut as the skate tee: use the solid shell, keep its own material
+    if 'G_teeD' in bpy.data.objects:
+        td = bpy.data.objects['G_teeD']; matd = td.data.materials[0] if td.data.materials else bpy.data.materials.get('M_teeD')
+        td.data = o.data.copy(); td.data.materials.clear()
+        if matd: td.data.materials.append(matd)
+        for vg in list(td.vertex_groups): td.vertex_groups.remove(vg)
+        dt2 = td.modifiers.new('dt', 'DATA_TRANSFER'); dt2.object = body; dt2.use_vert_data = True; dt2.data_types_verts = {'VGROUP_WEIGHTS'}; dt2.vert_mapping = 'POLYINTERP_NEAREST'
+        dt2.layers_vgroup_select_src = 'ALL'; dt2.layers_vgroup_select_dst = 'NAME'
+        bpy.context.view_layer.objects.active = td
+        with bpy.context.temp_override(object=td, active_object=td):
+            bpy.ops.object.modifier_move_to_index(modifier=dt2.name, index=0); bpy.ops.object.modifier_apply(modifier=dt2.name)
+        for poly in td.data.polygons: poly.use_smooth = True
+        print('teeD solid copy', len(td.data.vertices))
+    for _tee in (o, bpy.data.objects.get('G_teeD')):
+        if not _tee: continue
+        _tee.parent = arm
+        if not any(m.type == 'ARMATURE' for m in _tee.modifiers):
+            mo = _tee.modifiers.new('arm', 'ARMATURE'); mo.object = arm
+        print('tee skinned', _tee.name, 'vgroups', len(_tee.vertex_groups), 'parent', _tee.parent.name if _tee.parent else None)
+        if len(_tee.vertex_groups) < 6:
+            raise RuntimeError('TEE2 weight transfer failed for %s: %d groups' % (_tee.name, len(_tee.vertex_groups)))
+
+# quality pass: fill short interior holes on every garment shell. Keep real openings (neck / hem / cuffs)
+# by position so a slightly short collar is never capped. Torn 3-16-gons at the hem and sleeves of the
+# old field-fitted shells (and leftover remesh specks) are what showed skin through the tee.
+def close_shell_holes(o, max_sides=22):
+    bm = bmesh.new(); bm.from_mesh(o.data); bm.edges.ensure_lookup_table(); bm.verts.ensure_lookup_table(); bm.faces.ensure_lookup_table()
+    used = set(); loops = []
+    for e0 in bm.edges:
+        if not e0.is_boundary or e0.index in used: continue
+        loop = []; e = e0; v = e.verts[0]; guard = 0
+        while e.index not in used and guard < 10000:
+            used.add(e.index); loop.append(e); v = e.other_vert(v)
+            nxt = next((x for x in v.link_edges if x.is_boundary and x.index not in used), None)
+            if nxt is None: break
+            e = nxt; guard += 1
+        if loop: loops.append(loop)
+    # world-ish object space: Blender garments sit near the origin, +Z up
+    def loop_stats(L):
+        ps = [((e.verts[0].co + e.verts[1].co) * 0.5) for e in L]
+        n = max(1, len(ps)); cx = sum(p.x for p in ps) / n; cz = sum(p.z for p in ps) / n
+        return cx, cz, len(L)
+    st = [loop_stats(L) for L in loops]
+    if not st:
+        bm.free(); return 0
+    big = [s for s in st if s[2] > max_sides] or st
+    zmin, zmax = min(s[1] for s in big), max(s[1] for s in big)
+    xmax = max(abs(s[0]) for s in big)
+    fill_e = []
+    for L, (cx, cz, ln) in zip(loops, st):
+        if ln < 3 or ln > max_sides: continue
+        # tiny remnant holes (3-8 sides) are never real openings; always fill
+        if ln > 8:
+            at_hem = cz <= zmin + 0.03
+            at_neck = cz >= zmax - 0.04
+            at_cuff = xmax > 0.12 and abs(cx) >= xmax * 0.7
+            if at_hem or at_neck or at_cuff: continue
+        fill_e.extend(L)
+    nfill = 0
+    if fill_e:
+        ret = bmesh.ops.holes_fill(bm, edges=fill_e, sides=max_sides)
+        nfill = len(ret.get('faces', []) or [])
+        if nfill:
+            bmesh.ops.triangulate(bm, faces=list(bm.faces))
+            bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    bm.to_mesh(o.data); bm.free(); o.data.update()
+    if nfill: print('closed holes', o.name, 'newfaces', nfill, 'loops', len(loops))
+    return nfill
+
+for _o in list(bpy.data.objects):
+    if _o.type == 'MESH' and _o.name.startswith('G_'):
+        close_shell_holes(_o)
+
 # chunky lug soles (turnaround sheet close-up): a thick flat-bottomed sole under each trainer with lug blocks round the edge, skinned to the foot
 _sh = bpy.data.objects['G_shoes']; _Ws = wmap(_sh); _toS = arm.matrix_world.inverted() @ _sh.matrix_world
 if not FEM:  # sheet trainers are long and chunky: stretch each shoe ~15% heel-to-toe about its own centre

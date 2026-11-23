@@ -83,7 +83,7 @@ export async function loadAvatar3D(scene, { name = 'player', base = import.meta.
     if (gtex[g.id] === false) return tint();
     if (!gtex[g.id]) gtex[g.id] = tex('g-' + g.id, () => { gtex[g.id] = false; if (av.fit) av.setFit(av.fit, av._vis); });
     const t = gtex[g.id]; m.diffuseTexture = t; m.emissiveTexture = t;
-    const c = Color3.FromHexString(g.col), L = 0.3 * c.r + 0.59 * c.g + 0.11 * c.b, f = LOOK2 ? (L > 0.6 ? 0.2 : 0.3) : (L > 0.6 ? 0.26 : 0.4), d = LOOK2 ? (L > 0.6 ? 0.66 : 0.86) : (L > 0.6 ? 0.6 : 0.78); // white garments: no blow-out
+    const c = Color3.FromHexString(g.col), L = 0.3 * c.r + 0.59 * c.g + 0.11 * c.b, f = LOOK2 ? (L > 0.6 ? 0.08 : 0.12) : (L > 0.6 ? 0.26 : 0.4), d = LOOK2 ? (L > 0.6 ? 0.72 : 0.92) : (L > 0.6 ? 0.6 : 0.78); // LOOK2: cloth is lit, not unlit; dark tees keep enough albedo for folds
     m.emissiveColor = new Color3(f, f, f); m.diffuseColor = new Color3(d, d, d); m._e0 = null; av._expo = null; };
   // pipeline chunk 1 (male): Cycles-baked ambient occlusion per part + a texture-coloured fresnel rim (cheap, mobile-safe)
   if (!FEM) {
@@ -97,12 +97,18 @@ export async function loadAvatar3D(scene, { name = 'player', base = import.meta.
   // threshold (the red chest blob). Less emissive, more key light (real form shading), a softer rim, a hair sheen with
   // mips (the 2048 hair map aliased into a blob without them), and emissive/lights compensated for scene exposure.
   if (LOOK2) {
-    if (!FEM) { skinM.emissiveColor.set(0.22, 0.22, 0.22); skinM.diffuseColor.set(0.92, 0.89, 0.88); }
-    else { skinM.emissiveColor.set(0.27, 0.235, 0.205); skinM.diffuseColor.set(0.96, 0.89, 0.83); }
-    skinM.specularColor.set(0.07, 0.06, 0.055); skinM.specularPower = 22;
-    if (!FEM) { hairM.diffuseColor.set(0.6, 0.6, 0.6); hairM.emissiveColor.set(0.3, 0.3, 0.3); hairM.specularColor.set(0.16, 0.15, 0.14); hairM.specularPower = 36; }
-    const rim2 = () => { const f = new FresnelParameters(); f.leftColor = new Color3(1.2, 1.15, 1.1); f.rightColor = new Color3(0.8, 0.8, 0.8); f.power = 3; f.bias = 0; return f; };
-    for (const m of [skinM, ...Object.values(gm)]) if (m.emissiveFresnelParameters || !FEM) m.emissiveFresnelParameters = rim2();
+    // visible in-game upgrade: form comes from the key/rim lights, not unlit emissive (which washed the face pale and flat)
+    if (!FEM) { skinM.emissiveColor.set(0.08, 0.075, 0.07); skinM.diffuseColor.set(0.98, 0.88, 0.80); }
+    else { skinM.emissiveColor.set(0.09, 0.08, 0.07); skinM.diffuseColor.set(1.0, 0.90, 0.84); }
+    skinM.specularColor.set(0.16, 0.13, 0.11); skinM.specularPower = 40; skinM.ambientColor.set(0.16, 0.16, 0.17);
+    // hair: dark shell + strand bump from the hair map (was 0.6 diffuse / 0.3 emissive = a grey blob)
+    hairM.diffuseColor.set(FEM ? 0.22 : 0.16, FEM ? 0.20 : 0.15, FEM ? 0.19 : 0.14);
+    hairM.emissiveColor.set(0.05, 0.045, 0.04); hairM.specularColor.set(0.28, 0.24, 0.20); hairM.specularPower = 56;
+    if (hairM.diffuseTexture) { const hb = hairM.diffuseTexture.clone(); hb.level = 0.55; hairM.bumpTexture = hb; hairM.useParallax = false; hairM.invertNormalMapY = false; }
+    curlM.diffuseColor = Color3.FromHexString(FEM ? '#1e1612' : '#14110f'); curlM.emissiveColor.set(0.03, 0.025, 0.02);
+    curlM.specularColor.set(0.22, 0.18, 0.15); curlM.specularPower = 40;
+    const rim2 = () => { const f = new FresnelParameters(); f.leftColor = new Color3(0.55, 0.52, 0.48); f.rightColor = new Color3(0.12, 0.12, 0.12); f.power = 2.4; f.bias = 0.08; return f; };
+    for (const m of [skinM, hairM, curlM, ...Object.values(gm)]) m.emissiveFresnelParameters = rim2();
   }
 
   // animation groups, blended by weight
@@ -167,8 +173,8 @@ export async function loadAvatar3D(scene, { name = 'player', base = import.meta.
   for (const m of new Set(lit.map(x => x.material).filter(Boolean))) m.maxSimultaneousLights = 8;
   av.lights = [key, rim, fill];
   av.lightRig = (cam) => { const p = root.position, c = cam.position; let dx = c.x - p.x, dz = c.z - p.z; const L = Math.hypot(dx, dz) || 1; dx /= L; dz /= L;
-    key.position.set(p.x + dx * 2.2 - dz * 1.6, p.y + 2.3, p.z + dz * 2.2 + dx * 1.6); rim.position.set(p.x - dx * 2.0 + dz * 0.8, p.y + 2.0, p.z - dz * 2.0 - dx * 0.8); fill.position.set(p.x + dx * 2.0 + dz * 1.8, p.y + 1.2, p.z + dz * 2.0 - dx * 1.8); };
-  if (LOOK2) { key.intensity = 0.8; rim.intensity = 0.34; fill.intensity = 0.26; }
+    key.position.set(p.x + dx * 2.0 - dz * 1.5, p.y + 2.4, p.z + dz * 2.0 + dx * 1.5); rim.position.set(p.x - dx * 2.6 + dz * 0.4, p.y + 1.9, p.z - dz * 2.6 - dx * 0.4); fill.position.set(p.x + dx * 1.6 + dz * 2.0, p.y + 1.15, p.z + dz * 1.6 - dx * 2.0); };
+  if (LOOK2) { key.intensity = 1.45; key.diffuse = Color3.FromHexString('#ffe1c0'); rim.intensity = 1.05; rim.diffuse = Color3.FromHexString('#c9d8ff'); fill.intensity = 0.16; }
   for (const l of av.lights) l._i0 = l.intensity;
   // exposure compensation (quality pass): scene exposure is 1.4 on the street, 1.7-2.0 in venues; keep the avatar's own light constant
   av.setExposure = (e) => { if (!LOOK2) return; const k = Math.max(0.6, Math.min(1, 1.4 / (e || 1.4))); if (av._expo === k) return; av._expo = k;

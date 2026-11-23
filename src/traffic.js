@@ -274,11 +274,23 @@ export function buildTraffic(scene, city, { low = false, lite = false, stops = [
     if (!low) { const hb = beamSrc.createInstance('hb'); hb.parent = node; hb.position.set(0, 0, 0); }
     cars.push({ node, kind: s.kind, patrol: !!s.patrol, a: 0, b: 0, s: 0, len: 1, speed: 0, max: s.kind === 'bus' ? 8 : s.kind === 'wagon' ? 9 : 10 + R() * 4, heading: 0, offset: 0 });
   }
+  const placeBusy = (x, z, self, hl) => {
+    const need = hl + 3;
+    for (const o of cars) { if (o === self || !o.node) continue; if (Math.hypot(o.node.position.x - x, o.node.position.z - z) < need + HALF(o)) return true; }
+    for (const o of parked) { if (Math.hypot(o.node.position.x - x, o.node.position.z - z) < need + HALF(o)) return true; }
+    return false;
+  };
   const placeCar = (c, near) => {
-    for (let tries = 0; tries < 40; tries++) {
+    for (let tries = 0; tries < 60; tries++) {
       const a = G.nodes[Math.floor(R() * G.nodes.length)]; const p = G.pos.get(a);
-      const d = Math.hypot(p[0] - near.x, p[1] - near.z); if (d > 200 || d < 15) continue;
-      const nb = G.adj.get(a); const b = nb[Math.floor(R() * nb.length)]; setEdge(c, a, b); c.s = 0; c.speed = c.max * 0.6; return true;
+      const d = Math.hypot(p[0] - near.x, p[1] - near.z); if (d > 200 || d < 18) continue;
+      const nb = G.adj.get(a); if (!nb || !nb.length) continue; const b = nb[Math.floor(R() * nb.length)];
+      const pb = G.pos.get(b); const len = Math.max(0.01, Math.hypot(pb[0] - p[0], pb[1] - p[1]));
+      const s0 = Math.min(len * 0.7, HALF(c) + 1 + R() * 4);
+      const vx = (pb[0] - p[0]) / len, vz = (pb[1] - p[1]) / len; const x = p[0] + vx * s0, z = p[1] + vz * s0;
+      if (placeBusy(x, z, c, HALF(c))) continue;
+      setEdge(c, a, b); c.s = s0; c.speed = c.max * 0.6;
+      c.node.position.set(x, -0.085, z); c.heading = Math.atan2(vx, vz); c.node.rotation.y = c.heading; return true;
     }
     const a = G.nodes[Math.floor(R() * G.nodes.length)]; setEdge(c, a, G.adj.get(a)[0]); return false;
   };
@@ -366,15 +378,15 @@ const tmp = new Vector3();
 export function updateTraffic(T, dt, player, t) {
   const { G, PG } = T;
   if (!T.inited) { T.cars.forEach(c => T.placeCar(c, player)); T.peds.forEach(p => T.placePed(p, player)); T.inited = true; }
-  // glitches (a)+(f): obstacles are sampled along every vehicle's body (an 18 m bus was a single centre point, so a car
-  // following round a bend or crossing a junction saw nothing and drove through the trailer), parked vehicles count too,
-  // and the player camera is an obstacle so cars stop short of it instead of driving through the lens.
+  // glitches (a)+(f): one oriented body per vehicle (not a single centre, and not only "ahead" point samples —
+  // a car already inside an 18 m bus saw only rear samples behind it, stopped, and stayed overlapping).
+  // Parked vehicles and the player camera count too. Cars brake to a real gap and back up if already overlapping.
   const OBS = T._obs || (T._obs = []); OBS.length = 0;
-  const addBody = (o, node, kind) => { const hd = node.rotation.y, fx = Math.sin(hd), fz = Math.cos(hd), hl = (kind === 'bus' ? 9 : kind === 'wagon' ? 2.7 : 2.3) - 0.6, hw = kind === 'bus' ? 1.3 : kind === 'wagon' ? 1.05 : 0.9;
-    const n = kind === 'bus' ? 7 : 3; for (let i = 0; i < n; i++) { const k = -1 + 2 * i / (n - 1); OBS.push({ o, x: node.position.x + fx * hl * k, z: node.position.z + fz * hl * k, fx, fz, hw }); } };
+  const addBody = (o, node, kind) => { const hd = node.rotation.y, fx = Math.sin(hd), fz = Math.cos(hd);
+    OBS.push({ o, x: node.position.x, z: node.position.z, fx, fz, hl: HALF(o), hw: kind === 'bus' ? 1.3 : kind === 'wagon' ? 1.05 : 0.9, kind }); };
   for (const o of T.cars) addBody(o, o.node, o.kind);
   for (const o of T.parked) addBody(o, o.node, o.kind);
-  const camP = T.cam && !(T.drv && T.drv.on) ? T.cam.position : null; if (camP) OBS.push({ o: 'cam', x: camP.x, z: camP.z, fx: 0, fz: 0, hw: 0.5 });
+  const camP = T.cam && !(T.drv && T.drv.on) ? T.cam.position : null; if (camP) OBS.push({ o: 'cam', x: camP.x, z: camP.z, fx: 0, fz: 0, hl: 0.7, hw: 0.8, kind: 'cam' });
   for (const c of T.cars) {
     if (c.chase) continue; // driven by src/missions.js while chasing (heat)
     const pa = G.pos.get(c.a), pb = G.pos.get(c.b);
@@ -388,8 +400,20 @@ export function updateTraffic(T, dt, player, t) {
     let target = c.max; if (ahead > 0 && ahead < look + HALF(c) && lat < lw) { target = drv ? Math.max(0, (ahead - HALF(c) - 3.2) * 0.8) : 0; if (drv && c.speed < 0.6) { c.blk = (c.blk || 0) + dt; if (c.blk > 2.4 && (!c.hk || t - c.hk > 7) && Math.hypot(dx, dz) < 20) { c.hk = t; T.onHonk && T.onHonk(c); } } } else c.blk = 0;
     if (drv && T.honked && performance.now() - T.honked < 2500 && ahead < 0 && -ahead < 14 && lat < 2.4) { c.yield = 1.4; }
     if (c.yield) { c.yield = Math.max(0, c.yield - dt * 0.4); }
-    { const hc = HALF(c), wc = c.kind === 'bus' ? 1.3 : 0.9; for (const p of OBS) { if (p.o === c) continue; const ox = p.x - cx, oz = p.z - cz; const ah = ox * ux + oz * uz; if (ah <= 0 || ah > hc + 6) continue;
-      const la = Math.abs(-ox * uz + oz * ux), onc = p.fx * ux + p.fz * uz < -0.5; if (la < (onc ? 0.25 : 0.7) + wc * 0.5 + p.hw * 0.5 + (p.o === 'cam' ? 0.5 : 0)) target = Math.min(target, Math.max(0, (ah - hc - 0.9) * 1.5)); } }
+    { const hc = HALF(c), wc = c.kind === 'bus' ? 1.3 : 0.9;
+      for (const p of OBS) {
+        if (p.o === c) continue;
+        const ox = p.x - cx, oz = p.z - cz; const ah = ox * ux + oz * uz; // along our travel axis, other centre
+        const gap = (c.kind === 'bus' || p.kind === 'bus') ? 4.2 : p.kind === 'cam' ? 2.4 : 2.6;
+        const reach = hc + (p.hl || 0) + gap + 2;
+        if (ah + (p.hl || 0) <= 0 || ah > reach) continue; // fully behind us, or too far ahead
+        const la = Math.abs(-ox * uz + oz * ux), onc = p.fx * ux + p.fz * uz < -0.5;
+        const latNeed = (onc ? 0.2 : 0.45) + wc * 0.5 + p.hw * 0.5 + (p.kind === 'cam' ? 0.4 : 0);
+        if (la >= latNeed) continue;
+        const clear = ah - hc - (p.hl || 0); // metres of open road between body ends
+        if (clear < 0) { c.s = Math.max(0, c.s + clear * 0.6); target = 0; } // already overlapping: slide back along the path
+        else target = Math.min(target, Math.max(0, (clear - gap) * 1.35));
+      } }
     // corner slowdown
     if (c.len - c.s < 8) target = Math.min(target, c.max * 0.55);
     // stop at red signals: 24 s cycle, N-S green 0-10 s, all-red 10-12, E-W green 12-22, all-red 22-24
