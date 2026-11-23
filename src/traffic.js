@@ -366,6 +366,15 @@ const tmp = new Vector3();
 export function updateTraffic(T, dt, player, t) {
   const { G, PG } = T;
   if (!T.inited) { T.cars.forEach(c => T.placeCar(c, player)); T.peds.forEach(p => T.placePed(p, player)); T.inited = true; }
+  // glitches (a)+(f): obstacles are sampled along every vehicle's body (an 18 m bus was a single centre point, so a car
+  // following round a bend or crossing a junction saw nothing and drove through the trailer), parked vehicles count too,
+  // and the player camera is an obstacle so cars stop short of it instead of driving through the lens.
+  const OBS = T._obs || (T._obs = []); OBS.length = 0;
+  const addBody = (o, node, kind) => { const hd = node.rotation.y, fx = Math.sin(hd), fz = Math.cos(hd), hl = (kind === 'bus' ? 9 : kind === 'wagon' ? 2.7 : 2.3) - 0.6, hw = kind === 'bus' ? 1.3 : kind === 'wagon' ? 1.05 : 0.9;
+    const n = kind === 'bus' ? 7 : 3; for (let i = 0; i < n; i++) { const k = -1 + 2 * i / (n - 1); OBS.push({ o, x: node.position.x + fx * hl * k, z: node.position.z + fz * hl * k, fx, fz, hw }); } };
+  for (const o of T.cars) addBody(o, o.node, o.kind);
+  for (const o of T.parked) addBody(o, o.node, o.kind);
+  const camP = T.cam && !(T.drv && T.drv.on) ? T.cam.position : null; if (camP) OBS.push({ o: 'cam', x: camP.x, z: camP.z, fx: 0, fz: 0, hw: 0.5 });
   for (const c of T.cars) {
     if (c.chase) continue; // driven by src/missions.js while chasing (heat)
     const pa = G.pos.get(c.a), pb = G.pos.get(c.b);
@@ -379,7 +388,8 @@ export function updateTraffic(T, dt, player, t) {
     let target = c.max; if (ahead > 0 && ahead < look + HALF(c) && lat < lw) { target = drv ? Math.max(0, (ahead - HALF(c) - 3.2) * 0.8) : 0; if (drv && c.speed < 0.6) { c.blk = (c.blk || 0) + dt; if (c.blk > 2.4 && (!c.hk || t - c.hk > 7) && Math.hypot(dx, dz) < 20) { c.hk = t; T.onHonk && T.onHonk(c); } } } else c.blk = 0;
     if (drv && T.honked && performance.now() - T.honked < 2500 && ahead < 0 && -ahead < 14 && lat < 2.4) { c.yield = 1.4; }
     if (c.yield) { c.yield = Math.max(0, c.yield - dt * 0.4); }
-    for (const o of T.cars) { if (o === c) continue; const ox = o.node.position.x - cx, oz = o.node.position.z - cz; const ah = ox * ux + oz * uz; const hl = HALF(c) + HALF(o); if (ah > 0 && ah < hl + 4.5 && Math.abs(-ox * uz + oz * ux) < 1.6) { target = Math.min(target, Math.max(0, (ah - hl - 0.8) * 1.5)); } }
+    { const hc = HALF(c), wc = c.kind === 'bus' ? 1.3 : 0.9; for (const p of OBS) { if (p.o === c) continue; const ox = p.x - cx, oz = p.z - cz; const ah = ox * ux + oz * uz; if (ah <= 0 || ah > hc + 6) continue;
+      const la = Math.abs(-ox * uz + oz * ux), onc = p.fx * ux + p.fz * uz < -0.5; if (la < (onc ? 0.25 : 0.7) + wc * 0.5 + p.hw * 0.5 + (p.o === 'cam' ? 0.5 : 0)) target = Math.min(target, Math.max(0, (ah - hc - 0.9) * 1.5)); } }
     // corner slowdown
     if (c.len - c.s < 8) target = Math.min(target, c.max * 0.55);
     // stop at red signals: 24 s cycle, N-S green 0-10 s, all-red 10-12, E-W green 12-22, all-red 22-24
@@ -403,6 +413,11 @@ export function updateTraffic(T, dt, player, t) {
     c.node.rotation.y = c.heading;
     if (Math.hypot(c.node.position.x - player.x, c.node.position.z - player.z) > 330) { T.placeCar(c, player); const p = G.pos.get(c.a); c.node.position.set(p[0], -0.085, p[1]); }
   }
+  // glitch (f): if the camera still ends up inside a body (camera swung into a parked car, a car turned into it), hide that vehicle
+  if (T.cam && !(T.drv && T.drv.on)) { const cp = T.cam.position; for (const list of [T.cars, T.parked]) for (const o of list) { const n = o.node, dx = cp.x - n.position.x, dz = cp.z - n.position.z;
+    let hide = false; if (Math.abs(dx) < 10 && Math.abs(dz) < 10 && cp.y < 3.6) { const hd = n.rotation.y, fx = Math.sin(hd), fz = Math.cos(hd); const along = dx * fx + dz * fz, side = -dx * fz + dz * fx;
+      hide = Math.abs(along) < HALF(o) + 0.25 && Math.abs(side) < (o.kind === 'bus' ? 1.6 : 1.2); }
+    if (hide !== !!o._camHide) { o._camHide = hide; n.setEnabled(!hide); } } }
   const on = Math.floor(t * 4) % 2; T.barM.emissiveColor.set(on ? 0.15 : 0.1, on ? 0.4 : 0.1, on ? 1 : 0.2); T.barM2.emissiveColor.set(on ? 0.1 : 0.15, on ? 0.1 : 0.4, on ? 0.2 : 1);
   if (T.queues.length) { let best = null, bd = 85; for (const q of T.queues) { const d = Math.hypot(q.x - player.x, q.z - player.z); if (d < bd) { bd = d; best = q; } }
     if (best !== T.qCur) { T.qCur = best; T.qPool.forEach((a, i) => { const p = best && best.pts[i]; a.root.setEnabled(!!p); if (p) { a.root.position.set(p[0], 0, p[1]); a.root.rotation.y = p[2]; } }); }

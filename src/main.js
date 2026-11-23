@@ -110,7 +110,7 @@ async function start() {
   const hemi = new HemisphericLight('hemi', new Vector3(0.1, 1, 0.2), scene); hemi.intensity = 1.0; hemi.diffuse = hex('#9aa6cc'); hemi.groundColor = hex('#2a2426'); hemi.specular = new Color3(0.2, 0.2, 0.3);
   const moon = new DirectionalLight('moon', new Vector3(-0.4, -0.8, 0.5), scene); moon.intensity = 0.45; moon.diffuse = hex('#b8c4ff'); moon.specular = new Color3(0.3, 0.3, 0.4);
   let DANCE = null, COL = null, SEAT = null, punch = 0;
-  const cam = new FreeCamera('cam', new Vector3(0, 5, -10), scene); cam.minZ = 0.1; cam.maxZ = 900; cam.fov = 0.95; cam.inputs.clear(); const cam0 = cam;
+  const cam = new FreeCamera('cam', new Vector3(0, 5, -10), scene); cam.minZ = 0.1; cam.maxZ = LITE ? 1400 : isTouch ? 2200 : 5000; /* was 900: long streets (Donegall) and high aerials clipped to a hard void */ cam.fov = 0.95; cam.inputs.clear(); const cam0 = cam;
   let glow = null; if (!LOW && !Q.has('noglow')) { try { glow = new GlowLayer('glow', scene, { mainTextureRatio: 0.35, blurKernelSize: 32 }); glow.intensity = 0.5; } catch (e) { console.warn('glow off', e); glow = null; } }
   // cinematic pipeline: gentle bloom, ACES filmic tone mapping, contrast grade, vignette, light grain, FXAA (+ SSAO on ?ssao)
   let pipe = null, SSAO = null;
@@ -183,7 +183,7 @@ async function start() {
   // crew base (MALE / FEMALE): ?base= for tests, else the app's avatar_base when signed in (read-only), else the local pick
   CREW.base = ['male', 'female'].includes(Q.get('base')) ? Q.get('base') : (CR.getLocalBase() || 'male'); CREW.baseFromApp = false;
   const swapAvatar = (kind) => { if (Q.has('procav')) return; const tok = (swapAvatar.n = (swapAvatar.n || 0) + 1);
-    loadAvatar3D(scene, { name: 'player3d', kind }).then(av => { if (tok !== swapAvatar.n) { av.root.dispose(false, true); Object.values(av.ag).forEach(g => g.dispose()); return; }
+    loadAvatar3D(scene, { name: 'player3d', kind, hq: !LITE && !isTouch, lite: LITE, exempt: !SAFE }).then(av => { if (tok !== swapAvatar.n) { av.root.dispose(false, true); Object.values(av.ag).forEach(g => g.dispose()); return; }
       const old = player; av.root.position.copyFrom(old.root.position); av.root.rotation.y = old.root.rotation.y;
       if (old.isGlb) { old.root.dispose(false, true); Object.values(old.ag).forEach(g => g.dispose()); } else { old.root.setEnabled(false); old.allMeshes().forEach(m => m.setEnabled(false)); }
       player = av; window.__rw.player = av; player.setFit(CREW.fit, CR.visibleFor); if (glow) for (const m of av.allMeshes()) glow.addExcludedMesh(m); DG.log('avatar3d loaded ' + kind); }).catch(e => console.warn('avatar3d', e)); };
@@ -265,7 +265,7 @@ async function start() {
   if (im) mapBase = Object.assign(im, { bounds: mapBase.bounds, proc: mapBase }); } catch (e) { console.warn('minimap', e); }
   app.mapBase = mapBase;
   const hud = createHUD(app);
-  const RB = createRapid({ scene, traffic, hud, app, grid: city.grid }); window.__rw.RB = RB; window.__rw.traffic = traffic; const DRV = createDrive(traffic); window.__rw.DRV = DRV; traffic.drv = DRV; DRV.horn = () => { AU.horn(); traffic.honked = performance.now(); }; traffic.onHonk = () => AU.horn(0.5); const CAB = createCabs({ scene, traffic, hud, app, city, player: { get root() { return player.root; } } }); window.__rw.CAB = CAB; const wrapA = (a) => { while (a > Math.PI) a -= 2 * Math.PI; while (a < -Math.PI) a += 2 * Math.PI; return a; };
+  const RB = createRapid({ scene, traffic, hud, app, grid: city.grid }); window.__rw.RB = RB; window.__rw.traffic = traffic; traffic.cam = cam; const DRV = createDrive(traffic); window.__rw.DRV = DRV; traffic.drv = DRV; DRV.horn = () => { AU.horn(); traffic.honked = performance.now(); }; traffic.onHonk = () => AU.horn(0.5); const CAB = createCabs({ scene, traffic, hud, app, city, player: { get root() { return player.root; } } }); window.__rw.CAB = CAB; const wrapA = (a) => { while (a > Math.PI) a -= 2 * Math.PI; while (a < -Math.PI) a += 2 * Math.PI; return a; };
   // GPS destination (GTA-style): defaults to the Temple door; venues or a tapped waypoint from the pause map
   let DEST = { x: ext.doorPos.x, z: ext.doorPos.z, label: 'THE TEMPLE', kind: 'venue', id: 'temple' };
   const venueDest = VENUES.filter(v => v.inSlice).map(v => v.id === 'temple' ? { ...v, x: ext.doorPos.x, z: ext.doorPos.z } : v.id === 'warehousexl' && whDoor ? { ...v, x: whDoor.x, z: whDoor.z } : (d => d ? { ...v, x: d.x, z: d.z } : v)(venueDoors.find(q => q.v.id === v.id)));
@@ -428,7 +428,7 @@ async function start() {
   // auto quality tier (low/med/high): ?q=low|med|high pins it, otherwise start med on phones / high on desktop and adapt to measured FPS
   let tier = Q.get('q') || (LITE ? 'low' : isTouch ? 'med' : 'high'); if (!TIERS[tier]) tier = 'high'; const autoTier = Q.has('auto') || (!Q.get('q') && !Q.has('webgl')); let tierT = 0, tierF = [], tierUp = false, cullT = 0;
   const baseScale = 1 / Math.min(1.5, devicePixelRatio || 1);
-  function setTier(n) { tier = n; const T0 = TIERS[n]; const dprE = Math.min(2.5, devicePixelRatio || 1); engine.setHardwareScalingLevel(LITE ? (SAFE ? 1.25 : 1) : isTouch ? T0.scale / dprE : T0.scale === 1 ? baseScale : Math.min(T0.scale, 1.25) / Math.min(1.5, dprE)); // phones: native px / scale (1.5x down on med)
+  function setTier(n) { tier = n; const T0 = TIERS[n]; const dprE = Math.min(2.5, devicePixelRatio || 1); engine.setHardwareScalingLevel(LITE ? (SAFE ? 1.25 : 1 / Math.min(1.5, dprE)) : isTouch ? Math.max(T0.scale / dprE, 1 / 2) /* phones: DPR capped at 2 */ : T0.scale === 1 ? baseScale : Math.min(T0.scale, 1.25) / Math.min(1.5, dprE)); // phones: native px / scale (1.5x down on med)
     if (pipe) { pipe.bloomEnabled = T0.bloom; pipe.grainEnabled = T0.grain; try { pipe.samples = n === 'high' && !isTouch ? 4 : 1; } catch (e) { } }
     if (SSAO) { const on = n === 'high'; const M = scene.postProcessRenderPipelineManager; if (on && !SSAO._rwOn) M.attachCamerasToRenderPipeline('ssao', cam0); if (!on && SSAO._rwOn !== false) M.detachCamerasFromRenderPipeline('ssao', cam0); SSAO._rwOn = on; } if (glow) glow.isEnabled = T0.glow; if (typeof STREAM !== 'undefined' && STREAM) { STREAM.radius = LITE ? 150 : isTouch ? Math.min(300, T0.stream) : T0.stream; STREAM.drop = STREAM.radius + (LITE ? 250 : 300); } if (typeof T !== 'undefined' && T) { T.crowdMax = T0.crowd; T.crowdFar = T0.far; } CROWD.max = T0.crowd; CROWD.far = T0.far; if (TEMPLE) { TEMPLE.crowdMax = T0.crowd; TEMPLE.crowdFar = T0.far; } for (const k in CLUBS) { CLUBS[k].crowdMax = T0.crowd; CLUBS[k].crowdFar = T0.far; } window.__rw.tier = n; console.log('[rw] quality tier', n); }
   setTier(tier);
@@ -489,7 +489,7 @@ async function start() {
     const autoDance = app.inside && T.mode === 'rave' && T.danceFloor(P) && P.speed < 0.2 && !window.__rw.noAutoDance; app.autoDance = autoDance;
     if (SEAT) { P.x = SEAT.x; P.z = SEAT.z; P.heading = SEAT.h; P.speed = 0; }
     player.root.position.set(P.x, P.y + (app.inside && T.floorY ? T.floorY(P.x, P.z) : 0) + (SEAT ? (window.__rw.seatY ?? 0.3) : 0), P.z); player.root.rotation.y = P.heading; dust.emitter.set(P.x, 0.05, P.z); dust.emitRate = P.speed > 4.5 && !app.inside ? 45 : 0;
-    if (player.lightRig) player.lightRig(cam);
+    if (player.lightRig) player.lightRig(cam); if (player.setExposure) player.setExposure(pipe ? pipe.imageProcessing.exposure : 1.4);
     SKY.update(cam);
     if (player.animate) player.animate(dt, { speed: SEAT ? 0 : P.speed, dancing: (P.dancing || autoDance || (DANCE && DANCE.active())) && !SEAT, air: P.air && !SEAT, sitting: !!SEAT }); else animateAvatar(player, dt, { speed: P.speed * 0.8, dancing: P.dancing || autoDance });
     // camera with collision
@@ -504,6 +504,7 @@ async function start() {
     { // audit P1-9: backed against a wall -> lift the camera over the head and fade the player instead of filling the screen with it
       const close = Math.max(0, Math.min(1, (1.9 - C.curDist) / 0.9)); camPos.y += close * 1.15; tgt.y -= close * 0.25;
       const vis = 1 - 0.7 * close; if (Math.abs((C._vis ?? 1) - vis) > 0.02) { C._vis = vis; try { for (const m of player.allMeshes()) m.visibility = vis; } catch (e) { } } }
+    if (!app.inside) { const ph = city.grid.topNear(camPos.x, camPos.z, 0.5, 3); if (ph > 0 && camPos.y < ph + 0.35) camPos.y = ph + 0.35; } // glitch (d): never inside a bench/bin/box
     if (app.inside && T && T.club && camPos.z < 0.5) camPos.z = 0.5; // clubs: never behind the entrance wall (z = 0), the EXIT sign / door filled the screen green
     // smoothed follow camera + slight FOV kick when sprinting
     if (camSnap) { smPos.copyFrom(camPos); smTgt.copyFrom(tgt); camSnap = false; } else { const k = Math.min(1, dt * 8); Vector3.LerpToRef(smPos, camPos, k, smPos); Vector3.LerpToRef(smTgt, tgt, Math.min(1, dt * 14), smTgt); }
