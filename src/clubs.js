@@ -202,6 +202,30 @@ const SPECS = {
 };
 export const CLUB_IDS = Object.keys(SPECS);
 
+// ---------------------------------------------------------------- venue standard pack (quality pass 2026-11-23)
+// Brings every club up to the Temple's production standard without touching each venue's own layout: truss towers with
+// LED strips and hung line arrays either side of the booth, flight cases, a B&W RECKLESS banner over the DJ (not where a
+// screen already carries it), beat-synced uplighter washes along both side walls (so the room reads instead of a black
+// box), and a lit FIRE EXIT door + TOILETS · CLOAKROOM sign. All merged into the existing per-material meshes.
+function standardPack(K, S, id) {
+  const { W, D, H } = S, [djx, djz] = S.dj, M = (k, w, h, d, x, y, z, col, r) => K.B(k, w, h, d, x, y, z, col ? hex(col) : null, r);
+  const bw = id === 'locationx' ? 2.6 : 3.0, th = Math.min(H - 0.35, 6.2), TW = { warehousexl: [3.3, -0.4], thompsons: [3.2, -0.4], terminus: [2.2, 0.9] }[id];
+  if (TW) for (const sd of [-1, 1]) { const tx = djx + sd * TW[0], tz = djz + TW[1]; if (Math.abs(tx) > W / 2 - 0.5) continue;
+    for (const dx of [-0.18, 0.18]) for (const dz of [-0.18, 0.18]) M('metal', 0.05, th, 0.05, tx + dx, th / 2, tz + dz, '#2a2b30');
+    for (let y = 0.5; y < th; y += 0.6) M('metal', 0.4, 0.03, 0.03, tx, y, tz - 0.18, '#2a2b30', [0, 0, 0.6]);
+    M('ledR', 0.05, th - 0.6, 0.05, tx, th / 2, tz - 0.24);
+    if (th > 3.2) for (let k = 0; k < 4; k++) M('kit', 0.8, 0.28, 0.55, tx, th - 0.45 - k * 0.3, tz - 0.05, '#121214', [-(k * 0.06), 0, 0]);
+    K.segs.push([tx - 0.25, tz - 0.25, tx + 0.25, tz - 0.25], [tx - 0.25, tz + 0.25, tx + 0.25, tz + 0.25]); }
+  else for (const sd of [-1, 1]) { const tx = djx + sd * (bw / 2 + 0.35); if (Math.abs(tx) < W / 2 - 0.3) M(id === 'warehouse' ? 'ledA' : 'ledP', 0.06, H - 1.0, 0.06, tx, (H - 1.0) / 2 + 0.3, D - 0.12); } // LED uprights on the back wall
+  if (id !== 'thompsons') { const bwid = Math.min(5, W * 0.36); K.add('banner', xf(planeR(bwid, bwid * 0.24), { r: [0, Math.PI, 0], t: [djx, Math.min(H - 0.6, 4.4, H * 0.72), Math.min(D - 0.35, djz + 1.3)] })); }
+  // uplighter cans + additive wash quads up both side walls (one merged mesh, pulsed in updateClub)
+  for (const sd of [-1, 1]) for (let z = 3; z < D - 1.5; z += 3.2) { const x = sd * (W / 2 - 0.08);
+    M('kit', 0.22, 0.22, 0.22, x - sd * 0.2, 0.11, z, '#111'); K.add('upWash', xf(planeR(1.3, Math.min(H - 0.4, 4.2)), { r: [0, sd * Math.PI / 2, 0], t: [x - sd * 0.03, Math.min(H - 0.4, 4.2) / 2 + 0.1, z] })); }
+  // fire exit (left wall, back corner) + toilets / cloakroom sign by the entrance
+  const fz = D - 1.6; M('door', 0.06, 2.2, 1.5, -W / 2 + 0.1, 1.1, fz); K.add('fireX', xf(planeR(1.0, 0.36), { r: [0, -Math.PI / 2, 0], t: [-W / 2 + 0.14, 2.55, fz] }));
+  K.add('wcSign', xf(planeR(1.8, 0.34), { r: [0, -Math.PI / 2, 0], t: [-W / 2 + 0.14, Math.min(2.7, H - 0.5), 1.6] }));
+}
+
 // ---------------------------------------------------------------- build
 export function buildClub(scene, id, { index = 0, low = false, posters = [], venue }) {
   const OFF = new Vector3(4400 + index * 400, 0, 0);
@@ -211,6 +235,7 @@ export function buildClub(scene, id, { index = 0, low = false, posters = [], ven
   const S = SPECS[id](scene, K, R);
   // exit door + sign, and real Reckless posters by the entrance
   K.B('door', 2.6, 2.5, 0.06, 0, 1.25, -0.02); K.add('exit', xf(planeR(1.4, 0.5), { t: [0, 3.0 > S.H - 0.4 ? S.H - 0.5 : 3.0, 0.12] }));
+  standardPack(K, S, id);
   const mats = {
     floor: mat(scene, id + '-floor', { s: new Color3(0.25, 0.25, 0.25), p: 60 }), wall: mat(scene, id + '-wall'), ceil: mat(scene, id + '-ceil'), metal: mat(scene, id + '-metal', { s: new Color3(0.5, 0.5, 0.55), p: 50 }),
     kit: mat(scene, id + '-kit', { s: new Color3(0.2, 0.2, 0.2), p: 40 }), wood: mat(scene, id + '-wood'), trim: mat(scene, id + '-trim'), leaf: mat(scene, id + '-leaf'),
@@ -235,6 +260,10 @@ export function buildClub(scene, id, { index = 0, low = false, posters = [], ven
   mats.floor.diffuseTexture.uScale = mats.floor.diffuseTexture.vScale = id === 'terminus' ? 4 : id === 'warehouse' ? 5 : 6;
   const um = (k, tex) => { const m = mat(scene, id + '-' + k, { unlit: true, two: true, d: Color3.Black() }); m.emissiveTexture = tex; mats[k] = m; return m; };
   um('exit', signTex(scene, '⟵ EXIT', { bg: '#11a84a', w: 256, h: 96 }));
+  um('fireX', signTex(scene, 'FIRE EXIT', { bg: '#11a84a', w: 512, h: 184 })); um('wcSign', signTex(scene, 'TOILETS · CLOAKROOM ⟶', { fg: '#ffffff', bg: '#111114', w: 1024, h: 192 }));
+  um('banner', signTex(scene, 'RECKLESS', { fg: '#ffffff', bg: '#0a0a0a', w: 1024, h: 246, font: '"Arial Black", Arial, sans-serif' }));
+  { const upT = canvasTex(scene, id + '-upT', 64, 128, (c) => { const g = c.createLinearGradient(0, 128, 0, 0); g.addColorStop(0, 'rgba(255,255,255,0.9)'); g.addColorStop(0.5, 'rgba(255,255,255,0.25)'); g.addColorStop(1, 'rgba(255,255,255,0)'); c.fillStyle = g; c.fillRect(0, 0, 64, 128); const h = c.createLinearGradient(0, 0, 64, 0); h.addColorStop(0, 'rgba(0,0,0,1)'); h.addColorStop(0.5, 'rgba(0,0,0,0)'); h.addColorStop(1, 'rgba(0,0,0,1)'); c.globalCompositeOperation = 'destination-out'; c.fillStyle = h; c.fillRect(0, 0, 64, 128); });
+    upT.hasAlpha = true; const m = mat(scene, id + '-upWash', { unlit: true, add: true, d: Color3.Black() }); m.opacityTexture = upT; m.emissiveColor = hex(S.rig.washCol).scale(0.5); mats.upWash = m; }
   um('tickets', signTex(scene, 'TICKETS · COCKTAILS', { fg: '#1d5f63', bg: '#f2efe6', w: 1024, h: 160, frame: false }));
   um('estSign', signTex(scene, 'THE WARE-HOUSE · EST.', { fg: '#ffd890', bg: '#1a120c', w: 1024, h: 180 }));
   um('mural', canvasTex(scene, id + '-mural', 1024, 256, (c, w, h) => { const Rm = rng(41); c.fillStyle = '#20303a'; c.fillRect(0, 0, w, h); const cols = ['#ff6f3c', '#ffd23c', '#3cc8ff', '#ff3c8a', '#5fe07a', '#ffffff'];
@@ -288,7 +317,7 @@ export function buildClub(scene, id, { index = 0, low = false, posters = [], ven
     plan: { W: S.W, D: S.D, rects: S.plan }, bars: S.bars.map(b => ({ x: b.x + OFF.x, z: b.z + OFF.z, ry: b.ry, face: b.face })), djPos: S.dj,
     danceFloor: (p) => { const z = p.z - OFF.z, x = p.x - OFF.x; return z > S.floorZ[0] && z < S.floorZ[1] && Math.abs(x) < S.W / 2; },
     floorY: (x, z) => { const tz = S.tierZ; if (!tz) return 0; const lz = z - OFF.z; return lz > tz[0] && lz < tz[1] ? tz[2] : 0; },
-    glowSkip: () => [...beams.map(b => b.m), ...lasers.map(l => l.m), ...hazes, wash, meshes.floor].filter(Boolean),
+    glowSkip: () => [...beams.map(b => b.m), ...lasers.map(l => l.m), ...hazes, wash, meshes.floor, meshes.upWash].filter(Boolean),
   };
   return T;
 }
@@ -324,6 +353,7 @@ export function updateClub(T, t, dt, CV) {
   pulse(M.ledR, '#ff1a2a'); pulse(M.ledW, '#ffffff', 0.5); pulse(M.ledA, '#ffa040'); pulse(M.ledP, '#ff3ad0'); pulse(M.kitR, '#ff3a2a', 0.3);
   if (M.ceilPix) { const h = (beat * 0.125) % 1; M.ceilPix.emissiveColor.set(0.3 + 0.5 * Math.sin(h * 6.28) ** 2 + strobe, 0.1 + kick * 0.3 + strobe, 0.8 + strobe); }
   for (let i = 0; i < 4; i++) if (M['pad' + i]) M['pad' + i].alpha = 1, M['pad' + i].emissiveColor.scaleInPlace(0).addInPlace(hex(['#ff2a6a', '#2ad0ff', '#ffe02a', '#6aff2a'][i]).scale((Math.floor(beat) % 4) === i ? 1 : 0.18));
+  if (M.upWash) { const u = hex(S.rig.washCol), k = 0.55 + 0.55 * kick + strobe * 0.3; M.upWash.emissiveColor.set(u.r * k, u.g * k, u.b * k); }
   const wc = hex(S.rig.washCol); T.wash.material.emissiveColor.set(wc.r * (0.35 + 0.3 * kick), wc.g * (0.35 + 0.3 * kick), wc.b * (0.35 + 0.3 * kick));
   T.beams.forEach(b => { const s = t * 0.9 + b.i * 0.8; b.m.rotation.x = 0.9 + Math.sin(s) * 0.4; b.m.rotation.z = Math.sin(s * 0.7 + b.i) * 0.7; b.m.visibility = (Math.floor(beat / 4 + b.i) % 3 ? 0.75 : 0.3) + 0.25 * kick; });
   T.lasers.forEach(l => { const n = T.lasers.length, a = (l.i / Math.max(1, n - 1) - 0.5) * 1.4; const sweep = Math.sin(t * 0.8) * 0.5; l.m.rotation.y = Math.PI + a + sweep; l.m.rotation.x = -0.08 - 0.12 * Math.sin(t * 0.5 + l.i); l.m.visibility = Math.floor(beat / 2) % 4 === 3 ? 0 : 0.9; });
