@@ -9,8 +9,12 @@ from PIL import Image
 from scipy import ndimage as ndi
 L = '/workspace/reckless-world/avatar-refs/canonical-looks/'
 FEM = os.environ.get('AVB', 'male') == 'female'  # female base: face/skin/hair/shoes from her turnaround sheet's front view (tools/ref/female_front.png)
-OUT = os.path.join(os.path.dirname(__file__), '..', 'public', 'models', 'tex_f' if FEM else 'tex'); os.makedirs(OUT, exist_ok=True)
-DBG = '/workspace/reckless-world/.scratch/bake'; os.makedirs(DBG, exist_ok=True)
+OUT = os.environ.get('TEX_OUT') or os.path.join(os.path.dirname(__file__), '..', 'public', 'models', 'tex_f' if FEM else 'tex'); os.makedirs(OUT, exist_ok=True)
+DBG = os.environ.get('BAKE_DBG', '/workspace/reckless-world/.scratch/bake'); os.makedirs(DBG, exist_ok=True)
+# quality pass 2026-11-23: texture sizes (old: garments/shoes 512, body 1024, hair 1024/256, eyes 128), optional super-resolved
+# v5 garment sources (SR_DIR: Real-ESRGAN x4plus -> 2x, same registration), WebP quality, and the collar-leak clean-up.
+RG = int(os.environ.get('RES_G', '512')); RB = int(os.environ.get('RES_BODY', '1024')); RH = int(os.environ.get('RES_HAIR', '1024')); RE = int(os.environ.get('RES_EYES', '128'))
+SR_DIR = os.environ.get('SR_DIR', ''); WQ = int(os.environ.get('WEBP_Q', '88')); LEAKFIX = os.environ.get('LEAKFIX', '0') == '1'
 V5 = os.environ.get('V5', '1') != '0'  # APP DEV v5 crew art is the colour/silhouette reference (Luke approved 2026-11-20)
 V5F = {'skate-tee': 'upper-tee', 'rckls-tee': 'upper-rckls-tee', 'see-me-shorts': 'lower-see-shorts', 'deject-sleeve': 'upper-deject', 'barrel-jeans': 'lower-jeans', 'moltin-tee': 'upper-moltin', 'stripped-tee': 'upper-stripped',
   'seasoned-pants': 'lower-seasoned-pants', 'seasoned-hoodie': 'upper-hoodie', 'isometric-tee': 'upper-isometric', 'artillery': 'lower-artillery', 'ultra-tee': 'upper-ultra', 'stan-bottoms': 'lower-stan-bottoms', 'rawdwg-zip': 'upper-zip',
@@ -78,7 +82,21 @@ def backplate(rgb, size=13, amp=0.05):
     med = np.stack([ndi.median_filter(rgb[..., c], size=size) for c in range(3)], -1)
     det = rgb - ndi.gaussian_filter(rgb, (1.5, 1.5, 0))
     return np.clip(med + np.clip(det, -amp, amp), 0, 1)
+HI = {}  # quality pass: id(native image) -> (2x image with Real-ESRGAN detail, k); sample() reads the hi-res one at the same native coords
+SR_CANON = os.environ.get('SR_CANON', '')
+def hi_detail(proc, native, name, k=2):
+    """proc = the processed native-res source (fills/masks applied), native = the raw source it came from. Returns proc at k x with the
+    Real-ESRGAN detail of the raw source added back wherever proc still equals the raw pixels (so fills stay clean)."""
+    if FEM and name == 'tee-jeans': name = 'female_front'
+    f = os.path.join(SR_CANON, name + '.png')
+    if not SR_CANON or not os.path.exists(f): return None
+    sr = np.array(Image.open(f).convert('RGB')).astype(np.float32) / 255.0
+    if sr.shape[0] != native.shape[0] * k: return None
+    up = lambda a: np.stack([ndi.zoom(a[..., c], k, order=3) for c in range(a.shape[-1])], -1)
+    same = (np.abs(proc - native).sum(-1) < 2e-3).astype(np.float32); same = ndi.zoom(ndi.binary_erosion(same > 0.5, iterations=1).astype(np.float32), k, order=1)[..., None]
+    return np.clip(up(proc) + (sr - up(native)) * same, 0, 1)
 def sample(img, px, py):  # bilinear
+    if id(img) in HI: hi, k = HI[id(img)]; img, px, py = hi, (px + 0.5) * k - 0.5, (py + 0.5) * k - 0.5
     H, W = img.shape[:2]; px = np.clip(px, 0, W - 1.001); py = np.clip(py, 0, H - 1.001)
     x0 = np.floor(px).astype(int); y0 = np.floor(py).astype(int); fx = (px - x0)[..., None]; fy = (py - y0)[..., None]
     return (img[y0, x0] * (1 - fx) * (1 - fy) + img[y0, x0 + 1] * fx * (1 - fy) + img[y0 + 1, x0] * (1 - fx) * fy + img[y0 + 1, x0 + 1] * fx * fy)
@@ -123,8 +141,22 @@ def bake(n, R, front, back, mp, vis, facing=(0.0, 0.4)):
     # dilate islands so mips/bilinear never pull in black
     _, (iy, ix) = ndi.distance_transform_edt(~m, return_indices=True); col = col[iy, ix]
     return col
-def save(col, name, q=88):
-    Image.fromarray((np.clip(col, 0, 1) * 255).astype(np.uint8)).save(os.path.join(OUT, name + '.webp'), quality=q, method=6)
+def save(col, name, q=None):
+    Image.fromarray((np.clip(col, 0, 1) * 255).astype(np.uint8)).save(os.path.join(OUT, name + '.webp'), quality=q or WQ, method=6)
+
+def collar_leak(gi, bi, gmask):
+    """Old v4 neck/shoulder skin left inside the v5 garment-only layer at the collar (the 'patchy neck'): garment pixels in the
+    top band of the garment whose colour matches the base's skin and departs from the fabric's own median."""
+    H = gi.shape[0]; ys = np.where(gmask.any(1))[0]
+    if not len(ys): return np.zeros_like(gmask)
+    top = ys.min(); band = np.zeros_like(gmask); band[top:top + int(0.06 * H)] = True
+    sk = (bi[..., 3] > 0.9) & skin_mask(bi[..., :3]); skin_c = np.median(bi[..., :3][sk], 0)
+    fab = np.median(gi[..., :3][gmask & ~band], 0)
+    c = gi[..., :3]; ds = np.abs(c - skin_c).sum(-1); df = np.abs(c - fab).sum(-1)
+    mx = c.max(-1); mn = c.min(-1); sat = (mx - mn) / np.maximum(mx, 1e-3)
+    lk = gmask & band & (sat < 0.35) & (df > 0.35) & ((ds < 0.45) | (c.mean(-1) > fab.mean() + 0.2))
+    lk = ndi.binary_dilation(lk, iterations=1) & gmask
+    return lk
 
 def eye_centres_ref(rgb, alpha, mp_guess, ours):
     """Find the two iris centres near where the global map puts our eyes (darkest blobs)."""
@@ -193,21 +225,34 @@ if __name__ == '__main__':
     ska = sk.copy(); ska[int(gm(0, 0.78)[1]):] = False  # arms/hands only (shoe leather reads as skin)
     body_front = fill(rgb, ska, 2)
     plate = np.ones_like(rgb) * skin_c * 0.97
-    A, m = texels('Body', 1024); X, Y, Z = A[..., 0], A[..., 1], A[..., 2]
+    A, m = texels('Body', RB); X, Y, Z = A[..., 0], A[..., 1], A[..., 2]
     zneck = ez - 0.2
     hw = smooth(zneck - 0.03, zneck + 0.03, Z)[..., None]
     vis_body = depth_buffer(['Body'])
     skin_only = fill(rgb, sk & (rgb.mean(-1) > 0.45), 2); face_lo = np.stack([ndi.median_filter(skin_only[..., c], size=25) for c in range(3)], -1); face_lo = ndi.gaussian_filter(face_lo, (10, 10, 0))
+    if not FEM and os.environ.get('NECKFIX', '0') == '1': face_lo = face_lo * 0.45 + np.asarray(skin_c) * 0.55  # quality pass: side-neck / jaw texels took the blurred plate's neck-shadow browns (the 'patchy neck' at 3/4)
     if FEM: face_lo = np.ones_like(rgb) * skin_c  # female: jaw sides / under the chin take clean skin (the blurred plate pulled in hair-strand and neck-shadow browns)
-    cH = bake('Body', 1024, head_front, face_lo, hm, vis_body, (0.32, 0.72) if FEM else (0.3, 0.62)); # torso / arms / hands from the shirtless 'jeans' look so bare torsos carry the app's abs and arm shading
+    _h = hi_detail(head_front, rgb, 'tee-jeans')
+    if _h is not None: HI[id(head_front)] = (_h, 2); print('face: 2x Real-ESRGAN detail')
+    cH = bake('Body', RB, head_front, face_lo, hm, vis_body, (0.32, 0.72) if FEM else (0.3, 0.62)); # torso / arms / hands from the shirtless 'jeans' look so bare torsos carry the app's abs and arm shading
     rgbJ, alphaJ = load('tee-jeans' if FEM else 'jeans'); gmJ = global_map(alphaJ, BODY + ['G_jeans', 'G_shoes'])
     skJ = skin_mask(rgbJ) & alphaJ; skJ[int(gmJ(0, 0.78)[1]):] = False; skJ = ndi.binary_erosion(skJ, iterations=2)
-    cB = bake('Body', 1024, fill(rgbJ, skJ, 2), plate, gmJ, vis_body, (-0.15, 0.3))
+    _fj = fill(rgbJ, skJ, 2); _h = hi_detail(_fj, rgbJ, 'tee-jeans' if FEM else 'jeans')
+    if _h is not None: HI[id(_fj)] = (_h, 2)
+    cB = bake('Body', RB, _fj, plate, gmJ, vis_body, (-0.15, 0.3))
     cBody = cH * hw + cB * (1 - hw)
     if FEM:  # under her hair: the back and top of the scalp is hair-dark, so any gap in the shell reads as hair, not skin
-        Ab, mb_ = texels('Body', 1024); hcy = np.median(D['Eyes|co'][:, 1]) + 0.08; ezz = D['Eyes|co'][:, 2].mean()
+        Ab, mb_ = texels('Body', RB); hcy = np.median(D['Eyes|co'][:, 1]) + 0.08; ezz = D['Eyes|co'][:, 2].mean()
         dk_ = (Ab[..., 2] > ezz + 0.035) & (Ab[..., 1] > hcy) | (Ab[..., 2] > ezz + 0.1) | (Ab[..., 2] > ezz - 0.07) & (Ab[..., 1] > hcy + 0.04)  # nape down to the hairline
         cBody[dk_ & mb_] = np.array([0.06, 0.05, 0.045])
+    if os.environ.get('SHARDFIX', '0') == '1':  # quality pass: dark 2D feature lines (lash/lip/nostril strokes) projected onto texels that face
+        # away from the front camera (inner lips, nostril walls, nose sides, ear folds) read as black shards from any other angle.
+        # Keep dark features only where the surface faces the camera; elsewhere take the local skin median.
+        NYb = A[..., 4]; lum = cBody.mean(-1); _k = max(5, int(9 * RB / 2048)) | 1
+        med = np.stack([ndi.median_filter(cBody[..., c], size=_k * 3) for c in range(3)], -1)
+        shard = m & (Z > zneck) & (-NYb < float(os.environ.get('SHARD_F', '0.45'))) & (lum < med.mean(-1) * 0.72)
+        shard = ndi.binary_dilation(shard, iterations=1) & m & (Z > zneck)
+        cBody[shard] = med[shard]; print('shardfix texels', int(shard.sum()))
     if not FEM: cBody = np.clip(cBody * WARM, 0, 1)
     save(cBody, 'body')
     hairm = alpha & ~skin_mask(rgb) & (rgb.mean(-1) < 0.42)
@@ -224,32 +269,32 @@ if __name__ == '__main__':
     _, (iy, ix) = ndi.distance_transform_edt(~m_, return_indices=True); al = al[iy, ix]
     # turnaround sheet: curls live on the Curls mesh; the shell carries a high skin fade (dense stubble at the curl line,
     # thinning to bare skin) as an alpha-tested speckle, near-black under the curls. Procedural, 1024 px.
-    A_, m_ = texels('Hair', 1024); Z_, Y_ = A_[..., 2], A_[..., 1]; zz = Z_[m_]; yy = Y_[m_]
+    A_, m_ = texels('Hair', RH); Z_, Y_ = A_[..., 2], A_[..., 1]; zz = Z_[m_]; yy = Y_[m_]
     sp_ = float(D['Hair|span'][0]) if 'Hair|span' in D else zz.max() - zz.min(); f_ = (Z_ - (zz.max() - sp_)) / max(1e-4, sp_);  # f_ anchored at the crown (the shell below the fade is cut)
     ny_ = (Y_ - (yy.min() + yy.max()) / 2) / max(1e-4, (yy.max() - yy.min()) / 2)
     cl_ = 0.6 - 0.3 * smooth(-0.25, -0.75, ny_)
-    rs = np.random.RandomState(5); nz_ = ndi.gaussian_filter(rs.rand(1024, 1024), 0.8); nz_ = (np.argsort(np.argsort(nz_.ravel())).reshape(nz_.shape) + 0.5) / nz_.size  # rank -> uniform
+    rs = np.random.RandomState(5); nz_ = ndi.gaussian_filter(rs.rand(RH, RH), 0.8 * RH / 1024)  # speckle size fixed in UV space whatever the map size; nz_ = (np.argsort(np.argsort(nz_.ravel())).reshape(nz_.shape) + 0.5) / nz_.size  # rank -> uniform
     dens = 0.92 * smooth(0.0, 1.0, np.clip((f_ - 0.1) / np.maximum(cl_ - 0.1, 1e-3), 0, 1)) ** 2.0 * (1 - smooth(-0.5, -0.7, ny_))
     over = f_ >= cl_ - 0.015
     # colour fade (reads at any distance, mips can't wash it out): skin -> stubble -> near-black; speckled alpha only at the bottom edge
     al = np.where(over | (f_ > 0.1), 1.0, 0.0).astype(np.float32)  # colour fade all the way down: skin-tone scalp -> dark stubble -> curls; only the very rim is cut
-    g_ = 0.05 + 0.03 * rs.rand(1024, 1024); dark = np.dstack([g_ * 1.15, g_, g_ * 0.92])
-    skinT = np.clip(skin_c * 1.12, 0, 1) * (0.94 + 0.06 * rs.rand(1024, 1024))[..., None]
+    g_ = 0.05 + 0.03 * rs.rand(RH, RH); dark = np.dstack([g_ * 1.15, g_, g_ * 0.92])
+    skinT = np.clip(skin_c * 1.12, 0, 1) * (0.94 + 0.06 * rs.rand(RH, RH))[..., None]
     stub = np.clip(dens + (nz_ - 0.5) * 0.25, 0, 1)[..., None] ** 0.7
     hcol = np.where(over[..., None], dark, skinT * (1 - stub) + dark * 1.6 * stub)
     if FEM:  # sleek pulled-back hair: opaque, near-black with fine combed streaks
-        st2 = ndi.gaussian_filter(rs.rand(1024, 1024), (0.6, 6)); st2 = (st2 - st2.mean()) / (st2.std() + 1e-6)
+        st2 = ndi.gaussian_filter(rs.rand(RH, RH), (0.6, 6)); st2 = (st2 - st2.mean()) / (st2.std() + 1e-6)
         g2 = np.clip(0.06 + 0.018 * st2, 0.02, 0.12); hcol = np.dstack([g2 * 1.2, g2, g2 * 0.9]); al = np.ones_like(al)
     dd_, (iy, ix) = ndi.distance_transform_edt(~m_, return_indices=True); al = al[iy, ix] * (dd_ <= 3); hcol = hcol[iy, ix]
     if not FEM: lowf = (f_[iy, ix] < 0.1); al[lowf] = 0  # alpha never bleeds far: slivers at the nape stay clear
     Image.fromarray((np.dstack([np.clip(hcol, 0, 1), al]) * 255).astype(np.uint8), 'RGBA').save(os.path.join(OUT, 'hair.webp'), quality=92, method=6, exact=True)
-    save(bake('Eyes', 128, rgb, rgb, hm, None, (-1, -0.5)), 'eyes')
+    save(bake('Eyes', RE, rgb, rgb, hm, None, (-1, -0.5)), 'eyes')
     # shoes: below the jeans hem, not denim/skin
     blue = (rgb[..., 2] > rgb[..., 0] + 0.04) & alpha
     sh = alpha & ~blue & ~sk; sh[:int(gm(0, 0.12)[1])] = False
-    shoe_front = fill(rgb, sh, 2); csh = bake('G_shoes', 512, shoe_front, shoe_front, gm, None, (-1, -0.5))
+    shoe_front = fill(rgb, sh, 2); csh = bake('G_shoes', RG, shoe_front, shoe_front, gm, None, (-1, -0.5))
     # trainer detail (sheet close-up): matte black upper, grey panel stitching, light-grey laces across the instep, rubber toe band
-    As, ms_ = texels('G_shoes', 512); X_, Y_, Z_, NZ_ = As[..., 0], As[..., 1], As[..., 2], As[..., 5]
+    As, ms_ = texels('G_shoes', RG); X_, Y_, Z_, NZ_ = As[..., 0], As[..., 1], As[..., 2], As[..., 5]
     csh = csh * 0.0 + np.array([0.07, 0.07, 0.075]); zmn = Z_[ms_].min(); ht_ = Z_ - zmn
     for sx in (-1, 1):
         sel_ = ms_ & (X_ * sx > 0); cxs_ = np.median(X_[sel_]); ys_ = Y_[sel_]; y0s, y1s = np.percentile(ys_, 3), np.percentile(ys_, 97)
@@ -268,9 +313,12 @@ if __name__ == '__main__':
         if only and iid not in only: continue
         V5D = '/workspace/rr-' + ('female' if FEM else 'male') + '-v5/'
         if V5 and V5F.get(iid):  # v5: per-gender garment-only RGBA over the fixed base -> exact garment mask, no colour classification
-            bi = np.array(Image.open(V5D + 'base.png').convert('RGBA')).astype(np.float32) / 255.0; gi = np.array(Image.open(V5D + 'garments/' + V5F[iid] + '.png').convert('RGBA')).astype(np.float32) / 255.0
+            _bp, _gp = V5D + 'base.png', V5D + 'garments/' + V5F[iid] + '.png'
+            if SR_DIR: _sd = os.path.join(SR_DIR, 'female' if FEM else 'male'); _bp, _gp = os.path.join(_sd, 'base.png'), os.path.join(_sd, 'garments', V5F[iid] + '.png')
+            bi = np.array(Image.open(_bp).convert('RGBA')).astype(np.float32) / 255.0; gi = np.array(Image.open(_gp).convert('RGBA')).astype(np.float32) / 255.0
             ga = gi[..., 3:4]; rgb = gi[..., :3] * ga + bi[..., :3] * (1 - ga); alpha = (bi[..., 3] > 0.5) | (ga[..., 0] > 0.5); v5mask = ga[..., 0] > 0.5
             same = (np.abs(gi[..., :3] - bi[..., :3]).sum(-1) < 0.09) & (bi[..., 3] > 0.5); v5mask = v5mask & ~ndi.binary_dilation(same & v5mask, iterations=1)   # layer pixels identical to the base (hands/arms baked into the cut) are not cloth
+            if LEAKFIX and slot != 'legs': v5mask = v5mask & ~collar_leak(gi, bi, v5mask)
         else:
             if not os.path.exists(L + look + '.png'): print('no look', look); continue
             rgb, alpha = load(look); v5mask = None
@@ -304,7 +352,8 @@ if __name__ == '__main__':
         else:  # tops: keep the global scale, but put the app's hem exactly on our hem (centre columns, no sleeves)
             cxp = int(gm(0, 1)[0]); colm = gmask[:, cxp - 30:cxp + 30]; hem = np.where(colm.any(1))[0].max()
             mp = Map(gm.ax, gm.bx, gm.az, hem + gm.az * z0)
-        front = fill(rgb, gmask, 3); back = backplate(front, 31 if slot != 'legs' else 7, 0.03 if slot != 'legs' else 0.05)
+        _k = gi.shape[1] / 540.0 if (V5 and V5F.get(iid)) else 1.0
+        front = fill(rgb, gmask, max(1, round(3 * _k))); back = backplate(front, int(31 * _k) | 1 if slot != 'legs' else int(7 * _k) | 1, 0.03 if slot != 'legs' else 0.05)
         Image.fromarray((np.concatenate([np.clip(front, 0, 1), np.clip(back, 0, 1), np.stack([gmask] * 3, -1).astype(np.float32)], 1) * 255).astype(np.uint8)).save(DBG + '/front_' + iid + '.png')
-        save(bake(gname, 512, front, back, mp, vis, (-0.05, 0.35)), 'g-' + iid)
+        save(bake(gname, RG, front, back, mp, vis, (-0.05, 0.35)), 'g-' + iid)
         print('baked', iid, kind, look)

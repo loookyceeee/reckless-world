@@ -1084,8 +1084,62 @@ for o in TEXM:
     bpy.ops.object.select_all(action='DESELECT'); bpy.context.view_layer.objects.active = o; o.select_set(True)
     bpy.ops.object.mode_set(mode='EDIT'); bpy.ops.mesh.select_all(action='SELECT')
     bpy.ops.mesh.remove_doubles(threshold=1e-5)  # glTF import splits every UV/normal seam: weld so islands are whole
-    bpy.ops.uv.smart_project(angle_limit=math.radians(60), island_margin=0.012, area_weight=0.0, scale_to_bounds=True)
+    # quality pass 2026-11-23: garments were cut into hundreds of tiny islands at 60 deg (field-fitted folds), so mips and
+    # bilinear pulled neighbouring islands' colour in -> dark/light 'shreds'. AV_GUV_ANGLE (default 60 = old) for G_* shells.
+    _ang = float(os.environ.get('AV_GUV_ANGLE', '60')) if o.name.startswith('G_') else 60.0
+    _mg = float(os.environ.get('AV_GUV_MARGIN', '0.012')) if o.name.startswith('G_') else 0.012
+    bpy.ops.uv.smart_project(angle_limit=math.radians(_ang), island_margin=_mg, area_weight=0.0, scale_to_bounds=True)
+    _HK = float(os.environ.get('AV_BUV_HEAD', '1'))
+    if o.name == 'Body' and _HK > 1.001:
+        # quality pass 2026-11-23: the face island got ~10% of the body atlas (715 islands packed by 3D area, the head is a small
+        # part of the body), so at 1024 the whole face was ~110 texels wide. Scale the head/neck islands by AV_BUV_HEAD
+        # (linear) and repack, so the face gets its share of the 2048 map.
+        import bmesh as _bmm
+        _bm = _bmm.from_edit_mesh(o.data); _uvl = _bm.loops.layers.uv.active; _Mw = o.matrix_world
+        _eo = bpy.data.objects.get('Eyes'); _ez = (sum(((_eo.matrix_world @ v.co).z for v in _eo.data.vertices)) / len(_eo.data.vertices)) if _eo else max((_Mw @ v.co).z for v in _bm.verts) - 0.12
+        _zh = _ez - 0.2; _bm.faces.ensure_lookup_table(); _par = list(range(len(_bm.faces)))
+        def _fd(i):
+            while _par[i] != i: _par[i] = _par[_par[i]]; i = _par[i]
+            return i
+        for e in _bm.edges:
+            if len(e.link_faces) != 2: continue
+            f1, f2 = e.link_faces; a_, b_ = e.verts
+            u1 = {l.vert: l[_uvl].uv.copy() for l in f1.loops if l.vert in (a_, b_)}; u2 = {l.vert: l[_uvl].uv.copy() for l in f2.loops if l.vert in (a_, b_)}
+            if all((u1[v] - u2[v]).length < 1e-6 for v in (a_, b_)): _par[_fd(f1.index)] = _fd(f2.index)
+        _isl = {}
+        for f in _bm.faces: _isl.setdefault(_fd(f.index), []).append(f)
+        _nh = 0
+        for fs in _isl.values():
+            zc = sum((_Mw @ f.calc_center_median()).z for f in fs) / len(fs)
+            if zc < _zh: continue
+            _nh += 1; ls = [l for f in fs for l in f.loops]; cu = sum((l[_uvl].uv for l in ls), Vector((0, 0))) / len(ls)
+            for l in ls: l[_uvl].uv = cu + (l[_uvl].uv - cu) * _HK
+        _bmm.update_edit_mesh(o.data); bpy.context.scene.tool_settings.use_uv_select_sync = True
+        bpy.ops.uv.pack_islands(rotate=True, scale=True, margin=_mg)
+        print('head uv boost', _HK, 'islands', _nh, 'of', len(_isl))
     bpy.ops.object.mode_set(mode='OBJECT')
+    if o.name.startswith('G_') and o.name != 'G_shoes' and os.environ.get('AV_GUV', 'smart') == 'proj':
+        # quality pass 2026-11-23: front/back projection atlas for garments. The textures ARE front projections of the app art, so a
+        # front half (left of the atlas) and a mirrored back half (right) give two whole islands at the art's own aspect instead
+        # of ~300 smart-project slivers (mip bleed between slivers = the dark/light 'shreds'). Split per 2 cm height band at the
+        # shell's own mid-depth, so tubes (torso, sleeves, legs) cut along their sides, where the bake blends front/back anyway.
+        _Mw = o.matrix_world; _P = [(_Mw @ v.co) for v in o.data.vertices]
+        _zs = [p.z for p in _P]; _z0, _z1 = min(_zs), max(_zs); _xs = [p.x for p in _P]; _x0, _x1 = min(_xs), max(_xs)
+        _NB = max(1, int((_z1 - _z0) / 0.02) + 1); _acc = [[0.0, 0] for _ in range(_NB)]
+        for p in _P: _k = min(_NB - 1, int((p.z - _z0) / 0.02)); _acc[_k][0] += p.y; _acc[_k][1] += 1
+        _yc = [a_[0] / a_[1] if a_[1] else None for a_ in _acc]
+        for _k in range(_NB):
+            if _yc[_k] is None: _yc[_k] = next((_yc[j] for j in list(range(_k, -1, -1)) + list(range(_k, _NB)) if _yc[j] is not None), 0.0)
+        _W, _H = (_x1 - _x0) or 1e-3, (_z1 - _z0) or 1e-3; _S = 1.0 / max(2 * _W, _H) * 0.98; _mx = 0.004
+        _uvd = o.data.uv_layers.active.data
+        for pl in o.data.polygons:
+            c = sum((_P[i] for i in pl.vertices), Vector()) / len(pl.vertices); _k = min(_NB - 1, int((c.z - _z0) / 0.02))
+            front = c.y <= _yc[_k]
+            for li in pl.loop_indices:
+                p = _P[o.data.loops[li].vertex_index]
+                u = (p.x - _x0) * _S if front else 0.5 + (_x1 - p.x) * _S
+                u = _mx + u * (1 - 2 * _mx) if front else u; v = 0.01 + (p.z - _z0) * _S
+                _uvd[li].uv = (min(0.4995, u) if front else max(0.5005, u), v)
 arm.animation_data.action = ia; bpy.context.scene.frame_set(1); bpy.context.view_layer.update()
 # --- Pipeline chunk 1: Cycles ambient-occlusion bake (idle pose, starter fit as occluders) -> tex/ao_<part>.png (512)
 AO_DIR = os.environ.get('AO_DIR', '')
@@ -1097,7 +1151,7 @@ if AO_DIR:
     for nm in ('Body', 'G_tee', 'G_jeans', 'G_shoes'):
         o = sc.objects.get(nm)
         if not o or not o.data.uv_layers: continue
-        img = bpy.data.images.new('ao_' + nm, 512, 512); bm = bpy.data.materials.new('bake_' + nm); bm.use_nodes = True
+        _AR = int(os.environ.get('AO_RES', '512')); img = bpy.data.images.new('ao_' + nm, _AR, _AR); bm = bpy.data.materials.new('bake_' + nm); bm.use_nodes = True
         tn = bm.node_tree.nodes.new('ShaderNodeTexImage'); tn.image = img; bm.node_tree.nodes.active = tn
         keep = [sl.material for sl in o.material_slots]
         if not o.material_slots: o.data.materials.append(bm)
