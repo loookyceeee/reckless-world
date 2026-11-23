@@ -1,7 +1,7 @@
 // Self-made procedural audio (no samples, no copyrighted music): WebAudio-synthesised city ambience outside and an
 // original 140 BPM beat inside the Temple (muffled through the walls nearby). Silent until the first tap / START and toggleable.
 export function createAudio() {
-  let ctx = null, beatOff = false, force = false, t0 = 0, master, amb, ambF, beatBus, beatF, beatG, ambG, on = false, started = false, nextT = 0, step = 0, timer = null;
+  let ctx = null, beatOff = false, force = false, beatTgt = 0, LOOK = 0.12, t0 = 0, master, amb, ambF, beatBus, beatF, beatG, ambG, on = false, started = false, nextT = 0, step = 0, timer = null;
   const BPM = 140, S16 = 60 / BPM / 4;
   const noiseBuf = (sec, brown) => { const b = ctx.createBuffer(1, ctx.sampleRate * sec, ctx.sampleRate), d = b.getChannelData(0); let l = 0; for (let i = 0; i < d.length; i++) { const w = Math.random() * 2 - 1; if (brown) { l = (l + 0.02 * w) / 1.02; d[i] = l * 3.5; } else d[i] = w; } return b; };
   let white;
@@ -15,6 +15,8 @@ export function createAudio() {
     // beat bus -> lowpass (muffled outside) -> gain
     beatBus = ctx.createGain(); beatF = ctx.createBiquadFilter(); beatF.type = 'lowpass'; beatF.frequency.value = 300; beatG = ctx.createGain(); beatG.gain.value = 0; beatBus.connect(beatF).connect(beatG).connect(master);
     nextT = ctx.currentTime + 0.1; t0 = nextT; timer = setInterval(schedule, 25);
+    // iOS: an <audio>/SoundCloud start or a phone call can leave the context 'interrupted'/'suspended'; resume on the next gesture or tick
+    try { ctx.onstatechange = () => { if (ctx.state !== 'running' && force) ctx.resume().catch(() => { }); }; } catch (e) { }
     setTimeout(carPass, 2500);
   }
   function carPass() { if (!ctx) return; if (on && ambG.gain.value > 0.05) { const s = ctx.createBufferSource(); s.buffer = white; s.loop = true; const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.Q.value = 0.8; const g = ctx.createGain(); const t = ctx.currentTime, d = 2.5 + Math.random() * 2.5;
@@ -26,8 +28,12 @@ export function createAudio() {
   const clap = (t) => { const s = ctx.createBufferSource(); s.buffer = white; const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 1500; f.Q.value = 0.9; const g = ctx.createGain(); g.gain.setValueAtTime(0.0, t); g.gain.linearRampToValueAtTime(0.35, t + 0.005); g.gain.exponentialRampToValueAtTime(0.001, t + 0.16); s.connect(f).connect(g).connect(beatBus); s.start(t); s.stop(t + 0.2); };
   const BASS = [0, 0, 12, 0, 0, 0, 10, 0, 0, 0, 12, 0, 7, 0, 10, 0]; // semitones over A1, an original 1-bar riff
   const bass = (t, n) => { const o = ctx.createOscillator(), f = ctx.createBiquadFilter(), g = ctx.createGain(); o.type = 'sawtooth'; o.frequency.value = 55 * Math.pow(2, n / 12); f.type = 'lowpass'; f.frequency.setValueAtTime(900, t); f.frequency.exponentialRampToValueAtTime(160, t + 0.12); g.gain.setValueAtTime(0.22, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.14); o.connect(f).connect(g).connect(beatBus); o.start(t); o.stop(t + 0.16); };
-  function schedule() { if (!ctx) return; while (nextT < ctx.currentTime + 0.12) { const s = step % 16, bar = Math.floor(step / 16);
-      if (beatG.gain.value > 0.001) { if (s % 4 === 0) kick(nextT); if (s % 4 === 2) hat(nextT, 0.22); else if (s % 2 === 1) hat(nextT, 0.07); if (s === 4 || s === 12) clap(nextT); if (s % 4 !== 0 && BASS[s] !== undefined && (s % 2 === 0 || bar % 2)) bass(nextT, BASS[s]); }
+  // quality pass 2026-11-23 (dance cut-outs): notes were gated on beatG.gain.value (an automated AudioParam; it lags the target and
+  // stale reads drop whole bars) and scheduled 120 ms ahead from a main-thread timer, so a long frame left silent gaps. Gate on the
+  // JS-side target instead, and look 0.6 s ahead while a dance round is on (also pumped from the render loop, see pump()).
+  function schedule() { if (!ctx) return; if (nextT < ctx.currentTime - 0.25) { const skip = Math.ceil((ctx.currentTime - nextT) / S16); nextT += skip * S16; step += skip; } // never machine-gun a backlog after a stall
+    while (nextT < ctx.currentTime + (force ? 0.6 : LOOK)) { const s = step % 16, bar = Math.floor(step / 16);
+      if (beatTgt > 0.001) { if (s % 4 === 0) kick(nextT); if (s % 4 === 2) hat(nextT, 0.22); else if (s % 2 === 1) hat(nextT, 0.07); if (s === 4 || s === 12) clap(nextT); if (s % 4 !== 0 && BASS[s] !== undefined && (s % 2 === 0 || bar % 2)) bass(nextT, BASS[s]); }
       nextT += S16; step++; } }
   const api = {
     get on() { return on; },
@@ -47,7 +53,10 @@ export function createAudio() {
       const E = api._eng, t = ctx.currentTime, r = Math.min(1, x); E.o.frequency.setTargetAtTime(38 + r * 70, t, 0.12); E.o2.frequency.setTargetAtTime(19 + r * 35, t, 0.12); E.f.frequency.setTargetAtTime(300 + r * 900, t, 0.2); E.g.gain.setTargetAtTime(run && on ? 0.03 + r * 0.03 : 0, t, 0.15); },
     // inside: full-band beat; outside: muffled by distance to the Temple door
     set beatOff(v) { beatOff = v; },
-    set force(v) { force = v; }, // dance minigame: the synth 140 BPM bed plays full whatever else is on
+    set force(v) { force = v; if (ctx && v) { if (ctx.state !== 'running') ctx.resume().catch(() => { }); beatTgt = 0.9; beatG.gain.cancelScheduledValues(ctx.currentTime); beatG.gain.setTargetAtTime(0.9, ctx.currentTime, 0.05); beatF.frequency.setTargetAtTime(16000, ctx.currentTime, 0.05); schedule(); } }, // dance minigame: the synth 140 BPM bed plays full whatever else is on, from the first count-in beat
+    get force() { return force; },
+    pump() { if (ctx && force) { if (ctx.state === 'suspended') ctx.resume().catch(() => { }); schedule(); } }, // called every frame during a dance round
+    get state() { return ctx ? ctx.state : 'none'; },
     // beat position of what is coming out of the speakers now (null until audio is unlocked)
     clock() { if (!ctx || !on || !t0) return null; return (ctx.currentTime - (ctx.outputLatency || ctx.baseLatency || 0) - t0) / (60 / BPM); },
     hit(kind) { if (!ctx || !on) return; const t = ctx.currentTime, o = ctx.createOscillator(), g = ctx.createGain(); o.type = kind === 'miss' ? 'sawtooth' : 'sine'; o.connect(g).connect(master);
@@ -57,7 +66,7 @@ export function createAudio() {
     shutter() { if (!ctx || !on) return; const t = ctx.currentTime, s = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain(); s.buffer = white; f.type = 'bandpass'; f.frequency.value = 3200; s.connect(f).connect(g).connect(master);
       g.gain.setValueAtTime(0.0, t); g.gain.linearRampToValueAtTime(0.25, t + 0.004); g.gain.exponentialRampToValueAtTime(0.001, t + 0.05); g.gain.setValueAtTime(0.0, t + 0.07); g.gain.linearRampToValueAtTime(0.16, t + 0.074); g.gain.exponentialRampToValueAtTime(0.001, t + 0.12); s.start(t); s.stop(t + 0.15); }, // SoundCloud music playing -> synth beat steps aside (it stays as the fallback)
     update({ inside, dist }) { if (!ctx) return; const t = ctx.currentTime;
-      const bg = (beatOff && !force) ? 0 : inside ? 0.9 : Math.max(0, 1 - dist / 90) * 0.5; beatG.gain.setTargetAtTime(bg, t, 0.3); beatF.frequency.setTargetAtTime(inside ? 16000 : 260, t, 0.3); ambG.gain.setTargetAtTime(inside ? 0.08 : 0.55, t, 0.5); },
+      const bg = force ? 0.9 : beatOff ? 0 : inside ? 0.9 : Math.max(0, 1 - dist / 90) * 0.5; beatTgt = bg; beatG.gain.setTargetAtTime(bg, t, 0.3); beatF.frequency.setTargetAtTime(inside || force ? 16000 : 260, t, 0.3); ambG.gain.setTargetAtTime(inside ? 0.08 : 0.55, t, 0.5); },
   };
   return api;
 }

@@ -368,3 +368,8 @@ html.rw-app .panel a[href^="http"]{pointer-events:none;text-decoration:none;colo
 html.rw-app .phone>*:first-child{padding-left:56px}
 @media (pointer:coarse){html.rw-app .overlay .panel{padding-top:calc(max(16px,env(safe-area-inset-top)) + 46px)!important}}
 html.rw-app #title .tc{margin-top:env(safe-area-inset-top)}
+
+/* dance tiers (quality pass 2026-11-23): picked during the count-in, EASY by default */
+.dance .dtiers{display:none;gap:6px;justify-content:center;margin:4px 0}.dance.pre .dtiers{display:flex}
+.dance .dtiers button{font:800 11px Unbounded,sans-serif;letter-spacing:.06em;padding:6px 10px;border:2px solid rgba(255,255,255,.5);background:rgba(0,0,0,.55);color:#fff;border-radius:4px}
+.dance .dtiers button.sel{background:#fff;color:#000;border-color:#fff}
