@@ -292,7 +292,20 @@ export function buildTraffic(scene, city, { low = false, lite = false, stops = [
       setEdge(c, a, b); c.s = s0; c.speed = c.max * 0.6;
       c.node.position.set(x, -0.085, z); c.heading = Math.atan2(vx, vz); c.node.rotation.y = c.heading; return true;
     }
-    const a = G.nodes[Math.floor(R() * G.nodes.length)]; setEdge(c, a, G.adj.get(a)[0]); return false;
+    // last resort: keep trying further away rather than dropping two bodies on the same node
+    for (let tries = 0; tries < 80; tries++) {
+      const a = G.nodes[Math.floor(R() * G.nodes.length)]; const p = G.pos.get(a);
+      const d = Math.hypot(p[0] - near.x, p[1] - near.z); if (d < 25) continue;
+      const nb = G.adj.get(a); if (!nb || !nb.length) continue;
+      const b = nb[Math.floor(R() * nb.length)]; const pb = G.pos.get(b);
+      const len = Math.max(0.01, Math.hypot(pb[0] - p[0], pb[1] - p[1]));
+      const s0 = Math.min(len * 0.5, HALF(c) + 2);
+      const vx = (pb[0] - p[0]) / len, vz = (pb[1] - p[1]) / len; const x = p[0] + vx * s0, z = p[1] + vz * s0;
+      if (placeBusy(x, z, c, HALF(c))) continue;
+      setEdge(c, a, b); c.s = s0; c.speed = c.max * 0.6;
+      c.node.position.set(x, -0.085, z); c.heading = Math.atan2(vx, vz); c.node.rotation.y = c.heading; return true;
+    }
+    return false;
   };
   const setEdge = (c, a, b) => {
     c.a = a; c.b = b; const pa = G.pos.get(a), pb = G.pos.get(b); c.len = Math.max(0.01, Math.hypot(pb[0] - pa[0], pb[1] - pa[1]));
@@ -404,15 +417,17 @@ export function updateTraffic(T, dt, player, t) {
       for (const p of OBS) {
         if (p.o === c) continue;
         const ox = p.x - cx, oz = p.z - cz; const ah = ox * ux + oz * uz; // along our travel axis, other centre
-        const gap = (c.kind === 'bus' || p.kind === 'bus') ? 4.2 : p.kind === 'cam' ? 2.4 : 2.6;
+        const gap = (c.kind === 'bus' || p.kind === 'bus') ? 5.5 : p.kind === 'cam' ? 3.2 : 3.4;
         const reach = hc + (p.hl || 0) + gap + 2;
         if (ah + (p.hl || 0) <= 0 || ah > reach) continue; // fully behind us, or too far ahead
         const la = Math.abs(-ox * uz + oz * ux), onc = p.fx * ux + p.fz * uz < -0.5;
-        const latNeed = (onc ? 0.2 : 0.45) + wc * 0.5 + p.hw * 0.5 + (p.kind === 'cam' ? 0.4 : 0);
+        const latNeed = (onc ? 0.25 : 0.55) + wc * 0.5 + p.hw * 0.5 + (p.kind === 'cam' ? 0.5 : 0);
         if (la >= latNeed) continue;
         const clear = ah - hc - (p.hl || 0); // metres of open road between body ends
-        if (clear < 0) { c.s = Math.max(0, c.s + clear * 0.6); target = 0; } // already overlapping: slide back along the path
-        else target = Math.min(target, Math.max(0, (clear - gap) * 1.35));
+        if (clear < 0) { // already overlapping: separate fully and stop; respawn if we cannot
+          c.s = Math.max(0, c.s + clear - 0.6); c.speed = 0; target = 0;
+          if (clear < -1.2) c._re = 1;
+        } else target = Math.min(target, Math.max(0, (clear - gap) * 1.2));
       } }
     // corner slowdown
     if (c.len - c.s < 8) target = Math.min(target, c.max * 0.55);
@@ -435,6 +450,7 @@ export function updateTraffic(T, dt, player, t) {
     c.heading += dh * Math.min(1, dt * 6);
     c.node.position.x += (x - c.node.position.x) * Math.min(1, dt * 8); c.node.position.z += (z - c.node.position.z) * Math.min(1, dt * 8);
     c.node.rotation.y = c.heading;
+    if (c._re) { c._re = 0; T.placeCar(c, player); }
     if (Math.hypot(c.node.position.x - player.x, c.node.position.z - player.z) > 330) { T.placeCar(c, player); const p = G.pos.get(c.a); c.node.position.set(p[0], -0.085, p[1]); }
   }
   // glitch (f): if the camera still ends up inside a body (camera swung into a parked car, a car turned into it), hide that vehicle
