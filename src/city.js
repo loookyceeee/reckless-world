@@ -182,7 +182,7 @@ export async function buildCity(scene, { low = false, lite = false } = {}) {
   const grid = new SegGrid(16);
   const R = rng(42);
   // ---------- ground ----------
-  const gm = new StandardMaterial('ground', scene); gm.diffuseColor = hex('#20251e'); gm.specularColor = new Color3(0.05, 0.05, 0.08);
+  const gm = new StandardMaterial('ground', scene); gm.diffuseColor = hex('#1c1c22'); gm.specularColor = new Color3(0.05, 0.05, 0.08); // night grey (was olive #20251e: showed as a green void past the paving / at the far clip)
   const ground = toMesh('ground', xf(box(3200, 0.2, 5000), { t: [-240, -0.205, -790] }), scene, gm); ground.parent = root;
   // ---------- buildings ----------
   const { d, e } = windowTextures(scene);
@@ -226,6 +226,29 @@ export async function buildCity(scene, { low = false, lite = false } = {}) {
     for (const q of P4) { B.p.push(q[0], y, q[1]); B.c.push(col.r, col.g, col.b, 1); B.u.push(q[0] / uvs, q[1] / uvs); }
     B.i.push(base, base + 1, base + 2, base, base + 2, base + 3);
   };
+  // glitch (facade / street warp): each segment was an independent quad with its own perpendiculars, so on a
+  // curve (Lisburn Road, etc.) the carriageway and pavement scalloped, overlapped and left gaps, and the
+  // facades beside them looked bent. Miter joined offsets at every vertex; sharp miters are capped.
+  const offsetLine = (pts, half) => {
+    const n = pts.length, L = [], R = []; if (n < 2) return { L, R };
+    const nor = [];
+    for (let i = 0; i < n - 1; i++) { const dx = pts[i + 1][0] - pts[i][0], dz = pts[i + 1][1] - pts[i][1], len = Math.hypot(dx, dz) || 1; nor.push([-dz / len, dx / len]); }
+    for (let i = 0; i < n; i++) {
+      const a = nor[Math.max(0, i - 1)], b = nor[Math.min(nor.length - 1, i)];
+      let mx = a[0] + b[0], mz = a[1] + b[1], ml = Math.hypot(mx, mz);
+      if (ml < 1e-6) { mx = b[0]; mz = b[1]; } else { mx /= ml; mz /= ml; }
+      const sc = Math.min(half * 3, half / Math.max(0.35, Math.abs(mx * b[0] + mz * b[1])));
+      L.push([pts[i][0] + mx * sc, pts[i][1] + mz * sc]); R.push([pts[i][0] - mx * sc, pts[i][1] - mz * sc]);
+    }
+    return { L, R };
+  };
+  const along = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+  const ribbonSeg = (B, aL, aR, bL, bR, y, col, uvs) => {
+    const P4 = [aL, bL, bR, aR], base = B.p.length / 3;
+    for (const q of P4) { B.p.push(q[0], y, q[1]); B.c.push(col.r, col.g, col.b, 1); B.u.push(q[0] / uvs, q[1] / uvs); }
+    B.i.push(base, base + 1, base + 2, base, base + 2, base + 3);
+  };
+  const ribbon = (B, pts, w, y, col, uvs = 6) => { const off = offsetLine(pts, w / 2); for (let i = 0; i < pts.length - 1; i++) ribbonSeg(B, off.L[i], off.R[i], off.L[i + 1], off.R[i + 1], y, col, uvs); };
   const discB = (B, p, r, y, col, uvs = 6) => { const base = B.p.length / 3; B.p.push(p[0], y, p[1]); B.c.push(col.r, col.g, col.b, 1); B.u.push(p[0] / uvs, p[1] / uvs);
     for (let k = 0; k < 12; k++) { const a = k / 12 * Math.PI * 2; const x = p[0] + Math.cos(a) * r, z = p[1] + Math.sin(a) * r; B.p.push(x, y, z); B.c.push(col.r, col.g, col.b, 1); B.u.push(x / uvs, z / uvs); }
     for (let k = 0; k < 12; k++) B.i.push(base, base + 1 + ((k + 1) % 12), base + 1 + k); };
@@ -245,26 +268,32 @@ export async function buildCity(scene, { low = false, lite = false } = {}) {
     const pts = r.pts;
     if (r.d) {
       const RB = r.sf ? CB : RD; if (r.sf) SETT.push(r);
-      for (let i = 0; i < pts.length - 1; i++) quadB(RB, pts[i], pts[i + 1], r.w, YR, r.sf ? hex('#ffffff') : ASPH, r.sf ? 3 : 6);
+      ribbon(RB, pts, r.w, YR, r.sf ? hex('#ffffff') : ASPH, r.sf ? 3 : 6);
       for (let i = 0; i < pts.length; i++) { const p = pts[i]; discB(RB, p, r.w / 2, r.sf ? YR + 0.002 : YR, r.sf ? hex('#ffffff') : ASPH, r.sf ? 3 : 6); }
       if (r.t === 'service') continue;
-      for (let i = 0; i < pts.length - 1; i++) {
-        let a = pts[i], b = pts[i + 1]; const dx = b[0] - a[0], dz = b[1] - a[1]; const L = Math.hypot(dx, dz); if (L < 0.05) continue; const ux = dx / L, uz = dz / L;
-        const ta = r.n && nodeDeg.get(r.n[i]) > 2 ? nodeW.get(r.n[i]) / 2 + PW : 0, tb = r.n && nodeDeg.get(r.n[i + 1]) > 2 ? nodeW.get(r.n[i + 1]) / 2 + PW : 0;
-        if (ta + tb > L - 0.5) continue;
-        const A = [a[0] + ux * ta, a[1] + uz * ta], Bp = [b[0] - ux * tb, b[1] - uz * tb];
-        for (const sd of [-1, 1]) {
-          const o = r.w / 2 + PW / 2, ox = -uz * sd, oz = ux * sd;
-          quadB(PV, [A[0] + ox * o, A[1] + oz * o], [Bp[0] + ox * o, Bp[1] + oz * o], PW, YP, PAVE, 3);
-          const k1 = r.w / 2, k2 = r.w / 2 + 0.22; // kerb face + kerb stone
-          wallB(MK, [A[0] + ox * k1, A[1] + oz * k1], [Bp[0] + ox * k1, Bp[1] + oz * k1], YR, YP + 0.004, KERBF);
-          quadB(MK, [A[0] + ox * (k1 + k2) / 2, A[1] + oz * (k1 + k2) / 2], [Bp[0] + ox * (k1 + k2) / 2, Bp[1] + oz * (k1 + k2) / 2], 0.22, YP + 0.004, KERB);
-          const o2 = r.w / 2 + PW; wallB(MK, [Bp[0] + ox * o2, Bp[1] + oz * o2], [A[0] + ox * o2, A[1] + oz * o2], -0.105, YP, PAVE); // back edge in paving colour (no dark seam against the paved floor)
+      const edge = offsetLine(pts, r.w / 2), paveC = offsetLine(pts, r.w / 2 + PW / 2), kerbC = offsetLine(pts, r.w / 2 + 0.11), back = offsetLine(pts, r.w / 2 + PW);
+      const flush = (arr, fn) => { if (arr.length > 1) fn(arr); arr.length = 0; };
+      for (const side of ['L', 'R']) {
+        const pc = [], kc = [], ec = [], bc = [];
+        const push = (a, p0, p1) => { if (!a.length) a.push(p0); a.push(p1); };
+        for (let i = 0; i < pts.length - 1; i++) {
+          const a = pts[i], b = pts[i + 1]; const L = Math.hypot(b[0] - a[0], b[1] - a[1]); if (L < 0.05) { flush(pc, q => ribbon(PV, q, PW, YP, PAVE, 3)); flush(kc, q => ribbon(MK, q, 0.22, YP + 0.004, KERB, 6)); flush(ec, q => { for (let k = 0; k < q.length - 1; k++) wallB(MK, q[k], q[k + 1], YR, YP + 0.004, KERBF); }); flush(bc, q => { for (let k = 0; k < q.length - 1; k++) wallB(MK, q[k + 1], q[k], -0.105, YP, PAVE); }); continue; }
+          const ta = r.n && nodeDeg.get(r.n[i]) > 2 ? nodeW.get(r.n[i]) / 2 + PW : 0, tb = r.n && nodeDeg.get(r.n[i + 1]) > 2 ? nodeW.get(r.n[i + 1]) / 2 + PW : 0;
+          if (ta + tb > L - 0.5) { flush(pc, q => ribbon(PV, q, PW, YP, PAVE, 3)); flush(kc, q => ribbon(MK, q, 0.22, YP + 0.004, KERB, 6)); flush(ec, q => { for (let k = 0; k < q.length - 1; k++) wallB(MK, q[k], q[k + 1], YR, YP + 0.004, KERBF); }); flush(bc, q => { for (let k = 0; k < q.length - 1; k++) wallB(MK, q[k + 1], q[k], -0.105, YP, PAVE); }); continue; }
+          const t0 = ta / L, t1 = 1 - tb / L;
+          push(pc, along(paveC[side][i], paveC[side][i + 1], t0), along(paveC[side][i], paveC[side][i + 1], t1));
+          push(kc, along(kerbC[side][i], kerbC[side][i + 1], t0), along(kerbC[side][i], kerbC[side][i + 1], t1));
+          push(ec, along(edge[side][i], edge[side][i + 1], t0), along(edge[side][i], edge[side][i + 1], t1));
+          push(bc, along(back[side][i], back[side][i + 1], t0), along(back[side][i], back[side][i + 1], t1));
         }
+        flush(pc, q => ribbon(PV, q, PW, YP, PAVE, 3));
+        flush(kc, q => ribbon(MK, q, 0.22, YP + 0.004, KERB, 6));
+        flush(ec, q => { for (let k = 0; k < q.length - 1; k++) wallB(MK, q[k], q[k + 1], YR, YP + 0.004, KERBF); });
+        flush(bc, q => { for (let k = 0; k < q.length - 1; k++) wallB(MK, q[k + 1], q[k], -0.105, YP, PAVE); }); // back edge in paving colour
       }
     } else {
       if (r.sf) SETT.push(r);
-      for (let i = 0; i < pts.length - 1; i++) quadB(r.sf ? CB : PV, pts[i], pts[i + 1], Math.max(1.6, r.w), r.sf ? YP + 0.002 : YR - 0.012, r.sf ? hex('#ffffff') : FOOT, 3);
+      ribbon(r.sf ? CB : PV, pts, Math.max(1.6, r.w), r.sf ? YP + 0.002 : YR - 0.012, r.sf ? hex('#ffffff') : FOOT, 3);
     }
   }
   const dyRoad = (r) => ['primary', 'secondary', 'trunk', 'tertiary'].includes(r.t) || Math.abs(Math.floor(r.p[0] * 7)) % 3 === 0;
@@ -426,10 +455,14 @@ export async function buildCity(scene, { low = false, lite = false } = {}) {
   // ---------- street kit (research/asset-refs/street_kit_colour.png): R bins, benches, utility boxes, planters, bike racks, cones ----------
   // one thin-instanced mesh per prop (1 draw call each, ~100-400 tris), dropped beside every few lamps on the pavement, facing the road
   {
+    const KIT_FOOT = { bin: [0.26, 0.26, 1.03], bench: [0.82, 0.23, 0.86], box: [0.37, 0.19, 1.1], planter: [0.55, 0.3, 0.75], rack: [0.5, 0.33, 0.85], cone: [0.2, 0.2, 0.62] }; // half x, half z, height (m)
     const kit = { bin: [], bench: [], box: [], planter: [], rack: [], cone: [] }; const order = ['bin', 'bench', 'box', 'bin', 'planter', 'rack', 'bin', 'box', 'cone', 'bench'];
     lamps.forEach((l, i) => { if (i % (low ? 6 : 3)) return; const r = roadNear(l[0], l[1]); if (!r) return; const tx = -r.nz, tz = r.nx, side = i % 2 ? 1 : -1;
       const q = kerbside(l[0] + tx * 1.7 * side + r.nx * 0.4, l[1] + tz * 1.7 * side + r.nz * 0.4, 0.55); if (!q) return; const k = order[(i / (low ? 6 : 3) | 0) % order.length];
-      kit[k].push([q[0], q[1], Math.atan2(-r.nx, -r.nz)]); grid.add(q[0] - 0.25, q[1], q[0] + 0.25, q[1], 1); });
+      const ang = Math.atan2(-r.nx, -r.nz); kit[k].push([q[0], q[1], ang]);
+      // glitch (d): register the real oriented footprint + height (was a 0.5 m x-axis stub at h 1, so the camera and player went through bench ends)
+      const [hx, hz, hh] = KIT_FOOT[k], ca = Math.cos(ang), sa = Math.sin(ang), W = (lx, lz) => [q[0] + lx * ca + lz * sa, q[1] - lx * sa + lz * ca];
+      grid.addPoly([W(-hx, -hz), W(hx, -hz), W(hx, hz), W(-hx, hz)], hh); });
     const DK = hex('#2a2c33'), MG = hex('#8a8f99'), PU = hex('#7b2cff'), RD = hex('#e8401c'), WD = hex('#9a6234'), GN = hex('#3d6b3e'), FL = hex('#d24bd8'), OR = hex('#ff6a1a'), WT = hex('#f2f2ee');
     place('kitBin', merge([color(xf(rbox(0.48, 0.95, 0.48, 0.06, 2), { t: [0, 0.475, 0] }), DK), color(xf(box(0.5, 0.09, 0.5), { t: [0, 0.78, 0] }), PU), color(xf(rbox(0.52, 0.08, 0.52, 0.04, 2), { t: [0, 0.99, 0] }), MG), color(xf(box(0.2, 0.06, 0.02), { t: [0, 0.88, 0.25] }), hex('#0b0b0d'))]), kit.bin, 2);
     place('kitBench', merge([color(xf(box(1.6, 0.06, 0.42), { t: [0, 0.45, 0] }), RD), color(xf(box(1.6, 0.36, 0.06), { t: [0, 0.68, -0.2], r: [-0.12, 0, 0] }), RD), ...[-0.7, 0.7].map(x => color(xf(box(0.06, 0.45, 0.42), { t: [x, 0.225, 0] }), DK))]), kit.bench, 2);

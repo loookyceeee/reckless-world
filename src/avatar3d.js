@@ -22,24 +22,41 @@ const M3 = { 'manager-shorts': 'shortsL', 'rawdawg-shorts': 'shortsL', 'artiller
 const COVER_KINDS = ['tee', 'crop', 'long', 'hoodie', 'jeans', 'pants', 'cuffed', 'shorts', 'shortsL', 'pantsW', 'jersey', 'teeD', 'shoes', 'briefs', 'bra'];
 const SKIN = Color3.FromHexString('#ead3cb'), HAIR = Color3.FromHexString('#141214');
 
-export async function loadAvatar3D(scene, { name = 'player', base = import.meta.env.BASE_URL, kind = 'male' } = {}) {
+// quality pass 2026-11-23: 2048 masters (models/tex*, desktop) + 1024 copies (models/tex*_1k, touch / low-memory), trilinear mips,
+// anisotropy up to 16 (4 on low-memory), and the avatar's own textures are exempt from the low-memory 512 / touch 1024 global cap
+// (the cap is for the city; the avatar is the closest thing to the camera and was being cut to 512 on iPhone / app).
+let capPatched = false;
+function exemptAvatarFromCap(engine, cap) {
+  if (capPatched || !engine || !engine._prepareWebGLTexture) return; capPatched = true;
+  const orig = engine._prepareWebGLTexture.bind(engine), caps = engine.getCaps(), hw = engine._gl ? engine._gl.getParameter(engine._gl.MAX_TEXTURE_SIZE) : cap;
+  engine._prepareWebGLTexture = function (texture, ...rest) {
+    const u = (texture && texture.url) || '';
+    if (!/\/models\/tex(_f)?(_1k)?\//.test(u)) return orig(texture, ...rest);
+    const was = caps.maxTextureSize; caps.maxTextureSize = Math.min(hw, Math.max(was, cap));
+    try { return orig(texture, ...rest); } finally { caps.maxTextureSize = was; }
+  };
+}
+export async function loadAvatar3D(scene, { name = 'player', base = import.meta.env.BASE_URL, kind = 'male', hq = true, lite = false, file = null, exempt = true } = {}) {
   const FEM = kind === 'female';
+  const engine = scene.getEngine(); if (exempt) exemptAvatarFromCap(engine, hq ? 2048 : 1024); // SAFE (WebView crashed once): no exemption, the 512 cap stands
+  const ANISO = Math.max(1, Math.min(lite ? 4 : 16, (engine.getCaps().maxAnisotropy || 4)));
   // meshopt-compressed glb (tools/blender/build_avatar.py -> gltf-transform resample/prune/dedup/meshopt), served as .json so the
   // host brotli-compresses it (~240 KB on the wire); decoder is the local meshoptimizer build, no CDN
   MeshoptCompression.Configuration.decoder.url = base + 'models/meshopt_decoder.js';
-  const res = await SceneLoader.ImportMeshAsync('', base + 'models/', FEM ? 'avatar_f.glb.json' : 'avatar.glb.json', scene, null, '.glb');
+  const res = await SceneLoader.ImportMeshAsync('', base + 'models/', file || (FEM ? 'avatar_f.glb.json' : 'avatar.glb.json'), scene, null, '.glb');
   const root = new TransformNode(name, scene);
   const gltfRoot = res.meshes[0]; gltfRoot.parent = root; gltfRoot.name = name + '-gltf';
   const byName = {}; for (const m of res.meshes) { if (m === gltfRoot) continue; const n = m.name.replace(/_primitive\d+$/, '').split('.')[0]; (byName[n] = byName[n] || []).push(m); m.isPickable = false; m.alwaysSelectAsActiveMesh = true; m.name = 'av3d-' + n; }
   // Materials: every visible part carries a texture projected from the app's own crew renders (tools/bake_avatar_tex.py),
   // so face, hair, tee print and stonewash denim match the app. The renders already hold soft studio shading, so the
   // material lights them gently: half-Lambert-like fill through emissive (wrap lighting), low specular, no glow (main.js).
-  const TEX = base + (FEM ? 'models/tex_f/' : 'models/tex/');
-  const tex = (f, onErr, noMip = false) => { const t = new Texture(TEX + f + '.webp', scene, noMip, false, noMip ? Texture.BILINEAR_SAMPLINGMODE : Texture.TRILINEAR_SAMPLINGMODE, null, () => onErr && onErr()); t.anisotropicFilteringLevel = 4; return t; };
+  const LOOK2 = !/[?&]avlook=1\b/.test(location.search); // quality pass lighting (?avlook=1 = the old look, for before/after)
+  const TEX = base + (FEM ? 'models/tex_f' : 'models/tex') + (hq ? '/' : '_1k/');
+  const tex = (f, onErr, noMip = false) => { const t = new Texture(TEX + f + '.webp', scene, noMip, false, noMip ? Texture.BILINEAR_SAMPLINGMODE : Texture.TRILINEAR_SAMPLINGMODE, null, () => onErr && onErr()); t.anisotropicFilteringLevel = ANISO; return t; };
   const mat = (id, col, { rough = 0.75, t = null, fill = 0.42 } = {}) => { const m = new StandardMaterial('av3d-' + id, scene); m.diffuseColor = col.clone(); const sp = (1 - rough) * 0.3; m.specularColor = new Color3(sp, sp, sp); m.specularPower = 28; m.ambientColor = new Color3(0.3, 0.3, 0.32);
     if (t) { m.diffuseTexture = t; m.emissiveTexture = t; m.emissiveColor = new Color3(fill, fill, fill); m.diffuseColor = new Color3(0.78, 0.78, 0.78); } return m; };
   const skinM = mat('skin', SKIN, { rough: 0.6, t: tex('body'), fill: 0.32 }); if (FEM) { skinM.diffuseColor.set(0.88, 0.81, 0.75); skinM.emissiveColor.set(0.36, 0.31, 0.27); } /* audit P1-8: lifted, less brown cast (face read muddy beside the male) */ else skinM.diffuseColor.set(0.82, 0.8, 0.8); skinM.specularColor.set(0.05, 0.04, 0.035); // warm light skin like the sheets (was washed-out pale) // less fill, more key: arms read apart from the torso
-  const hairM = mat('hair', HAIR, { rough: 0.9, t: tex('hair', null, true), fill: 0.5 }); /* no mips: stretched nape UVs must not average the fade into stripes */ hairM.diffuseColor.set(0.45, 0.45, 0.45); /* opaque hair shell: the fade carries skin colour down to the hairline, so no alpha holes or nape slit */ hairM.backFaceCulling = false; // alpha-tested fringe edge: no forehead band
+  const hairM = mat('hair', HAIR, { rough: 0.9, t: tex('hair', null, !LOOK2), fill: 0.5 }); /* no mips: stretched nape UVs must not average the fade into stripes */ hairM.diffuseColor.set(0.45, 0.45, 0.45); /* opaque hair shell: the fade carries skin colour down to the hairline, so no alpha holes or nape slit */ hairM.backFaceCulling = false; // alpha-tested fringe edge: no forehead band
   const browM = mat('brow', HAIR, { rough: 0.8 });
   const eyeM = mat('eye', Color3.White(), { rough: 0.2, t: tex('eyes'), fill: 0.5 });
   // keep the loader's winding (glTF is right-handed): new materials must copy sideOrientation or every shell renders inside-out
@@ -62,12 +79,12 @@ export async function loadAvatar3D(scene, { name = 'player', base = import.meta.
   for (const m of [...Object.values(gm), byName.G_bra?.[0]?.material, byName.G_briefs?.[0]?.material, byName.G_shoes?.[0]?.material].filter(Boolean)) { m.backFaceCulling = false; m.twoSidedLighting = true; }
   const gtex = {}; // per-item garment textures, loaded when first worn
   const wear = (kind, g) => { const m = gm[kind];
-    const tint = () => { m.diffuseTexture = null; m.emissiveTexture = null; m.emissiveColor = Color3.Black(); m.diffuseColor = Color3.FromHexString(g.col); };
+    const tint = () => { m.diffuseTexture = null; m.emissiveTexture = null; m.emissiveColor = Color3.Black(); m.diffuseColor = Color3.FromHexString(g.col); m._e0 = null; av._expo = null; };
     if (gtex[g.id] === false) return tint();
     if (!gtex[g.id]) gtex[g.id] = tex('g-' + g.id, () => { gtex[g.id] = false; if (av.fit) av.setFit(av.fit, av._vis); });
     const t = gtex[g.id]; m.diffuseTexture = t; m.emissiveTexture = t;
-    const c = Color3.FromHexString(g.col), L = 0.3 * c.r + 0.59 * c.g + 0.11 * c.b, f = L > 0.6 ? 0.26 : 0.4, d = L > 0.6 ? 0.6 : 0.78; // white garments: no blow-out
-    m.emissiveColor = new Color3(f, f, f); m.diffuseColor = new Color3(d, d, d); };
+    const c = Color3.FromHexString(g.col), L = 0.3 * c.r + 0.59 * c.g + 0.11 * c.b, f = LOOK2 ? (L > 0.6 ? 0.08 : 0.12) : (L > 0.6 ? 0.26 : 0.4), d = LOOK2 ? (L > 0.6 ? 0.72 : 0.92) : (L > 0.6 ? 0.6 : 0.78); // LOOK2: cloth is lit, not unlit; dark tees keep enough albedo for folds
+    m.emissiveColor = new Color3(f, f, f); m.diffuseColor = new Color3(d, d, d); m._e0 = null; av._expo = null; };
   // pipeline chunk 1 (male): Cycles-baked ambient occlusion per part + a texture-coloured fresnel rim (cheap, mobile-safe)
   if (!FEM) {
     const ao = (m, f, lvl = 1) => { const t = new Texture(TEX + 'ao_' + f + '.webp', scene, false, false, Texture.TRILINEAR_SAMPLINGMODE, null, () => { m.ambientTexture = null; }); t.level = lvl; m.ambientTexture = t; };
@@ -75,6 +92,25 @@ export async function loadAvatar3D(scene, { name = 'player', base = import.meta.
     const rimF = () => { const f = new FresnelParameters(); f.leftColor = new Color3(1.55, 1.45, 1.35); f.rightColor = Color3.White(); f.power = 2.5; f.bias = 0; return f; };
     for (const m of [skinM, ...Object.values(gm)]) m.emissiveFresnelParameters = rimF();
   }
+  // quality pass: the face read flat and pale because most of its light was unlit emissive (texture x 0.32 fill, x 1.55 at
+  // the fresnel rim) pushed through ACES at exposure 1.4 (1.7-2.0 in clubs); the tee print's red crossed the 0.72 bloom
+  // threshold (the red chest blob). Less emissive, more key light (real form shading), a softer rim, a hair sheen with
+  // mips (the 2048 hair map aliased into a blob without them), and emissive/lights compensated for scene exposure.
+  if (LOOK2) {
+    // visible in-game upgrade: form comes from the key/rim lights, not unlit emissive (which washed the face pale and flat)
+    if (!FEM) { skinM.emissiveColor.set(0.08, 0.075, 0.07); skinM.diffuseColor.set(0.98, 0.88, 0.80); }
+    else { skinM.emissiveColor.set(0.09, 0.08, 0.07); skinM.diffuseColor.set(1.0, 0.90, 0.84); }
+    skinM.specularColor.set(0.16, 0.13, 0.11); skinM.specularPower = 40; skinM.ambientColor.set(0.16, 0.16, 0.17);
+    // hair: dark shell + strand bump from the hair map (was 0.6 diffuse / 0.3 emissive = a grey blob)
+    hairM.diffuseColor.set(FEM ? 0.22 : 0.16, FEM ? 0.20 : 0.15, FEM ? 0.19 : 0.14);
+    hairM.emissiveColor.set(0.05, 0.045, 0.04); hairM.specularColor.set(0.28, 0.24, 0.20); hairM.specularPower = 56;
+    if (hairM.diffuseTexture) { const hb = hairM.diffuseTexture.clone(); hb.level = 0.55; hairM.bumpTexture = hb; hairM.useParallax = false; hairM.invertNormalMapY = false; }
+    curlM.diffuseColor = Color3.FromHexString(FEM ? '#1e1612' : '#14110f'); curlM.emissiveColor.set(0.03, 0.025, 0.02);
+    curlM.specularColor.set(0.22, 0.18, 0.15); curlM.specularPower = 40;
+    const rim2 = () => { const f = new FresnelParameters(); f.leftColor = new Color3(0.55, 0.52, 0.48); f.rightColor = new Color3(0.12, 0.12, 0.12); f.power = 2.4; f.bias = 0.08; return f; };
+    for (const m of [skinM, hairM, curlM, ...Object.values(gm)]) m.emissiveFresnelParameters = rim2();
+  }
+
   // animation groups, blended by weight
   const AG = {}; for (const g of res.animationGroups) { g.stop(); AG[g.name] = g; }
   for (const k of ['idle', 'walk', 'jog', 'sprint', 'dance', 'jumpLoop', 'sit']) if (AG[k]) { AG[k].start(true, 1.0); AG[k].setWeightForAllAnimatables(k === 'idle' ? 1 : 0); }
@@ -137,7 +173,13 @@ export async function loadAvatar3D(scene, { name = 'player', base = import.meta.
   for (const m of new Set(lit.map(x => x.material).filter(Boolean))) m.maxSimultaneousLights = 8;
   av.lights = [key, rim, fill];
   av.lightRig = (cam) => { const p = root.position, c = cam.position; let dx = c.x - p.x, dz = c.z - p.z; const L = Math.hypot(dx, dz) || 1; dx /= L; dz /= L;
-    key.position.set(p.x + dx * 2.2 - dz * 1.6, p.y + 2.3, p.z + dz * 2.2 + dx * 1.6); rim.position.set(p.x - dx * 2.0 + dz * 0.8, p.y + 2.0, p.z - dz * 2.0 - dx * 0.8); fill.position.set(p.x + dx * 2.0 + dz * 1.8, p.y + 1.2, p.z + dz * 2.0 - dx * 1.8); };
+    key.position.set(p.x + dx * 2.0 - dz * 1.5, p.y + 2.4, p.z + dz * 2.0 + dx * 1.5); rim.position.set(p.x - dx * 2.6 + dz * 0.4, p.y + 1.9, p.z - dz * 2.6 - dx * 0.4); fill.position.set(p.x + dx * 1.6 + dz * 2.0, p.y + 1.15, p.z + dz * 1.6 - dx * 2.0); };
+  if (LOOK2) { key.intensity = 1.45; key.diffuse = Color3.FromHexString('#ffe1c0'); rim.intensity = 1.05; rim.diffuse = Color3.FromHexString('#c9d8ff'); fill.intensity = 0.16; }
+  for (const l of av.lights) l._i0 = l.intensity;
+  // exposure compensation (quality pass): scene exposure is 1.4 on the street, 1.7-2.0 in venues; keep the avatar's own light constant
+  av.setExposure = (e) => { if (!LOOK2) return; const k = Math.max(0.6, Math.min(1, 1.4 / (e || 1.4))); if (av._expo === k) return; av._expo = k;
+    for (const m of new Set(av.allMeshes().map(x => x.material).filter(Boolean))) { if (!m._e0) m._e0 = m.emissiveColor.clone(); m.emissiveColor.copyFrom(m._e0).scaleInPlace(k); }
+    for (const l of av.lights) l.intensity = l._i0 * k; };
   av.meshes = () => res.meshes.filter(m => m !== gltfRoot && m.isEnabled());
   av.allMeshes = () => res.meshes.filter(m => m !== gltfRoot);
   return av;

@@ -13,6 +13,17 @@ export class SegGrid {
     for (let i = Math.floor((x - r) / c); i <= Math.floor((x + r) / c); i++) for (let j = Math.floor((z - r) / c); j <= Math.floor((z + r) / c); j++) { const a = this.map.get(this.key(i, j)); if (a) for (const s of a) out.add(s); }
     return out;
   }
+  // glitch (d): tallest low obstacle (props: benches, bins, boxes) within r of a point, so the camera can rise over it instead of clipping
+  topNear(x, z, r, hmax = 3) {
+    let top = 0;
+    for (const s of this.near(x, z, r + 1)) {
+      if (s.h >= hmax || s.h <= top) continue;
+      const dx = s.x1 - s.x0, dz = s.z1 - s.z0; const L2 = dx * dx + dz * dz || 1e-6;
+      let t = ((x - s.x0) * dx + (z - s.z0) * dz) / L2; t = Math.max(0, Math.min(1, t));
+      if (Math.hypot(x - (s.x0 + dx * t), z - (s.z0 + dz * t)) < r) top = s.h;
+    }
+    return top;
+  }
   // push a circle out of walls
   resolve(p, r, y = 0) {
     for (let it = 0; it < 3; it++) {

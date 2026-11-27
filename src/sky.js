@@ -1,8 +1,6 @@
 // Night sky: procedural equirect canvas (gradient + city-glow horizon + stars + moon + soft cloud banks) on an inverted sphere,
 // plus a CC0 Poly Haven night HDRI (cobblestone_street_night, downsampled to 512x256) as a cube env for wet reflections.
-import { CreateSphere } from '@babylonjs/core/Meshes/Builders/sphereBuilder';
 import { FresnelParameters } from '@babylonjs/core/Materials/fresnelParameters';
-import { Mesh } from '@babylonjs/core/Meshes/mesh';
 import { Layer } from '@babylonjs/core/Layers/layer';
 import '@babylonjs/core/Layers/layerSceneComponent';
 import { Vector3 } from '@babylonjs/core/Maths/math.vector';
@@ -43,7 +41,9 @@ export function buildSky(scene, { low = false, hi = false } = {}) {
   const sky = { name: 'sky', setEnabled: (v) => { layer.isEnabled = v; }, isEnabled: () => layer.isEnabled, layer,
     update: (cam) => { cam.getDirectionToRef(Vector3.Forward(), fwd); const yaw = Math.atan2(fwd.x, fwd.z), pitch = Math.asin(Math.max(-1, Math.min(1, fwd.y)));
       const asp = scene.getEngine().getAspectRatio(cam), vf = cam.fov, hf = 2 * Math.atan(Math.tan(vf / 2) * asp);
-      tex.uScale = hf / (2 * Math.PI); tex.uOffset = yaw / (2 * Math.PI) - tex.uScale / 2; tex.vScale = vf / Math.PI; tex.vOffset = 0.5 + pitch / Math.PI - tex.vScale / 2; } };
+      // clamp V so a high aerial (steep pitch) cannot sample outside the equirect and flash an inverted / empty cap
+      tex.uScale = hf / (2 * Math.PI); tex.uOffset = yaw / (2 * Math.PI) - tex.uScale / 2;
+      tex.vScale = Math.min(1, vf / Math.PI); tex.vOffset = Math.max(0, Math.min(1 - tex.vScale, 0.5 + pitch / Math.PI - tex.vScale / 2)); } };
   let env = null;
   // desktop: the 1K HDRI (1024x512) into a 256 cube for sharper wet reflections; phones keep the 512 px copy
   // audit P2-12: an 8-bit linear webp of the same HDRI (125 KB / 35 KB instead of 1.76 MB / 0.44 MB). Values are clipped at 1.0,

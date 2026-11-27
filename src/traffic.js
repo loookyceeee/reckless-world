@@ -274,13 +274,38 @@ export function buildTraffic(scene, city, { low = false, lite = false, stops = [
     if (!low) { const hb = beamSrc.createInstance('hb'); hb.parent = node; hb.position.set(0, 0, 0); }
     cars.push({ node, kind: s.kind, patrol: !!s.patrol, a: 0, b: 0, s: 0, len: 1, speed: 0, max: s.kind === 'bus' ? 8 : s.kind === 'wagon' ? 9 : 10 + R() * 4, heading: 0, offset: 0 });
   }
+  const placeBusy = (x, z, self, hl) => {
+    const need = hl + 3;
+    for (const o of cars) { if (o === self || !o.node) continue; if (Math.hypot(o.node.position.x - x, o.node.position.z - z) < need + HALF(o)) return true; }
+    for (const o of parked) { if (Math.hypot(o.node.position.x - x, o.node.position.z - z) < need + HALF(o)) return true; }
+    return false;
+  };
   const placeCar = (c, near) => {
-    for (let tries = 0; tries < 40; tries++) {
+    for (let tries = 0; tries < 60; tries++) {
       const a = G.nodes[Math.floor(R() * G.nodes.length)]; const p = G.pos.get(a);
-      const d = Math.hypot(p[0] - near.x, p[1] - near.z); if (d > 200 || d < 15) continue;
-      const nb = G.adj.get(a); const b = nb[Math.floor(R() * nb.length)]; setEdge(c, a, b); c.s = 0; c.speed = c.max * 0.6; return true;
+      const d = Math.hypot(p[0] - near.x, p[1] - near.z); if (d > 200 || d < 18) continue;
+      const nb = G.adj.get(a); if (!nb || !nb.length) continue; const b = nb[Math.floor(R() * nb.length)];
+      const pb = G.pos.get(b); const len = Math.max(0.01, Math.hypot(pb[0] - p[0], pb[1] - p[1]));
+      const s0 = Math.min(len * 0.7, HALF(c) + 1 + R() * 4);
+      const vx = (pb[0] - p[0]) / len, vz = (pb[1] - p[1]) / len; const x = p[0] + vx * s0, z = p[1] + vz * s0;
+      if (placeBusy(x, z, c, HALF(c))) continue;
+      setEdge(c, a, b); c.s = s0; c.speed = c.max * 0.6;
+      c.node.position.set(x, -0.085, z); c.heading = Math.atan2(vx, vz); c.node.rotation.y = c.heading; return true;
     }
-    const a = G.nodes[Math.floor(R() * G.nodes.length)]; setEdge(c, a, G.adj.get(a)[0]); return false;
+    // last resort: keep trying further away rather than dropping two bodies on the same node
+    for (let tries = 0; tries < 80; tries++) {
+      const a = G.nodes[Math.floor(R() * G.nodes.length)]; const p = G.pos.get(a);
+      const d = Math.hypot(p[0] - near.x, p[1] - near.z); if (d < 25) continue;
+      const nb = G.adj.get(a); if (!nb || !nb.length) continue;
+      const b = nb[Math.floor(R() * nb.length)]; const pb = G.pos.get(b);
+      const len = Math.max(0.01, Math.hypot(pb[0] - p[0], pb[1] - p[1]));
+      const s0 = Math.min(len * 0.5, HALF(c) + 2);
+      const vx = (pb[0] - p[0]) / len, vz = (pb[1] - p[1]) / len; const x = p[0] + vx * s0, z = p[1] + vz * s0;
+      if (placeBusy(x, z, c, HALF(c))) continue;
+      setEdge(c, a, b); c.s = s0; c.speed = c.max * 0.6;
+      c.node.position.set(x, -0.085, z); c.heading = Math.atan2(vx, vz); c.node.rotation.y = c.heading; return true;
+    }
+    return false;
   };
   const setEdge = (c, a, b) => {
     c.a = a; c.b = b; const pa = G.pos.get(a), pb = G.pos.get(b); c.len = Math.max(0.01, Math.hypot(pb[0] - pa[0], pb[1] - pa[1]));
@@ -366,6 +391,15 @@ const tmp = new Vector3();
 export function updateTraffic(T, dt, player, t) {
   const { G, PG } = T;
   if (!T.inited) { T.cars.forEach(c => T.placeCar(c, player)); T.peds.forEach(p => T.placePed(p, player)); T.inited = true; }
+  // glitches (a)+(f): one oriented body per vehicle (not a single centre, and not only "ahead" point samples —
+  // a car already inside an 18 m bus saw only rear samples behind it, stopped, and stayed overlapping).
+  // Parked vehicles and the player camera count too. Cars brake to a real gap and back up if already overlapping.
+  const OBS = T._obs || (T._obs = []); OBS.length = 0;
+  const addBody = (o, node, kind) => { const hd = node.rotation.y, fx = Math.sin(hd), fz = Math.cos(hd);
+    OBS.push({ o, x: node.position.x, z: node.position.z, fx, fz, hl: HALF(o), hw: kind === 'bus' ? 1.3 : kind === 'wagon' ? 1.05 : 0.9, kind }); };
+  for (const o of T.cars) addBody(o, o.node, o.kind);
+  for (const o of T.parked) addBody(o, o.node, o.kind);
+  const camP = T.cam && !(T.drv && T.drv.on) ? T.cam.position : null; if (camP) OBS.push({ o: 'cam', x: camP.x, z: camP.z, fx: 0, fz: 0, hl: 0.7, hw: 0.8, kind: 'cam' });
   for (const c of T.cars) {
     if (c.chase) continue; // driven by src/missions.js while chasing (heat)
     const pa = G.pos.get(c.a), pb = G.pos.get(c.b);
@@ -379,7 +413,22 @@ export function updateTraffic(T, dt, player, t) {
     let target = c.max; if (ahead > 0 && ahead < look + HALF(c) && lat < lw) { target = drv ? Math.max(0, (ahead - HALF(c) - 3.2) * 0.8) : 0; if (drv && c.speed < 0.6) { c.blk = (c.blk || 0) + dt; if (c.blk > 2.4 && (!c.hk || t - c.hk > 7) && Math.hypot(dx, dz) < 20) { c.hk = t; T.onHonk && T.onHonk(c); } } } else c.blk = 0;
     if (drv && T.honked && performance.now() - T.honked < 2500 && ahead < 0 && -ahead < 14 && lat < 2.4) { c.yield = 1.4; }
     if (c.yield) { c.yield = Math.max(0, c.yield - dt * 0.4); }
-    for (const o of T.cars) { if (o === c) continue; const ox = o.node.position.x - cx, oz = o.node.position.z - cz; const ah = ox * ux + oz * uz; const hl = HALF(c) + HALF(o); if (ah > 0 && ah < hl + 4.5 && Math.abs(-ox * uz + oz * ux) < 1.6) { target = Math.min(target, Math.max(0, (ah - hl - 0.8) * 1.5)); } }
+    { const hc = HALF(c), wc = c.kind === 'bus' ? 1.3 : 0.9;
+      for (const p of OBS) {
+        if (p.o === c) continue;
+        const ox = p.x - cx, oz = p.z - cz; const ah = ox * ux + oz * uz; // along our travel axis, other centre
+        const gap = (c.kind === 'bus' || p.kind === 'bus') ? 5.5 : p.kind === 'cam' ? 3.2 : 3.4;
+        const reach = hc + (p.hl || 0) + gap + 2;
+        if (ah + (p.hl || 0) <= 0 || ah > reach) continue; // fully behind us, or too far ahead
+        const la = Math.abs(-ox * uz + oz * ux), onc = p.fx * ux + p.fz * uz < -0.5;
+        const latNeed = (onc ? 0.25 : 0.55) + wc * 0.5 + p.hw * 0.5 + (p.kind === 'cam' ? 0.5 : 0);
+        if (la >= latNeed) continue;
+        const clear = ah - hc - (p.hl || 0); // metres of open road between body ends
+        if (clear < 0) { // already overlapping: separate fully and stop; respawn if we cannot
+          c.s = Math.max(0, c.s + clear - 0.6); c.speed = 0; target = 0;
+          if (clear < -1.2) c._re = 1;
+        } else target = Math.min(target, Math.max(0, (clear - gap) * 1.2));
+      } }
     // corner slowdown
     if (c.len - c.s < 8) target = Math.min(target, c.max * 0.55);
     // stop at red signals: 24 s cycle, N-S green 0-10 s, all-red 10-12, E-W green 12-22, all-red 22-24
@@ -401,8 +450,14 @@ export function updateTraffic(T, dt, player, t) {
     c.heading += dh * Math.min(1, dt * 6);
     c.node.position.x += (x - c.node.position.x) * Math.min(1, dt * 8); c.node.position.z += (z - c.node.position.z) * Math.min(1, dt * 8);
     c.node.rotation.y = c.heading;
+    if (c._re) { c._re = 0; T.placeCar(c, player); }
     if (Math.hypot(c.node.position.x - player.x, c.node.position.z - player.z) > 330) { T.placeCar(c, player); const p = G.pos.get(c.a); c.node.position.set(p[0], -0.085, p[1]); }
   }
+  // glitch (f): if the camera still ends up inside a body (camera swung into a parked car, a car turned into it), hide that vehicle
+  if (T.cam && !(T.drv && T.drv.on)) { const cp = T.cam.position; for (const list of [T.cars, T.parked]) for (const o of list) { const n = o.node, dx = cp.x - n.position.x, dz = cp.z - n.position.z;
+    let hide = false; if (Math.abs(dx) < 10 && Math.abs(dz) < 10 && cp.y < 3.6) { const hd = n.rotation.y, fx = Math.sin(hd), fz = Math.cos(hd); const along = dx * fx + dz * fz, side = -dx * fz + dz * fx;
+      hide = Math.abs(along) < HALF(o) + 0.25 && Math.abs(side) < (o.kind === 'bus' ? 1.6 : 1.2); }
+    if (hide !== !!o._camHide) { o._camHide = hide; n.setEnabled(!hide); } } }
   const on = Math.floor(t * 4) % 2; T.barM.emissiveColor.set(on ? 0.15 : 0.1, on ? 0.4 : 0.1, on ? 1 : 0.2); T.barM2.emissiveColor.set(on ? 0.1 : 0.15, on ? 0.1 : 0.4, on ? 0.2 : 1);
   if (T.queues.length) { let best = null, bd = 85; for (const q of T.queues) { const d = Math.hypot(q.x - player.x, q.z - player.z); if (d < bd) { bd = d; best = q; } }
     if (best !== T.qCur) { T.qCur = best; T.qPool.forEach((a, i) => { const p = best && best.pts[i]; a.root.setEnabled(!!p); if (p) { a.root.position.set(p[0], 0, p[1]); a.root.rotation.y = p[2]; } }); }

@@ -110,13 +110,14 @@ async function start() {
   const hemi = new HemisphericLight('hemi', new Vector3(0.1, 1, 0.2), scene); hemi.intensity = 1.0; hemi.diffuse = hex('#9aa6cc'); hemi.groundColor = hex('#2a2426'); hemi.specular = new Color3(0.2, 0.2, 0.3);
   const moon = new DirectionalLight('moon', new Vector3(-0.4, -0.8, 0.5), scene); moon.intensity = 0.45; moon.diffuse = hex('#b8c4ff'); moon.specular = new Color3(0.3, 0.3, 0.4);
   let DANCE = null, COL = null, SEAT = null, punch = 0;
-  const cam = new FreeCamera('cam', new Vector3(0, 5, -10), scene); cam.minZ = 0.1; cam.maxZ = 900; cam.fov = 0.95; cam.inputs.clear(); const cam0 = cam;
+  const cam = new FreeCamera('cam', new Vector3(0, 5, -10), scene); cam.minZ = 0.1; cam.maxZ = LITE ? 1400 : isTouch ? 2200 : 5000; /* was 900: long streets (Donegall) and high aerials clipped to a hard void */ cam.fov = 0.82; cam.inputs.clear(); /* was 0.95: tighter FOV + closer arm so the avatar is readable, not a small pale figure */ const cam0 = cam;
   let glow = null; if (!LOW && !Q.has('noglow')) { try { glow = new GlowLayer('glow', scene, { mainTextureRatio: 0.35, blurKernelSize: 32 }); glow.intensity = 0.5; } catch (e) { console.warn('glow off', e); glow = null; } }
   // cinematic pipeline: gentle bloom, ACES filmic tone mapping, contrast grade, vignette, light grain, FXAA (+ SSAO on ?ssao)
   let pipe = null, SSAO = null;
   if (!SAFE && !LITE && !Q.has('nopost')) try {
     pipe = new DefaultRenderingPipeline('cine', true, scene, [cam0]);
-    pipe.fxaaEnabled = true; pipe.bloomEnabled = !LOW; pipe.bloomThreshold = 0.72; pipe.bloomWeight = 0.32; pipe.bloomKernel = 48; pipe.bloomScale = 0.5;
+    pipe.fxaaEnabled = !!(LOW || LITE || isTouch); pipe.bloomEnabled = !LOW; pipe.bloomThreshold = 0.88; pipe.bloomWeight = 0.2; pipe.bloomKernel = 32; pipe.bloomScale = 0.5;
+    try { if (!isTouch && !LITE && !LOW) pipe.samples = 4; } catch (e) { } /* desktop: MSAA instead of FXAA so the avatar is not smeared */
     pipe.imageProcessingEnabled = true; const ip = pipe.imageProcessing; ip.toneMappingEnabled = true; ip.toneMappingType = ImageProcessingConfiguration.TONEMAPPING_ACES; ip.exposure = 1.4; ip.contrast = 1.1;
     ip.vignetteEnabled = true; ip.vignetteWeight = 2.2; ip.vignetteColor = new Color4(0, 0, 0, 0); ip.vignetteStretch = 0.2;
     ip.colorCurvesEnabled = true; const cc = new ColorCurves(); cc.globalSaturation = -4; cc.shadowsHue = 215; cc.shadowsDensity = 22; cc.shadowsSaturation = 35; cc.highlightsHue = 40; cc.highlightsDensity = 6; cc.highlightsSaturation = 8; ip.colorCurves = cc;
@@ -183,7 +184,7 @@ async function start() {
   // crew base (MALE / FEMALE): ?base= for tests, else the app's avatar_base when signed in (read-only), else the local pick
   CREW.base = ['male', 'female'].includes(Q.get('base')) ? Q.get('base') : (CR.getLocalBase() || 'male'); CREW.baseFromApp = false;
   const swapAvatar = (kind) => { if (Q.has('procav')) return; const tok = (swapAvatar.n = (swapAvatar.n || 0) + 1);
-    loadAvatar3D(scene, { name: 'player3d', kind }).then(av => { if (tok !== swapAvatar.n) { av.root.dispose(false, true); Object.values(av.ag).forEach(g => g.dispose()); return; }
+    loadAvatar3D(scene, { name: 'player3d', kind, hq: !LITE && !isTouch, lite: LITE, exempt: !SAFE }).then(av => { if (tok !== swapAvatar.n) { av.root.dispose(false, true); Object.values(av.ag).forEach(g => g.dispose()); return; }
       const old = player; av.root.position.copyFrom(old.root.position); av.root.rotation.y = old.root.rotation.y;
       if (old.isGlb) { old.root.dispose(false, true); Object.values(old.ag).forEach(g => g.dispose()); } else { old.root.setEnabled(false); old.allMeshes().forEach(m => m.setEnabled(false)); }
       player = av; window.__rw.player = av; player.setFit(CREW.fit, CR.visibleFor); if (glow) for (const m of av.allMeshes()) glow.addExcludedMesh(m); DG.log('avatar3d loaded ' + kind); }).catch(e => console.warn('avatar3d', e)); };
@@ -199,7 +200,7 @@ async function start() {
   const dust = new ParticleSystem('dust', LOW ? 60 : 160, scene); dust.particleTexture = dustT; dust.emitter = new Vector3(0, 0.05, 0); dust.minEmitBox = new Vector3(-0.15, 0, -0.15); dust.maxEmitBox = new Vector3(0.15, 0, 0.15);
   dust.color1 = new Color4(0.75, 0.75, 0.8, 0.35); dust.color2 = new Color4(0.6, 0.6, 0.68, 0.25); dust.colorDead = new Color4(0.5, 0.5, 0.55, 0); dust.minSize = 0.15; dust.maxSize = 0.45; dust.minLifeTime = 0.35; dust.maxLifeTime = 0.8;
   dust.emitRate = 0; dust.direction1 = new Vector3(-0.4, 0.6, -0.4); dust.direction2 = new Vector3(0.4, 1.0, 0.4); dust.minEmitPower = 0.3; dust.maxEmitPower = 0.8; dust.gravity = new Vector3(0, -0.3, 0); dust.blendMode = ParticleSystem.BLENDMODE_STANDARD; dust.start();
-  const C = { yaw: P.heading, pitch: 0.22, dist: 5.8, curDist: 5.8, arm: 1, dip: 0 }; P.y = 0; P.vy = 0; P.air = false; P.jumpReq = 0; window.__rw.C = C;
+  const C = { yaw: P.heading, pitch: 0.18, dist: 4.2, curDist: 4.2, arm: 1, dip: 0 }; P.y = 0; P.vy = 0; P.air = false; P.jumpReq = 0; window.__rw.C = C;
   // markers: entrance rings + warehouse sign + poster spots
   const ringM = new StandardMaterial('ring', scene); ringM.emissiveColor = new Color3(1, 1, 1); ringM.disableLighting = true; ringM.alpha = 0.85;
   const mkRing = (x, z, n) => { const r = toMesh(n, xf(torus(2.6, 0.12, 40), { t: [0, 0.15, 0] }), scene, ringM); r.position.set(x, 0, z); r.parent = city.root; return r; };
@@ -265,7 +266,7 @@ async function start() {
   if (im) mapBase = Object.assign(im, { bounds: mapBase.bounds, proc: mapBase }); } catch (e) { console.warn('minimap', e); }
   app.mapBase = mapBase;
   const hud = createHUD(app);
-  const RB = createRapid({ scene, traffic, hud, app, grid: city.grid }); window.__rw.RB = RB; window.__rw.traffic = traffic; const DRV = createDrive(traffic); window.__rw.DRV = DRV; traffic.drv = DRV; DRV.horn = () => { AU.horn(); traffic.honked = performance.now(); }; traffic.onHonk = () => AU.horn(0.5); const CAB = createCabs({ scene, traffic, hud, app, city, player: { get root() { return player.root; } } }); window.__rw.CAB = CAB; const wrapA = (a) => { while (a > Math.PI) a -= 2 * Math.PI; while (a < -Math.PI) a += 2 * Math.PI; return a; };
+  const RB = createRapid({ scene, traffic, hud, app, grid: city.grid }); window.__rw.RB = RB; window.__rw.traffic = traffic; traffic.cam = cam; const DRV = createDrive(traffic); window.__rw.DRV = DRV; traffic.drv = DRV; DRV.horn = () => { AU.horn(); traffic.honked = performance.now(); }; traffic.onHonk = () => AU.horn(0.5); const CAB = createCabs({ scene, traffic, hud, app, city, player: { get root() { return player.root; } } }); window.__rw.CAB = CAB; const wrapA = (a) => { while (a > Math.PI) a -= 2 * Math.PI; while (a < -Math.PI) a += 2 * Math.PI; return a; };
   // GPS destination (GTA-style): defaults to the Temple door; venues or a tapped waypoint from the pause map
   let DEST = { x: ext.doorPos.x, z: ext.doorPos.z, label: 'THE TEMPLE', kind: 'venue', id: 'temple' };
   const venueDest = VENUES.filter(v => v.inSlice).map(v => v.id === 'temple' ? { ...v, x: ext.doorPos.x, z: ext.doorPos.z } : v.id === 'warehousexl' && whDoor ? { ...v, x: whDoor.x, z: whDoor.z } : (d => d ? { ...v, x: d.x, z: d.z } : v)(venueDoors.find(q => q.v.id === v.id)));
@@ -371,7 +372,7 @@ async function start() {
     city.root.setEnabled(true); carSrc(true); SKY.sky.setEnabled(true); FL.setEnabled(true); WET.setEnabled(true); traffic.cars.forEach(c => c.node.setEnabled(true)); traffic.parked.forEach(c => c.node.setEnabled(true)); traffic.peds.forEach(p => { p.av.root.setEnabled(true); p._on = undefined; });
     scene.clearColor = NIGHT; scene.fogDensity = 0.0028; scene.fogColor = new Color3(0.1, 0.105, 0.17); hud.interior(false);
     const d = DOOR || { x: ext.doorPos.x - Math.sin(ext.yaw) * 2.5, z: ext.doorPos.z - Math.cos(ext.yaw) * 2.5, heading: ext.yaw + Math.PI };
-    P.x = d.x; P.z = d.z; P.heading = d.heading; C.yaw = P.heading; C.pitch = 0.2; C.dist = 5.8;
+    P.x = d.x; P.z = d.z; P.heading = d.heading; C.yaw = P.heading; C.pitch = 0.18; C.dist = 4.2;
     const was = T; T = null;
     if (LITE && !Q.has('keepvenue')) { // free the interior + crowd; rebuilt on the next entry
       if (CVo) { for (const it of CVo.list) for (const m of [it.body, it.head, it.far]) if (m) m.parent = null; disposeOwned(CVo); CVo = null; }
@@ -428,7 +429,7 @@ async function start() {
   // auto quality tier (low/med/high): ?q=low|med|high pins it, otherwise start med on phones / high on desktop and adapt to measured FPS
   let tier = Q.get('q') || (LITE ? 'low' : isTouch ? 'med' : 'high'); if (!TIERS[tier]) tier = 'high'; const autoTier = Q.has('auto') || (!Q.get('q') && !Q.has('webgl')); let tierT = 0, tierF = [], tierUp = false, cullT = 0;
   const baseScale = 1 / Math.min(1.5, devicePixelRatio || 1);
-  function setTier(n) { tier = n; const T0 = TIERS[n]; const dprE = Math.min(2.5, devicePixelRatio || 1); engine.setHardwareScalingLevel(LITE ? (SAFE ? 1.25 : 1) : isTouch ? T0.scale / dprE : T0.scale === 1 ? baseScale : Math.min(T0.scale, 1.25) / Math.min(1.5, dprE)); // phones: native px / scale (1.5x down on med)
+  function setTier(n) { tier = n; const T0 = TIERS[n]; const dprE = Math.min(2.5, devicePixelRatio || 1); engine.setHardwareScalingLevel(LITE ? (SAFE ? 1.25 : 1 / Math.min(1.5, dprE)) : isTouch ? Math.max(T0.scale / dprE, 1 / 2) /* phones: DPR capped at 2 */ : T0.scale === 1 ? baseScale : Math.min(T0.scale, 1.25) / Math.min(1.5, dprE)); // phones: native px / scale (1.5x down on med)
     if (pipe) { pipe.bloomEnabled = T0.bloom; pipe.grainEnabled = T0.grain; try { pipe.samples = n === 'high' && !isTouch ? 4 : 1; } catch (e) { } }
     if (SSAO) { const on = n === 'high'; const M = scene.postProcessRenderPipelineManager; if (on && !SSAO._rwOn) M.attachCamerasToRenderPipeline('ssao', cam0); if (!on && SSAO._rwOn !== false) M.detachCamerasFromRenderPipeline('ssao', cam0); SSAO._rwOn = on; } if (glow) glow.isEnabled = T0.glow; if (typeof STREAM !== 'undefined' && STREAM) { STREAM.radius = LITE ? 150 : isTouch ? Math.min(300, T0.stream) : T0.stream; STREAM.drop = STREAM.radius + (LITE ? 250 : 300); } if (typeof T !== 'undefined' && T) { T.crowdMax = T0.crowd; T.crowdFar = T0.far; } CROWD.max = T0.crowd; CROWD.far = T0.far; if (TEMPLE) { TEMPLE.crowdMax = T0.crowd; TEMPLE.crowdFar = T0.far; } for (const k in CLUBS) { CLUBS[k].crowdMax = T0.crowd; CLUBS[k].crowdFar = T0.far; } window.__rw.tier = n; console.log('[rw] quality tier', n); }
   setTier(tier);
@@ -489,7 +490,7 @@ async function start() {
     const autoDance = app.inside && T.mode === 'rave' && T.danceFloor(P) && P.speed < 0.2 && !window.__rw.noAutoDance; app.autoDance = autoDance;
     if (SEAT) { P.x = SEAT.x; P.z = SEAT.z; P.heading = SEAT.h; P.speed = 0; }
     player.root.position.set(P.x, P.y + (app.inside && T.floorY ? T.floorY(P.x, P.z) : 0) + (SEAT ? (window.__rw.seatY ?? 0.3) : 0), P.z); player.root.rotation.y = P.heading; dust.emitter.set(P.x, 0.05, P.z); dust.emitRate = P.speed > 4.5 && !app.inside ? 45 : 0;
-    if (player.lightRig) player.lightRig(cam);
+    if (player.lightRig) player.lightRig(cam); if (player.setExposure) player.setExposure(pipe ? pipe.imageProcessing.exposure : 1.4);
     SKY.update(cam);
     if (player.animate) player.animate(dt, { speed: SEAT ? 0 : P.speed, dancing: (P.dancing || autoDance || (DANCE && DANCE.active())) && !SEAT, air: P.air && !SEAT, sitting: !!SEAT }); else animateAvatar(player, dt, { speed: P.speed * 0.8, dancing: P.dancing || autoDance });
     // camera with collision
@@ -504,11 +505,12 @@ async function start() {
     { // audit P1-9: backed against a wall -> lift the camera over the head and fade the player instead of filling the screen with it
       const close = Math.max(0, Math.min(1, (1.9 - C.curDist) / 0.9)); camPos.y += close * 1.15; tgt.y -= close * 0.25;
       const vis = 1 - 0.7 * close; if (Math.abs((C._vis ?? 1) - vis) > 0.02) { C._vis = vis; try { for (const m of player.allMeshes()) m.visibility = vis; } catch (e) { } } }
+    if (!app.inside) { const ph = city.grid.topNear(camPos.x, camPos.z, 0.5, 3); if (ph > 0 && camPos.y < ph + 0.35) camPos.y = ph + 0.35; } // glitch (d): never inside a bench/bin/box
     if (app.inside && T && T.club && camPos.z < 0.5) camPos.z = 0.5; // clubs: never behind the entrance wall (z = 0), the EXIT sign / door filled the screen green
     // smoothed follow camera + slight FOV kick when sprinting
     if (camSnap) { smPos.copyFrom(camPos); smTgt.copyFrom(tgt); camSnap = false; } else { const k = Math.min(1, dt * 8); Vector3.LerpToRef(smPos, camPos, k, smPos); Vector3.LerpToRef(smTgt, tgt, Math.min(1, dt * 14), smTgt); }
     cam.position.copyFrom(smPos); cam.setTarget(smTgt);
-    const wantFov = 0.95 + (P.speed > 4.5 && !app.inside ? 0.09 : 0); cam.fov += (wantFov - cam.fov) * Math.min(1, dt * 3);
+    const wantFov = 0.82 + (P.speed > 4.5 && !app.inside ? 0.07 : 0); cam.fov += (wantFov - cam.fov) * Math.min(1, dt * 3);
     if (app.title) { const f = flyover(window.__rwFly.at != null ? window.__rwFly.at : t - titleT0); cam.position.copyFrom(f.p); cam.setTarget(f.t); cam.fov = 0.9; camSnap = true; }
     if (window.__rw.camRel) { const o = window.__rw.camRel, h = P.heading + o[0], d = o[1]; cam.position.set(P.x + Math.sin(h) * d, o[2], P.z + Math.cos(h) * d); cam.setTarget(new Vector3(P.x, o[3], P.z)); }
     if (CAB) CAB.tick(dt, P);
@@ -637,7 +639,8 @@ async function start() {
   Object.assign(window.__rw, { enterClub: (id) => { const d = id === 'warehousexl' ? whDoor : venueDoors.find(q => q.v.id === id); return enterClub(id, d || { x: 0, z: 0 }); }, cur: () => T, ready: true, engine, scene, P, C, enterTemple, exitTemple, kind: engine.__kind, low: LOW,
     setMode: (m) => { setTempleMode(T, scene, m); hud.interior(true, m); }, openMap: () => hud.openMap(mapCtx()), close: () => hud.close(), hud, player,
     teleport: (x, z, yaw) => { P.x = x; P.z = z; if (yaw != null) { P.heading = yaw; C.yaw = yaw; } C.curDist = C.dist; slowT = 0; },
-    gotoStreet: (name, k = 0.5, side = 1) => { const rs = city.roads.filter(r => r.nm === name && r.d); if (!rs.length) return 'none'; const r = rs[Math.floor(rs.length * k) % rs.length]; const i = Math.floor(r.pts.length / 2) - (r.pts.length > 1 && r.pts.length % 2 === 0 ? 1 : 0); const a = r.pts[Math.max(0, i)], b = r.pts[Math.min(r.pts.length - 1, i + 1)]; const L = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1; const ux = (b[0] - a[0]) / L, uz = (b[1] - a[1]) / L; const off = r.w / 2 + 1.2; P.x = (a[0] + b[0]) / 2 - uz * off * side; P.z = (a[1] + b[1]) / 2 + ux * off * side; P.heading = Math.atan2(ux, uz); C.yaw = P.heading; C.curDist = C.dist; slowT = 0; return [P.x, P.z]; },
+    streets: Object.fromEntries([...new Set(city.roads.filter(r => r.nm && r.d).map(r => r.nm))].map(n => [n, true])),
+    gotoStreet: (name, k = 0.5, side = 1) => { let rs = city.roads.filter(r => r.nm === name && r.d); if (!rs.length) { const q = String(name || '').toLowerCase(); rs = city.roads.filter(r => r.nm && r.d && r.nm.toLowerCase().includes(q)); } if (!rs.length) return 'none'; const r = rs[Math.floor(rs.length * k) % rs.length]; const i = Math.floor(r.pts.length / 2) - (r.pts.length > 1 && r.pts.length % 2 === 0 ? 1 : 0); const a = r.pts[Math.max(0, i)], b = r.pts[Math.min(r.pts.length - 1, i + 1)]; const L = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1; const ux = (b[0] - a[0]) / L, uz = (b[1] - a[1]) / L; const off = r.w / 2 + 1.2; P.x = (a[0] + b[0]) / 2 - uz * off * side; P.z = (a[1] + b[1]) / 2 + ux * off * side; P.heading = Math.atan2(ux, uz); C.yaw = P.heading; C.curDist = C.dist; slowT = 0; return [P.x, P.z]; },
     stats: () => { const inst = window.__rw.inst; return { drawCalls: inst ? inst.drawCallsCounter.current : -1, activeMeshes: scene.getActiveMeshes().length, activeIndices: scene.getActiveIndices(), totalVertices: scene.getTotalVertices(), meshes: scene.meshes.length, frameMs: inst ? inst.frameTimeCounter.lastSecAverage : -1 }; }, fps: () => engine.getFps(), ext, T, traffic, posters, whDoor });
 }
 // title screen
