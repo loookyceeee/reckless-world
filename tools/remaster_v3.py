@@ -271,6 +271,13 @@ def main():
                 copy = (src_px[..., 3] > 40) & ~is_garment
                 dst_px = dst_px.copy()
                 dst_px[copy] = src_px[copy]
+                # Clear leftover blotch just outside the repaired silhouette.
+                # The body edge is slightly inside the old plateau, so uncopied
+                # tee pixels (light/blue, mid-alpha) remastered into a white fleck.
+                yy = np.arange(y0, y1)[:, None]
+                in_notch = (yy >= 161) & (yy <= 183)
+                leftover = in_notch & (src_px[..., 3] <= 40) & ~is_garment & (dst_px[..., 3] > 0)
+                dst_px[leftover] = 0
                 im[y0:y1, x0:x1] = dst_px
                 # temp save and remaster without a second geometric pass
                 tmp = PREV / f'_tmp_{sex}_{name}'
